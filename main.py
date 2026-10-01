@@ -129,7 +129,7 @@ async def send_dms(
         # Сообщение в DM
         await user.send(
             f"**BOT:** {message}\n"
-            f"-# сервер {server_name}"
+            f"-# Server: {server_name}"
         )
 
         await interaction.response.send_message(
