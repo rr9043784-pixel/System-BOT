@@ -48,235 +48,68 @@ def run_flask():
 
 
 # =========================
-# Discord Bot
-# =========================
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-
-class TournamentBot(commands.Bot):
-
-    async def setup_hook(self):
-
-        # Register persistent buttons
-        self.add_view(PingPanel())
-
-        # Sync slash commands only once during startup
-        try:
-
-            await self.tree.sync()
-
-            print("✅ Slash commands synced!")
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to sync slash commands: {e}"
-            )
-
-
-bot = TournamentBot(
-    command_prefix="!",
-    intents=intents
-)
-
-
-# =========================
-# Bot Ready
-# =========================
-
-@bot.event
-async def on_ready():
-
-    print(
-        f"🤖 Logged in as {bot.user}"
-    )
-
-
-# =========================
-# Owner Check
-# =========================
-
-def owner_only():
-
-    async def predicate(
-        interaction: discord.Interaction
-    ):
-
-        return interaction.user.id == OWNER_ID
-
-    return app_commands.check(predicate)
-
-
-# =========================
-# /send
-# =========================
-
-send_group = app_commands.Group(
-    name="send",
-    description="Send messages"
-)
-
-
-@send_group.command(
-    name="message",
-    description="Send a message to a channel"
-)
-@app_commands.describe(
-    text="Text to send",
-    channel="Channel where the message will be sent"
-)
-@owner_only()
-async def send_message(
-    interaction: discord.Interaction,
-    text: str,
-    channel: discord.TextChannel
-):
-
-    try:
-
-        await channel.send(
-            f"**BOT:** {text}"
-        )
-
-        await interaction.response.send_message(
-            "Message sent successfully.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ I don't have permission to send messages in that channel.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Failed to send the message.",
-            ephemeral=True
-        )
-
-
-@send_group.command(
-    name="dms",
-    description="Send a direct message to a user"
-)
-@app_commands.describe(
-    user="User to send the DM to",
-    message="Message to send"
-)
-@owner_only()
-async def send_dms(
-    interaction: discord.Interaction,
-    user: discord.User,
-    message: str
-):
-
-    try:
-
-        server_name = (
-            interaction.guild.name
-            if interaction.guild
-            else "Unknown Server"
-        )
-
-        await user.send(
-            f"**BOT:** {message}\n"
-            f"-# Server: {server_name}"
-        )
-
-        await interaction.response.send_message(
-            "DM sent successfully.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ Could not send a DM. The user's DMs are closed.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Could not send the DM.",
-            ephemeral=True
-        )
-
-
-bot.tree.add_command(send_group)
-
-
-# =========================
-# /clear
-# =========================
-
-clear_group = app_commands.Group(
-    name="clear",
-    description="Clear messages"
-)
-
-
-@clear_group.command(
-    name="message",
-    description="Delete messages from a channel"
-)
-@app_commands.describe(
-    channel="Channel to clear",
-    number_of_messages="Number of messages to delete"
-)
-@owner_only()
-async def clear_message(
-    interaction: discord.Interaction,
-    channel: discord.TextChannel,
-    number_of_messages: app_commands.Range[int, 1, 100]
-):
-
-    try:
-
-        deleted = await channel.purge(
-            limit=number_of_messages
-        )
-
-        await interaction.response.send_message(
-            f"✅ Successfully deleted {len(deleted)} messages.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ I don't have permission to delete messages in this channel.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Failed to delete messages.",
-            ephemeral=True
-        )
-
-
-bot.tree.add_command(clear_group)
-
-
-# =========================
 # Ping Panel
 # =========================
 
 class PingPanel(discord.ui.View):
 
     def __init__(self):
-
         super().__init__(
             timeout=None
         )
 
+
+    # =========================
+    # Get Member
+    # =========================
+
+    async def get_member(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if interaction.guild is None:
+
+            await interaction.response.send_message(
+                "❌ **Error**\n"
+                "This button can only be used inside a server.",
+                ephemeral=True
+            )
+
+            return None
+
+        try:
+
+            member = await interaction.guild.fetch_member(
+                interaction.user.id
+            )
+
+            return member
+
+        except discord.NotFound:
+
+            await interaction.response.send_message(
+                "❌ **Error**\n"
+                "Your member information could not be found.",
+                ephemeral=True
+            )
+
+            return None
+
+        except discord.HTTPException:
+
+            await interaction.response.send_message(
+                "❌ **Error**\n"
+                "I couldn't get your member information.",
+                ephemeral=True
+            )
+
+            return None
+
+
+    # =========================
+    # Toggle Role
+    # =========================
 
     async def toggle_role(
         self,
@@ -288,11 +121,13 @@ class PingPanel(discord.ui.View):
         if interaction.guild is None:
 
             await interaction.response.send_message(
-                "❌ This button can only be used inside a server.",
+                "❌ **Error**\n"
+                "This button can only be used inside a server.",
                 ephemeral=True
             )
 
             return
+
 
         role = interaction.guild.get_role(
             role_id
@@ -308,19 +143,14 @@ class PingPanel(discord.ui.View):
 
             return
 
-        member = interaction.guild.get_member(
-            interaction.user.id
+
+        member = await self.get_member(
+            interaction
         )
 
         if member is None:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "Your member information could not be found.",
-                ephemeral=True
-            )
-
             return
+
 
         try:
 
@@ -347,6 +177,7 @@ class PingPanel(discord.ui.View):
                     f"You now have the {role_name} role.",
                     ephemeral=True
                 )
+
 
         except discord.Forbidden:
 
@@ -454,7 +285,7 @@ class PingPanel(discord.ui.View):
 
 
     # =========================
-    # Remove All
+    # Remove All Ping Roles
     # =========================
 
     @discord.ui.button(
@@ -471,25 +302,21 @@ class PingPanel(discord.ui.View):
         if interaction.guild is None:
 
             await interaction.response.send_message(
-                "❌ This button can only be used inside a server.",
+                "❌ **Error**\n"
+                "This button can only be used inside a server.",
                 ephemeral=True
             )
 
             return
 
-        member = interaction.guild.get_member(
-            interaction.user.id
+
+        member = await self.get_member(
+            interaction
         )
 
         if member is None:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "Your member information could not be found.",
-                ephemeral=True
-            )
-
             return
+
 
         roles_to_remove = []
 
@@ -505,6 +332,7 @@ class PingPanel(discord.ui.View):
                     role
                 )
 
+
         try:
 
             if roles_to_remove:
@@ -513,11 +341,13 @@ class PingPanel(discord.ui.View):
                     *roles_to_remove
                 )
 
+
             await interaction.response.send_message(
                 "🗑️ **Roles removed!**\n"
                 "All ping roles have been removed from you.",
                 ephemeral=True
             )
+
 
         except discord.Forbidden:
 
@@ -534,6 +364,234 @@ class PingPanel(discord.ui.View):
                 "I couldn't remove your ping roles.",
                 ephemeral=True
             )
+
+
+# =========================
+# Discord Bot
+# =========================
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+
+class TournamentBot(commands.Bot):
+
+    async def setup_hook(self):
+
+        # Persistent buttons
+        self.add_view(
+            PingPanel()
+        )
+
+        # Sync slash commands once
+        try:
+
+            await self.tree.sync()
+
+            print(
+                "✅ Slash commands synced!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to sync slash commands: {e}"
+            )
+
+
+bot = TournamentBot(
+    command_prefix="!",
+    intents=intents
+)
+
+
+# =========================
+# Bot Ready
+# =========================
+
+@bot.event
+async def on_ready():
+
+    print(
+        f"🤖 Logged in as {bot.user}"
+    )
+
+
+# =========================
+# Owner Check
+# =========================
+
+def owner_only():
+
+    async def predicate(
+        interaction: discord.Interaction
+    ):
+
+        return interaction.user.id == OWNER_ID
+
+    return app_commands.check(
+        predicate
+    )
+
+
+# =========================
+# /send
+# =========================
+
+send_group = app_commands.Group(
+    name="send",
+    description="Send messages"
+)
+
+
+@send_group.command(
+    name="message",
+    description="Send a message to a channel"
+)
+@app_commands.describe(
+    text="Text to send",
+    channel="Channel where the message will be sent"
+)
+@owner_only()
+async def send_message(
+    interaction: discord.Interaction,
+    text: str,
+    channel: discord.TextChannel
+):
+
+    try:
+
+        await channel.send(
+            f"**BOT:** {text}"
+        )
+
+        await interaction.response.send_message(
+            "Message sent successfully.",
+            ephemeral=True
+        )
+
+    except discord.Forbidden:
+
+        await interaction.response.send_message(
+            "❌ I don't have permission to send messages in that channel.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+
+        await interaction.response.send_message(
+            "❌ Failed to send the message.",
+            ephemeral=True
+        )
+
+
+@send_group.command(
+    name="dms",
+    description="Send a direct message to a user"
+)
+@app_commands.describe(
+    user="User to send the DM to",
+    message="Message to send"
+)
+@owner_only()
+async def send_dms(
+    interaction: discord.Interaction,
+    user: discord.User,
+    message: str
+):
+
+    try:
+
+        server_name = (
+            interaction.guild.name
+            if interaction.guild
+            else "Unknown Server"
+        )
+
+        await user.send(
+            f"**BOT:** {message}\n"
+            f"-# Server: {server_name}"
+        )
+
+        await interaction.response.send_message(
+            "DM sent successfully.",
+            ephemeral=True
+        )
+
+    except discord.Forbidden:
+
+        await interaction.response.send_message(
+            "❌ Could not send a DM. The user's DMs are closed.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+
+        await interaction.response.send_message(
+            "❌ Could not send the DM.",
+            ephemeral=True
+        )
+
+
+bot.tree.add_command(
+    send_group
+)
+
+
+# =========================
+# /clear
+# =========================
+
+clear_group = app_commands.Group(
+    name="clear",
+    description="Clear messages"
+)
+
+
+@clear_group.command(
+    name="message",
+    description="Delete messages from a channel"
+)
+@app_commands.describe(
+    channel="Channel to clear",
+    number_of_messages="Number of messages to delete"
+)
+@owner_only()
+async def clear_message(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    number_of_messages: app_commands.Range[int, 1, 100]
+):
+
+    try:
+
+        deleted = await channel.purge(
+            limit=number_of_messages
+        )
+
+        await interaction.response.send_message(
+            f"✅ Successfully deleted {len(deleted)} messages.",
+            ephemeral=True
+        )
+
+    except discord.Forbidden:
+
+        await interaction.response.send_message(
+            "❌ I don't have permission to delete messages in this channel.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+
+        await interaction.response.send_message(
+            "❌ Failed to delete messages.",
+            ephemeral=True
+        )
+
+
+bot.tree.add_command(
+    clear_group
+)
 
 
 # =========================
