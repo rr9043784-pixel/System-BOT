@@ -40,6 +40,7 @@ def home():
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
+
     app.run(
         host="0.0.0.0",
         port=port
@@ -571,25 +572,30 @@ async def ping_command(
         return
 
 
-    # Panel text
-    panel_text = (
-        "**⚙️ Click on reactions to get the roles you need! ⚙️**\n\n"
-        f"🔴 <@&{VIDEO_ROLE_ID}> - You will receive notifications about a new video.\n"
-        f"🏆 <@&{TOURNAMENT_ROLE_ID}> - You will receive notifications about a new tournament.\n"
-        f"🎁 <@&{GIVEAWAY_ROLE_ID}> - You will receive notifications about the draw "
-        f"(The draw is related to the currency of the server, it is not related to money in any way!)\n"
-        f"📢 <@&{NEWS_ROLE_ID}> - You will receive notifications about new news on the server!"
+    # =========================
+    # Neutral Embed
+    # =========================
+
+    embed = discord.Embed(
+        description=(
+            "**⚙️ Click on reactions to get the roles you need! ⚙️**\n\n"
+            f"🔴 <@&{VIDEO_ROLE_ID}> - You will receive notifications about a new video.\n"
+            f"🏆 <@&{TOURNAMENT_ROLE_ID}> - You will receive notifications about a new tournament.\n"
+            f"🎁 <@&{GIVEAWAY_ROLE_ID}> - You will receive notifications about the draw "
+            f"(The draw is related to the currency of the server, it is not related to money in any way!)\n"
+            f"📢 <@&{NEWS_ROLE_ID}> - You will receive notifications about new news on the server!"
+        )
     )
 
 
     # Send panel
     await ctx.send(
-        panel_text,
+        embed=embed,
         view=PingPanel()
     )
 
 
-    # Delete !ping panel message
+    # Delete command message
     try:
 
         await ctx.message.delete()
