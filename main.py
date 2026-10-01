@@ -119,14 +119,12 @@ async def send_dms(
 
     try:
 
-        # Название сервера
         server_name = (
             interaction.guild.name
             if interaction.guild
             else "Unknown Server"
         )
 
-        # Сообщение в DM
         await user.send(
             f"**BOT:** {message}\n"
             f"-# Server: {server_name}"
@@ -157,7 +155,7 @@ bot.tree.add_command(send_group)
 
 
 # =========================
-# /clear message
+# /clear
 # =========================
 
 clear_group = app_commands.Group(
@@ -165,6 +163,10 @@ clear_group = app_commands.Group(
     description="Clear messages"
 )
 
+
+# =========================
+# /clear message
+# =========================
 
 @clear_group.command(
     name="message",
@@ -182,6 +184,7 @@ async def clear_message(
 ):
 
     try:
+
         deleted = await channel.purge(
             limit=number_of_messages
         )
@@ -192,19 +195,22 @@ async def clear_message(
         )
 
     except discord.Forbidden:
+
         await interaction.response.send_message(
             "❌ I don't have permission to delete messages in this channel.",
             ephemeral=True
         )
 
     except discord.HTTPException:
+
         await interaction.response.send_message(
             "❌ Failed to delete messages.",
             ephemeral=True
         )
 
 
-bot.tree.add_command(clear_group) 
+# Добавляем /clear
+bot.tree.add_command(clear_group)
 
 
 # =========================
@@ -236,4 +242,4 @@ Thread(
     daemon=True
 ).start()
 
-bot.run(TOKEN) 
+bot.run(TOKEN)
