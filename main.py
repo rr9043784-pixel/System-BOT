@@ -157,6 +157,57 @@ bot.tree.add_command(send_group)
 
 
 # =========================
+# /clear message
+# =========================
+
+clear_group = app_commands.Group(
+    name="clear",
+    description="Clear messages"
+)
+
+
+@clear_group.command(
+    name="message",
+    description="Delete messages from a channel"
+)
+@app_commands.describe(
+    channel="Channel to clear",
+    number_of_messages="Number of messages to delete"
+)
+@owner_only()
+async def clear_message(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    number_of_messages: app_commands.Range[int, 1, 100]
+):
+
+    try:
+        deleted = await channel.purge(
+            limit=number_of_messages
+        )
+
+        await interaction.response.send_message(
+            f"✅ Successfully deleted {len(deleted)} messages.",
+            ephemeral=True
+        )
+
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ I don't have permission to delete messages in this channel.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+        await interaction.response.send_message(
+            "❌ Failed to delete messages.",
+            ephemeral=True
+        )
+
+
+bot.tree.add_command(clear_group) 
+
+
+# =========================
 # Command errors
 # =========================
 
