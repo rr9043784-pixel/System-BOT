@@ -40,7 +40,10 @@ def home():
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
 
 
 # =========================
@@ -50,27 +53,44 @@ def run_flask():
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(
+
+class TournamentBot(commands.Bot):
+
+    async def setup_hook(self):
+
+        # Register persistent buttons
+        self.add_view(PingPanel())
+
+        # Sync slash commands only once during startup
+        try:
+
+            await self.tree.sync()
+
+            print("✅ Slash commands synced!")
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to sync slash commands: {e}"
+            )
+
+
+bot = TournamentBot(
     command_prefix="!",
     intents=intents
 )
 
 
 # =========================
-# Slash Commands Sync
+# Bot Ready
 # =========================
 
 @bot.event
 async def on_ready():
 
-    try:
-        await bot.tree.sync()
-        print("✅ Slash commands synced!")
-
-    except Exception as e:
-        print(f"❌ Failed to sync slash commands: {e}")
-
-    print(f"🤖 Logged in as {bot.user}")
+    print(
+        f"🤖 Logged in as {bot.user}"
+    )
 
 
 # =========================
@@ -79,7 +99,10 @@ async def on_ready():
 
 def owner_only():
 
-    async def predicate(interaction: discord.Interaction):
+    async def predicate(
+        interaction: discord.Interaction
+    ):
+
         return interaction.user.id == OWNER_ID
 
     return app_commands.check(predicate)
@@ -125,6 +148,13 @@ async def send_message(
 
         await interaction.response.send_message(
             "❌ I don't have permission to send messages in that channel.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+
+        await interaction.response.send_message(
+            "❌ Failed to send the message.",
             ephemeral=True
         )
 
@@ -246,6 +276,7 @@ class PingPanel(discord.ui.View):
             timeout=None
         )
 
+
     async def toggle_role(
         self,
         interaction: discord.Interaction,
@@ -253,7 +284,18 @@ class PingPanel(discord.ui.View):
         role_name: str
     ):
 
-        role = interaction.guild.get_role(role_id)
+        if interaction.guild is None:
+
+            await interaction.response.send_message(
+                "❌ This button can only be used inside a server.",
+                ephemeral=True
+            )
+
+            return
+
+        role = interaction.guild.get_role(
+            role_id
+        )
 
         if role is None:
 
@@ -283,7 +325,9 @@ class PingPanel(discord.ui.View):
 
             if role in member.roles:
 
-                await member.remove_roles(role)
+                await member.remove_roles(
+                    role
+                )
 
                 await interaction.response.send_message(
                     f"✅ **Role removed!**\n"
@@ -293,7 +337,9 @@ class PingPanel(discord.ui.View):
 
             else:
 
-                await member.add_roles(role)
+                await member.add_roles(
+                    role
+                )
 
                 await interaction.response.send_message(
                     f"✅ **Role added!**\n"
@@ -318,6 +364,10 @@ class PingPanel(discord.ui.View):
             )
 
 
+    # =========================
+    # Video Ping
+    # =========================
+
     @discord.ui.button(
         label="🔴 Video Ping",
         style=discord.ButtonStyle.primary,
@@ -335,6 +385,10 @@ class PingPanel(discord.ui.View):
             "Video Ping"
         )
 
+
+    # =========================
+    # Tournament Ping
+    # =========================
 
     @discord.ui.button(
         label="🏆 Tournament Ping",
@@ -354,6 +408,10 @@ class PingPanel(discord.ui.View):
         )
 
 
+    # =========================
+    # Giveaway Ping
+    # =========================
+
     @discord.ui.button(
         label="🎁 Giveaway Ping",
         style=discord.ButtonStyle.primary,
@@ -371,6 +429,10 @@ class PingPanel(discord.ui.View):
             "Giveaway Ping"
         )
 
+
+    # =========================
+    # News Ping
+    # =========================
 
     @discord.ui.button(
         label="📢 News Ping",
@@ -390,6 +452,10 @@ class PingPanel(discord.ui.View):
         )
 
 
+    # =========================
+    # Remove All
+    # =========================
+
     @discord.ui.button(
         label="❌ Remove all ping roles",
         style=discord.ButtonStyle.secondary,
@@ -400,6 +466,15 @@ class PingPanel(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
+
+        if interaction.guild is None:
+
+            await interaction.response.send_message(
+                "❌ This button can only be used inside a server.",
+                ephemeral=True
+            )
+
+            return
 
         member = interaction.guild.get_member(
             interaction.user.id
@@ -419,10 +494,15 @@ class PingPanel(discord.ui.View):
 
         for role_id in PING_ROLE_IDS:
 
-            role = interaction.guild.get_role(role_id)
+            role = interaction.guild.get_role(
+                role_id
+            )
 
             if role and role in member.roles:
-                roles_to_remove.append(role)
+
+                roles_to_remove.append(
+                    role
+                )
 
         try:
 
@@ -467,6 +547,7 @@ async def ping_command(
     option: str = None
 ):
 
+    # Owner only
     if ctx.author.id != OWNER_ID:
 
         await ctx.send(
@@ -478,6 +559,7 @@ async def ping_command(
         return
 
 
+    # Check option
     if option is None or option.lower() != "panel":
 
         await ctx.send(
@@ -489,6 +571,7 @@ async def ping_command(
         return
 
 
+    # Panel text
     panel_text = (
         "**⚙️ Click on reactions to get the roles you need! ⚙️**\n\n"
         f"🔴 <@&{VIDEO_ROLE_ID}> - You will receive notifications about a new video.\n"
@@ -499,21 +582,24 @@ async def ping_command(
     )
 
 
+    # Send panel
     await ctx.send(
         panel_text,
         view=PingPanel()
     )
 
 
-    # Delete !ping panel
+    # Delete !ping panel message
     try:
 
         await ctx.message.delete()
 
     except discord.Forbidden:
+
         pass
 
     except discord.HTTPException:
+
         pass
 
 
@@ -536,6 +622,7 @@ async def ping_command_error(
         )
 
     except discord.HTTPException:
+
         pass
 
 
@@ -563,12 +650,17 @@ async def on_app_command_error(
 
 
 # =========================
-# Start
+# Start Flask
 # =========================
 
 Thread(
     target=run_flask,
     daemon=True
 ).start()
+
+
+# =========================
+# Start Bot
+# =========================
 
 bot.run(TOKEN)
