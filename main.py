@@ -5,8 +5,8 @@ from flask import Flask
 from threading import Thread
 
 TOKEN = os.environ["DISCORD_TOKEN"]
+OWNER_ID = 1176149190192152626
 
-# Flask для Railway
 app = Flask(__name__)
 
 @app.route("/")
@@ -17,7 +17,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# Discord
+
 class Bot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
@@ -27,23 +27,93 @@ class Bot(discord.Client):
     async def setup_hook(self):
         await self.tree.sync()
 
+
 bot = Bot()
 
-@bot.tree.command(name="send", description="Send a message to a channel")
+
+def owner_only():
+    async def predicate(interaction: discord.Interaction):
+        return interaction.user.id == OWNER_ID
+    return app_commands.check(predicate)
+
+
+send_group = app_commands.Group(
+    name="send",
+    description="Send messages"
+)
+
+
+@send_group.command(
+    name="message",
+    description="Send a message to a channel"
+)
 @app_commands.describe(
     text="Text to send",
     channel="Channel where the message will be sent"
 )
-async def send(
+@owner_only()
+async def send_message(
     interaction: discord.Interaction,
     text: str,
     channel: discord.TextChannel
 ):
     await channel.send(f"**BOT:** {text}")
     await interaction.response.send_message(
-        "✅ Message sent!",
+        "Message sent successfully.",
         ephemeral=True
     )
+
+
+@send_group.command(
+    name="dms",
+    description="Send a direct message to a user"
+)
+@app_commands.describe(
+    user="User to send the DM to",
+    message="Message to send"
+)
+@owner_only()
+async def send_dms(
+    interaction: discord.Interaction,
+    user: discord.User,
+    message: str
+):
+    try:
+        await user.send(f"**BOT:** {message}")
+
+        await interaction.response.send_message(
+            "DM sent successfully.",
+            ephemeral=True
+        )
+
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ Could not send a DM. The user's DMs are closed.",
+            ephemeral=True
+        )
+
+    except discord.HTTPException:
+        await interaction.response.send_message(
+            "❌ Could not send the DM.",
+            ephemeral=True
+        )
+
+
+bot.tree.add_command(send_group)
+
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction,
+    error: app_commands.AppCommandError
+):
+    if isinstance(error, app_commands.CheckFailure):
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "❌ You do not have permission to use this command.",
+                ephemeral=True
+            )
+
 
 Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
