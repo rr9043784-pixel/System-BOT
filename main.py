@@ -27,6 +27,8 @@ OWNER_ID = 1176149190192152626
 
 UB_GUILD_ID = "1520800006905266216"
 
+MONEY_EMOJI = "<:MoneyR:1534220684178231397>"
+
 VIDEO_ROLE_ID = 1541715251018465351
 TOURNAMENT_ROLE_ID = 1541715118872731768
 GIVEAWAY_ROLE_ID = 1541716902752157798
@@ -86,7 +88,8 @@ async def add_ub_money(
         method="PATCH",
         headers={
             "Authorization": UB_TOKEN,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept": "application/json"
         }
     )
 
@@ -97,9 +100,23 @@ async def add_ub_money(
             request
         )
 
-        response.read()
+        response_body = response.read().decode(
+            "utf-8",
+            errors="ignore"
+        )
+
+        print(
+            f"✅ UnbelievaBoat reward sent: "
+            f"user={user_id}, amount={amount}"
+        )
+
+        if response_body:
+            print(
+                f"UB response: {response_body}"
+            )
 
         return True
+
 
     except urllib.error.HTTPError as e:
 
@@ -113,6 +130,16 @@ async def add_ub_money(
         )
 
         return False
+
+
+    except urllib.error.URLError as e:
+
+        print(
+            f"❌ UnbelievaBoat connection error: {e}"
+        )
+
+        return False
+
 
     except Exception as e:
 
@@ -153,6 +180,18 @@ class MoneyDropView(discord.ui.View):
 
 
     # =========================
+    # Money Format
+    # =========================
+
+    def money_text(self):
+
+        return (
+            f"{MONEY_EMOJI} "
+            f"{self.amount:,}"
+        )
+
+
+    # =========================
     # Update Button
     # =========================
 
@@ -169,6 +208,46 @@ class MoneyDropView(discord.ui.View):
         self.claim_button.disabled = (
             claimed >= self.quantity
         )
+
+
+    # =========================
+    # Create Embed
+    # =========================
+
+    def create_embed(self):
+
+        claimed = len(
+            self.claimed_users
+        )
+
+        restriction = ""
+
+        if self.allowed_user_id is not None:
+
+            restriction = (
+                f"\nOnly <@{self.allowed_user_id}> can claim"
+            )
+
+        elif self.allowed_role_id is not None:
+
+            restriction = (
+                f"\nOnly <@&{self.allowed_role_id}> can claim"
+            )
+
+        embed = discord.Embed(
+            title="💰 Money drop",
+            description=(
+                "Click the button below to receive the reward.\n\n"
+                f"**Reward:** {self.money_text()}\n"
+                f"**Claims:** {claimed}/{self.quantity}\n"
+                f"**Full drop:** "
+                f"{'✅' if claimed >= self.quantity else '❌'}"
+                f"{restriction}"
+            ),
+            color=discord.Color.green()
+        )
+
+        return embed
 
 
     # =========================
@@ -324,29 +403,11 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # Update message
+        # Update Embed
         # =========================
 
-        claimed = len(
-            self.claimed_users
-        )
-
         await interaction.response.edit_message(
-            content=(
-                "**Money drop**\n"
-                "Click the button below to receive the reward\n"
-                f"> {claimed}/{self.quantity}\n"
-                f"Full drop {'✅' if claimed >= self.quantity else '❌'}"
-                + (
-                    f"\nOnly <@{self.allowed_user_id}> can claim"
-                    if self.allowed_user_id is not None
-                    else (
-                        f"\nOnly <@&{self.allowed_role_id}> can claim"
-                        if self.allowed_role_id is not None
-                        else ""
-                    )
-                )
-            ),
+            embed=self.create_embed(),
             view=self
         )
 
@@ -363,12 +424,10 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
-        # Persistent Ping Panel
         self.add_view(
             PingPanel()
         )
 
-        # Slash commands
         try:
 
             await self.tree.sync()
@@ -402,10 +461,6 @@ class PingPanel(discord.ui.View):
             timeout=None
         )
 
-
-    # =========================
-    # Get Member
-    # =========================
 
     async def get_member(
         self,
@@ -451,10 +506,6 @@ class PingPanel(discord.ui.View):
 
             return None
 
-
-    # =========================
-    # Toggle Role
-    # =========================
 
     async def toggle_role(
         self,
@@ -541,10 +592,6 @@ class PingPanel(discord.ui.View):
             )
 
 
-    # =========================
-    # Video Ping
-    # =========================
-
     @discord.ui.button(
         label="🔴 Video Ping",
         style=discord.ButtonStyle.primary,
@@ -562,10 +609,6 @@ class PingPanel(discord.ui.View):
             "Video Ping"
         )
 
-
-    # =========================
-    # Tournament Ping
-    # =========================
 
     @discord.ui.button(
         label="🏆 Tournament Ping",
@@ -585,10 +628,6 @@ class PingPanel(discord.ui.View):
         )
 
 
-    # =========================
-    # Giveaway Ping
-    # =========================
-
     @discord.ui.button(
         label="🎁 Giveaway Ping",
         style=discord.ButtonStyle.primary,
@@ -607,10 +646,6 @@ class PingPanel(discord.ui.View):
         )
 
 
-    # =========================
-    # News Ping
-    # =========================
-
     @discord.ui.button(
         label="📢 News Ping",
         style=discord.ButtonStyle.primary,
@@ -628,10 +663,6 @@ class PingPanel(discord.ui.View):
             "News Ping"
         )
 
-
-    # =========================
-    # Remove All
-    # =========================
 
     @discord.ui.button(
         label="❌ Remove all ping roles",
@@ -979,10 +1010,6 @@ async def money_command(
     *args
 ):
 
-    # =========================
-    # Owner only
-    # =========================
-
     if ctx.author.id != OWNER_ID:
 
         await ctx.send(
@@ -992,10 +1019,6 @@ async def money_command(
 
         return
 
-
-    # =========================
-    # Check economy
-    # =========================
 
     if economy is None or economy.lower() != "economy":
 
@@ -1007,10 +1030,6 @@ async def money_command(
 
         return
 
-
-    # =========================
-    # Amount
-    # =========================
 
     try:
 
@@ -1038,18 +1057,17 @@ async def money_command(
         return
 
 
-    # =========================
-    # Parse arguments
-    # =========================
-
     allowed_user_id = None
     allowed_role_id = None
-
     quantity = 1
+
 
     for arg in args:
 
-        # User mention
+        # =========================
+        # User
+        # =========================
+
         if arg.startswith("<@") and not arg.startswith("<@&"):
 
             cleaned = (
@@ -1096,7 +1114,11 @@ async def money_command(
 
             allowed_user_id = user_id
 
-        # Role mention
+
+        # =========================
+        # Role
+        # =========================
+
         elif arg.startswith("<@&"):
 
             cleaned = (
@@ -1142,7 +1164,11 @@ async def money_command(
 
             allowed_role_id = role_id
 
+
+        # =========================
         # Quantity
+        # =========================
+
         else:
 
             try:
@@ -1180,6 +1206,16 @@ async def money_command(
 
     if allowed_role_id is not None:
 
+        if ctx.guild is None:
+
+            await ctx.send(
+                "❌ This command can only be used in a server.",
+                delete_after=5
+            )
+
+            return
+
+
         role = ctx.guild.get_role(
             allowed_role_id
         )
@@ -1207,36 +1243,11 @@ async def money_command(
 
 
     # =========================
-    # Restriction text
+    # Send Embed
     # =========================
 
-    restriction = ""
-
-    if allowed_user_id is not None:
-
-        restriction = (
-            f"\nOnly <@{allowed_user_id}> can claim"
-        )
-
-    elif allowed_role_id is not None:
-
-        restriction = (
-            f"\nOnly <@&{allowed_role_id}> can claim"
-        )
-
-
-    # =========================
-    # Send Money Drop
-    # =========================
-
-    message = await ctx.send(
-        content=(
-            "**Money drop**\n"
-            "Click the button below to receive the reward\n"
-            f"> 0/{quantity}\n"
-            f"Full drop ❌"
-            f"{restriction}"
-        ),
+    await ctx.send(
+        embed=view.create_embed(),
         view=view
     )
 
@@ -1267,6 +1278,29 @@ async def ping_command_error(
     ctx: commands.Context,
     error
 ):
+
+    try:
+
+        await ctx.send(
+            "❌ **Error**\n"
+            "Something went wrong while processing the command.",
+            delete_after=5
+        )
+
+    except discord.HTTPException:
+
+        pass
+
+
+@money_command.error
+async def money_command_error(
+    ctx: commands.Context,
+    error
+):
+
+    print(
+        f"❌ Money command error: {error}"
+    )
 
     try:
 
@@ -1318,4 +1352,4 @@ Thread(
 # Start Bot
 # =========================================================
 
-bot.run(TOKEN) 
+bot.run(TOKEN)
