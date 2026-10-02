@@ -175,6 +175,7 @@ class MoneyDropView(discord.ui.View):
         self.allowed_role_id = allowed_role_id
 
         self.claimed_users = set()
+        self.claimed_names = []
 
         self.update_button()
 
@@ -225,24 +226,49 @@ class MoneyDropView(discord.ui.View):
         if self.allowed_user_id is not None:
 
             restriction = (
-                f"\nOnly <@{self.allowed_user_id}> can claim"
+                f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
             )
 
         elif self.allowed_role_id is not None:
 
             restriction = (
-                f"\nOnly <@&{self.allowed_role_id}> can claim"
+                f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
             )
+
+
+        # =========================
+        # Claimed Users
+        # =========================
+
+        claimed_text = ""
+
+        if self.claimed_names:
+
+            claimed_text = (
+                "\n\n**👥 Claimed by:**\n"
+                + "\n".join(
+                    f"• {name}"
+                    for name in self.claimed_names
+                )
+            )
+
 
         embed = discord.Embed(
             title="💰 Money drop",
             description=(
                 "Click the button below to receive the reward.\n\n"
+
                 f"**Reward:** {self.money_text()}\n"
-                f"**Claims:** {claimed}/{self.quantity}\n"
+
+                f"**Claims:** "
+                f"{claimed}/{self.quantity}\n"
+
                 f"**Full drop:** "
                 f"{'✅' if claimed >= self.quantity else '❌'}"
+
                 f"{restriction}"
+
+                f"{claimed_text}"
             ),
             color=discord.Color.green()
         )
@@ -251,7 +277,7 @@ class MoneyDropView(discord.ui.View):
 
 
     # =========================
-    # Claim
+    # Claim Button
     # =========================
 
     @discord.ui.button(
@@ -269,7 +295,7 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # Already claimed
+        # Already Claimed
         # =========================
 
         if user.id in self.claimed_users:
@@ -297,7 +323,7 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # User restriction
+        # User Restriction
         # =========================
 
         if (
@@ -315,7 +341,7 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # Role restriction
+        # Role Restriction
         # =========================
 
         if self.allowed_role_id is not None:
@@ -372,7 +398,7 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # Add money
+        # Add Money
         # =========================
 
         success = await add_ub_money(
@@ -392,12 +418,29 @@ class MoneyDropView(discord.ui.View):
 
 
         # =========================
-        # Save claim
+        # Save Claim
         # =========================
 
         self.claimed_users.add(
             user.id
         )
+
+
+        # =========================
+        # Add Name
+        # Maximum 10
+        # =========================
+
+        if len(self.claimed_names) < 10:
+
+            self.claimed_names.append(
+                user.mention
+            )
+
+
+        # =========================
+        # Update Button
+        # =========================
 
         self.update_button()
 
@@ -409,6 +452,19 @@ class MoneyDropView(discord.ui.View):
         await interaction.response.edit_message(
             embed=self.create_embed(),
             view=self
+        )
+
+
+        # =========================
+        # Personal Reward Message
+        # =========================
+
+        await interaction.followup.send(
+            (
+                "🎉 **You received "
+                f"{self.money_text()}!**"
+            ),
+            ephemeral=True
         )
 
 
@@ -462,6 +518,10 @@ class PingPanel(discord.ui.View):
         )
 
 
+    # =========================
+    # Get Member
+    # =========================
+
     async def get_member(
         self,
         interaction: discord.Interaction
@@ -506,6 +566,10 @@ class PingPanel(discord.ui.View):
 
             return None
 
+
+    # =========================
+    # Toggle Role
+    # =========================
 
     async def toggle_role(
         self,
@@ -592,6 +656,10 @@ class PingPanel(discord.ui.View):
             )
 
 
+    # =========================
+    # Video Ping
+    # =========================
+
     @discord.ui.button(
         label="🔴 Video Ping",
         style=discord.ButtonStyle.primary,
@@ -609,6 +677,10 @@ class PingPanel(discord.ui.View):
             "Video Ping"
         )
 
+
+    # =========================
+    # Tournament Ping
+    # =========================
 
     @discord.ui.button(
         label="🏆 Tournament Ping",
@@ -628,6 +700,10 @@ class PingPanel(discord.ui.View):
         )
 
 
+    # =========================
+    # Giveaway Ping
+    # =========================
+
     @discord.ui.button(
         label="🎁 Giveaway Ping",
         style=discord.ButtonStyle.primary,
@@ -646,6 +722,10 @@ class PingPanel(discord.ui.View):
         )
 
 
+    # =========================
+    # News Ping
+    # =========================
+
     @discord.ui.button(
         label="📢 News Ping",
         style=discord.ButtonStyle.primary,
@@ -663,6 +743,10 @@ class PingPanel(discord.ui.View):
             "News Ping"
         )
 
+
+    # =========================
+    # Remove All
+    # =========================
 
     @discord.ui.button(
         label="❌ Remove all ping roles",
@@ -1201,7 +1285,7 @@ async def money_command(
 
 
     # =========================
-    # Check role
+    # Check Role
     # =========================
 
     if allowed_role_id is not None:
@@ -1243,7 +1327,7 @@ async def money_command(
 
 
     # =========================
-    # Send Embed
+    # Send Money Drop
     # =========================
 
     await ctx.send(
@@ -1253,7 +1337,7 @@ async def money_command(
 
 
     # =========================
-    # Delete command
+    # Delete Command
     # =========================
 
     try:
