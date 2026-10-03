@@ -1057,72 +1057,7 @@ async def clear_message(
             await interaction.response.send_message(
                 "❌ Something went wrong while deleting messages.",
                 ephemeral=True
-             )
-
-
-# =========================================================
-# !ping panel
-# =========================================================
-
-@bot.command(
-    name="ping"
-)
-async def ping_command(
-    ctx: commands.Context,
-    option: str = None
-):
-
-    if ctx.author.id != OWNER_ID:
-
-        await ctx.send(
-            "❌ **Permission denied**\n"
-            "You don't have permission to use this command.",
-            delete_after=5
-        )
-
-        return
-
-
-    if option is None or option.lower() != "panel":
-
-        await ctx.send(
-            "❌ **Invalid command**\n"
-            "Use `!ping panel`.",
-            delete_after=5
-        )
-
-        return
-
-
-    embed = discord.Embed(
-        description=(
-            "**⚙️ Click on reactions to get the roles you need! ⚙️**\n\n"
-            f"🔴 <@&{VIDEO_ROLE_ID}> - You will receive notifications about a new video.\n"
-            f"🏆 <@&{TOURNAMENT_ROLE_ID}> - You will receive notifications about a new tournament.\n"
-            f"🎁 <@&{GIVEAWAY_ROLE_ID}> - You will receive notifications about the draw "
-            f"(The draw is related to the currency of the server, it is not related to money in any way!)\n"
-            f"📢 <@&{NEWS_ROLE_ID}> - You will receive notifications about new news on the server!"
-        )
-    )
-
-
-    await ctx.send(
-        embed=embed,
-        view=PingPanel()
-    )
-
-
-    try:
-
-        await ctx.message.delete()
-
-    except discord.Forbidden:
-
-        pass
-
-    except discord.HTTPException:
-
-        pass
+            )
 
 
 # =========================================================
