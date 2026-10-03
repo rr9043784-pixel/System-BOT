@@ -10,7 +10,7 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
-from cogs.message import FeaturesView, PingView
+from message import FeaturesView, PingView
 
 
 # =================================================
