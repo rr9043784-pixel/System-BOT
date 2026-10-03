@@ -465,10 +465,7 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
-        # Persistent ping panel
-        self.add_view(
-            PingPanel()
-        )
+        
 
         # =================================================
         # Load message.py
