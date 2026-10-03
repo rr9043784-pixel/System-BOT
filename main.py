@@ -469,25 +469,42 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
-        # =================================================
-        # Load message.py
-        # =================================================
+# =================================================
+# Load message.py
+# =================================================
 
-        try:
+try:
 
-            await self.load_extension(
-                "message"
-            )
+    await self.load_extension("message")
 
-            print(
-                "✅ message.py loaded!"
-            )
+    print(
+        "✅ message.py loaded!"
+    )
 
-        except Exception as e:
+except Exception as e:
 
-            print(
-                f"❌ Failed to load message.py: {e}"
-            )
+    print(
+        f"❌ Failed to load message.py: {e}"
+    )
+
+
+# =================================================
+# Load ticket.py
+# =================================================
+
+try:
+
+    await self.load_extension("ticket")
+
+    print(
+        "✅ ticket.py loaded!"
+    )
+
+except Exception as e:
+
+    print(
+        f"❌ Failed to load ticket.py: {e}"
+    )
 
 
         # =================================================
