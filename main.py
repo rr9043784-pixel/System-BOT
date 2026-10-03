@@ -674,43 +674,6 @@ bot = TournamentBot(
 
             if role and role in member.roles:
 
-                roles_to_remove.append(
-                    role
-                )
-
-
-        try:
-
-            if roles_to_remove:
-
-                await member.remove_roles(
-                    *roles_to_remove
-                )
-
-
-            await interaction.response.send_message(
-                "🗑️ **Roles removed!**\n"
-                "All ping roles have been removed from you.",
-                ephemeral=True
-            )
-
-
-        except discord.Forbidden:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "I don't have permission to remove these roles.",
-                ephemeral=True
-            )
-
-        except discord.HTTPException:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "I couldn't remove your ping roles.",
-                ephemeral=True
-            )
-
 
 # =========================================================
 # Bot Ready
