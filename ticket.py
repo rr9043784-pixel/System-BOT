@@ -698,10 +698,6 @@ class TicketCog(commands.Cog):
             interaction.user.id
         )
 
-        # =================================================
-        # CHECK EXISTING ROLE
-        # =================================================
-
         if isinstance(
             interaction.user,
             discord.Member
@@ -731,10 +727,6 @@ class TicketCog(commands.Cog):
 
                 return
 
-        # =================================================
-        # BLOCK CHECK
-        # =================================================
-
         block = self.data["blocks"].get(
             user_id
         )
@@ -763,10 +755,6 @@ class TicketCog(commands.Cog):
                     )
 
                     return
-
-        # =================================================
-        # ACTIVE APPLICATION
-        # =================================================
 
         application = self.data["applications"].get(
             user_id
@@ -1224,7 +1212,6 @@ class TicketCog(commands.Cog):
             return True
 
         app_type = flow["type"]
-
         answers = flow["answers"]
 
         del self.data[
@@ -1469,10 +1456,6 @@ class TicketCog(commands.Cog):
 
             user = None
 
-        # =================================================
-        # ACCEPT
-        # =================================================
-
         if accepted:
 
             if application_type == "staff":
@@ -1507,10 +1490,6 @@ class TicketCog(commands.Cog):
 
                 return
 
-            # =============================================
-            # ROLE HIERARCHY
-            # =============================================
-
             if interaction.guild.me.top_role <= role:
 
                 await interaction.response.send_message(
@@ -1520,10 +1499,6 @@ class TicketCog(commands.Cog):
                 )
 
                 return
-
-            # =============================================
-            # ALREADY HAS ROLE
-            # =============================================
 
             if any(
                 r.id == role_id
@@ -1536,10 +1511,6 @@ class TicketCog(commands.Cog):
                 )
 
                 return
-
-            # =============================================
-            # GIVE ROLE
-            # =============================================
 
             try:
 
@@ -1576,7 +1547,7 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Staff┃| Host application "
                     "has been accepted!**\n\n"
-                    f"You have received the Staff┃| Host role."
+                    "You have received the Staff┃| Host role."
                 )
 
             else:
@@ -1584,12 +1555,8 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Moderator application "
                     "has been accepted!**\n\n"
-                    f"You have received the Moderator role."
+                    "You have received the Moderator role."
                 )
-
-        # =================================================
-        # REJECT
-        # =================================================
 
         else:
 
@@ -1646,98 +1613,103 @@ class TicketCog(commands.Cog):
     # DM LISTENER
     # =====================================================
 
-@commands.Cog.listener()
-async def on_message(self, message):
+    @commands.Cog.listener()
+    async def on_message(self, message):
 
-    if message.author.bot:
-        return
+        if message.author.bot:
+            return
 
-    # IMPORTANT:
-    # Guild messages are NOT processed here.
-    # Prefix commands are processed only by main.py.
-    if message.guild is not None:
-        return
+        if message.guild is not None:
+            return
 
-    handled = await self.process_application_message(
-        message
-    )
+        # =================================================
+        # APPLICATION
+        # =================================================
 
-    if handled:
-        return
+        handled = await self.process_application_message(
+            message
+        )
 
-    user_id = str(
-        message.author.id
-    )
+        if handled:
+            return
 
-    ticket = None
-    ticket_number_found = None
+        # =================================================
+        # SUPPORT TICKET
+        # =================================================
 
-    for number, data in (
-        self.data["tickets"].items()
-    ):
+        user_id = str(
+            message.author.id
+        )
 
-        if (
-            str(data["user_id"]) == user_id
-            and data["type"] == "support"
-            and not data.get("closed")
+        ticket = None
+        ticket_number_found = None
+
+        for number, data in (
+            self.data["tickets"].items()
         ):
 
-            ticket = data
-            ticket_number_found = number
+            if (
+                str(data["user_id"]) == user_id
+                and data["type"] == "support"
+                and not data.get("closed")
+            ):
 
-            break
+                ticket = data
+                ticket_number_found = number
 
-    if not ticket:
-        return
+                break
 
-    # Add checkmark reaction to the user's DM
-    try:
-        await message.add_reaction("✅")
-    except Exception:
-        pass
+        if not ticket:
+            return
 
-    channel = self.bot.get_channel(
-        ticket["channel_id"]
-    )
+        channel = self.bot.get_channel(
+            ticket["channel_id"]
+        )
 
-    if not channel:
-        return
+        if not channel:
+            return
 
-    embed = discord.Embed(
-        description=(
-            message.content
-            or "[No text]"
-        ),
-        color=discord.Color.blurple()
-    )
+        embed = discord.Embed(
+            description=(
+                message.content
+                or "[No text]"
+            ),
+            color=discord.Color.blurple()
+        )
 
-    embed.set_author(
-        name=f"{message.author} • User"
-    )
+        embed.set_author(
+            name=f"{message.author} • User"
+        )
 
-    embed.set_footer(
-        text=f"Ticket #{ticket_number_found}"
-    )
+        embed.set_footer(
+            text=f"Ticket #{ticket_number_found}"
+        )
 
-    files = []
+        files = []
 
-    for attachment in (
-        message.attachments[:10]
-    ):
+        for attachment in (
+            message.attachments[:10]
+        ):
 
+            try:
+                files.append(
+                    await attachment.to_file()
+                )
+            except Exception:
+                pass
+
+        await channel.send(
+            embed=embed,
+            files=files
+        )
+
+        # ONLY SUPPORT TICKET gets delivery confirmation
         try:
-
-            files.append(
-                await attachment.to_file()
+            await message.channel.send(
+                "**Support:** Your message has been delivered. ✅"
             )
-
         except Exception:
             pass
-
-    await channel.send(
-        embed=embed,
-        files=files
-            )
 
 
 # =========================================================
@@ -1947,4 +1919,4 @@ class ApplicationDecisionView(discord.ui.View):
 async def setup(bot):
     await bot.add_cog(
         TicketCog(bot)
-    )
+)
