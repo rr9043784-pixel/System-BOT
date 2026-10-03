@@ -527,19 +527,6 @@ bot = TournamentBot(
 )
 
 
-# =========================================================
-# Ping Panel
-# =========================================================
-
-class PingPanel(discord.ui.View):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
-
-
     # =========================
     # Get Member
     # =========================
@@ -587,117 +574,6 @@ class PingPanel(discord.ui.View):
             )
 
             return None
-
-
-    # =========================
-    # Toggle Role
-    # =========================
-
-    async def toggle_role(
-        self,
-        interaction: discord.Interaction,
-        role_id: int,
-        role_name: str
-    ):
-
-        if interaction.guild is None:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "This button can only be used inside a server.",
-                ephemeral=True
-            )
-
-            return
-
-
-        role = interaction.guild.get_role(
-            role_id
-        )
-
-        if role is None:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "The role could not be found.",
-                ephemeral=True
-            )
-
-            return
-
-
-        member = await self.get_member(
-            interaction
-        )
-
-        if member is None:
-            return
-
-
-        try:
-
-            if role in member.roles:
-
-                await member.remove_roles(
-                    role
-                )
-
-                await interaction.response.send_message(
-                    f"✅ **Role removed!**\n"
-                    f"You no longer have the {role_name} role.",
-                    ephemeral=True
-                )
-
-            else:
-
-                await member.add_roles(
-                    role
-                )
-
-                await interaction.response.send_message(
-                    f"✅ **Role added!**\n"
-                    f"You now have the {role_name} role.",
-                    ephemeral=True
-                )
-
-
-        except discord.Forbidden:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "I don't have permission to manage this role.",
-                ephemeral=True
-            )
-
-        except discord.HTTPException:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "I couldn't update your role.",
-                ephemeral=True
-            )
-
-
-    # =========================
-    # Video Ping
-    # =========================
-
-    @discord.ui.button(
-        label="🔴 Video Ping",
-        style=discord.ButtonStyle.primary,
-        custom_id="ping_video"
-    )
-    async def video(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-
-        await self.toggle_role(
-            interaction,
-            VIDEO_ROLE_ID,
-            "Video Ping"
-        )
 
 
     # =========================
