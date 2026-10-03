@@ -17,6 +17,9 @@ TICKET_CATEGORY_ID = 1555925139546439700
 SUPPORT_ROLE_ID = 1527295101867524106
 AFTER_CLOSE_CHANNEL_ID = 1527278068526219305
 
+STAFF_HOST_ROLE_ID = 1542739534343700500
+MODERATOR_ROLE_ID = 1539734753736134856
+
 DATA_FILE = "ticket_data.json"
 
 
@@ -308,7 +311,7 @@ class TicketCog(commands.Cog):
                 "Choose the type of request you want to create.\n\n"
                 "🔵 **Support Ticket**\n"
                 "For questions, reports, bugs and other support requests.\n\n"
-                "🟢 **Staff┃|Host**\n"
+                "🟢 **Staff┃| Host**\n"
                 "Submit an application for Staff or Host.\n\n"
                 "🔴 **Moderator**\n"
                 "Submit an application for Moderator."
@@ -336,7 +339,12 @@ class TicketCog(commands.Cog):
     # =====================================================
 
     @ticket.command(name="block")
-    async def ticket_block(self, ctx, member: discord.Member, application_type: str):
+    async def ticket_block(
+        self,
+        ctx,
+        member: discord.Member,
+        application_type: str
+    ):
 
         if not is_manager(ctx.author):
             await ctx.send(
@@ -411,7 +419,14 @@ class TicketCog(commands.Cog):
     # =====================================================
 
     @commands.command(name="answer")
-    async def answer(self, ctx, subcommand=None, number=None, *, text=None):
+    async def answer(
+        self,
+        ctx,
+        subcommand=None,
+        number=None,
+        *,
+        text=None
+    ):
 
         if not is_manager(ctx.author):
             await ctx.send(
@@ -444,17 +459,26 @@ class TicketCog(commands.Cog):
             return
 
         try:
-            user = await self.bot.fetch_user(int(ticket["user_id"]))
-            await user.send(f"**Support:** {text}")
+            user = await self.bot.fetch_user(
+                int(ticket["user_id"])
+            )
+
+            await user.send(
+                f"**Support:** {text}"
+            )
 
         except discord.Forbidden:
+
             await ctx.send(
                 "I could not send a DM to this user.",
                 delete_after=5
             )
+
             return
 
-        channel = self.bot.get_channel(ticket["channel_id"])
+        channel = self.bot.get_channel(
+            ticket["channel_id"]
+        )
 
         if channel:
 
@@ -467,7 +491,9 @@ class TicketCog(commands.Cog):
                 name=f"Support • {ctx.author.display_name}"
             )
 
-            await channel.send(embed=embed)
+            await channel.send(
+                embed=embed
+            )
 
         try:
             await ctx.message.delete()
@@ -479,7 +505,12 @@ class TicketCog(commands.Cog):
     # =====================================================
 
     @commands.command(name="close")
-    async def close(self, ctx, subcommand=None, number=None):
+    async def close(
+        self,
+        ctx,
+        subcommand=None,
+        number=None
+    ):
 
         if not is_manager(ctx.author):
             await ctx.send(
@@ -512,7 +543,10 @@ class TicketCog(commands.Cog):
             return
 
         try:
-            user = await self.bot.fetch_user(int(ticket["user_id"]))
+
+            user = await self.bot.fetch_user(
+                int(ticket["user_id"])
+            )
 
             close_channel = self.bot.get_channel(
                 AFTER_CLOSE_CHANNEL_ID
@@ -535,20 +569,26 @@ class TicketCog(commands.Cog):
             pass
 
         ticket["closed"] = True
+
         save_data(self.data)
 
-        channel = self.bot.get_channel(ticket["channel_id"])
+        channel = self.bot.get_channel(
+            ticket["channel_id"]
+        )
 
         if channel:
+
             try:
+
                 await channel.delete(
                     reason=f"Ticket {number} closed by {ctx.author}"
                 )
+
             except Exception:
                 pass
 
     # =====================================================
-    # SUPPORT
+    # SUPPORT BUTTON
     # =====================================================
 
     async def start_support(self, interaction):
@@ -567,6 +607,7 @@ class TicketCog(commands.Cog):
                     "🎫 You already have an open Support Ticket.",
                     ephemeral=True
                 )
+
                 return
 
         try:
@@ -589,23 +630,63 @@ class TicketCog(commands.Cog):
             )
 
     # =====================================================
-    # APPLICATION START
+    # APPLICATION BUTTON
     # =====================================================
 
-    async def start_application(self, interaction, app_type):
+    async def start_application(
+        self,
+        interaction,
+        app_type
+    ):
 
         user_id = str(interaction.user.id)
+
+        # =================================================
+        # CHECK EXISTING ROLE
+        # =================================================
+
+        if isinstance(interaction.user, discord.Member):
+
+            required_role_id = (
+                STAFF_HOST_ROLE_ID
+                if app_type == "staff"
+                else MODERATOR_ROLE_ID
+            )
+
+            if any(
+                role.id == required_role_id
+                for role in interaction.user.roles
+            ):
+
+                role_name = (
+                    "Staff┃| Host"
+                    if app_type == "staff"
+                    else "Moderator"
+                )
+
+                await interaction.response.send_message(
+                    f"❌ You already have the **{role_name}** role.",
+                    ephemeral=True
+                )
+
+                return
+
+        # =================================================
+        # BLOCK CHECK
+        # =================================================
 
         block = self.data["blocks"].get(user_id)
 
         if block:
 
-            expires = parse_date(block["expires_at"])
+            expires = parse_date(
+                block["expires_at"]
+            )
 
             if utc_now() < expires:
 
                 correct_type = (
-                    "Staff┃|Host"
+                    "Staff┃| Host"
                     if app_type == "staff"
                     else "Moderator"
                 )
@@ -621,9 +702,18 @@ class TicketCog(commands.Cog):
 
                     return
 
-        application = self.data["applications"].get(user_id)
+        # =================================================
+        # ACTIVE APPLICATION
+        # =================================================
 
-        if application and application.get("type") == app_type:
+        application = self.data["applications"].get(
+            user_id
+        )
+
+        if (
+            application
+            and application.get("type") == app_type
+        ):
 
             await interaction.response.send_message(
                 "📋 You already have an active application of this type.",
@@ -632,9 +722,14 @@ class TicketCog(commands.Cog):
 
             return
 
-        flow = self.data.get("application_flows", {}).get(user_id)
+        flow = self.data["application_flows"].get(
+            user_id
+        )
 
-        if flow and flow.get("type") == app_type:
+        if (
+            flow
+            and flow.get("type") == app_type
+        ):
 
             await interaction.response.send_message(
                 "📋 You are already completing an application.",
@@ -658,7 +753,7 @@ class TicketCog(commands.Cog):
         save_data(self.data)
 
         title = (
-            "🟢 Staff┃|Host Application"
+            "🟢 Staff┃| Host Application"
             if app_type == "staff"
             else "🔴 Moderator Application"
         )
@@ -679,6 +774,7 @@ class TicketCog(commands.Cog):
         except discord.Forbidden:
 
             del self.data["application_flows"][user_id]
+
             save_data(self.data)
 
             await interaction.response.send_message(
@@ -687,10 +783,14 @@ class TicketCog(commands.Cog):
             )
 
     # =====================================================
-    # LANGUAGE
+    # LANGUAGE SELECT
     # =====================================================
 
-    async def select_language(self, interaction, value):
+    async def select_language(
+        self,
+        interaction,
+        value
+    ):
 
         user_id = str(interaction.user.id)
 
@@ -717,14 +817,20 @@ class TicketCog(commands.Cog):
         )
 
     # =====================================================
-    # ISSUE
+    # ISSUE SELECT
     # =====================================================
 
-    async def select_issue(self, interaction, value):
+    async def select_issue(
+        self,
+        interaction,
+        value
+    ):
 
         user_id = str(interaction.user.id)
 
-        flow = self.data["support_flows"].get(user_id)
+        flow = self.data["support_flows"].get(
+            user_id
+        )
 
         if not flow:
 
@@ -759,6 +865,7 @@ class TicketCog(commands.Cog):
         if ticket:
 
             del self.data["support_flows"][user_id]
+
             save_data(self.data)
 
             await interaction.followup.send(
@@ -773,51 +880,68 @@ class TicketCog(commands.Cog):
             )
 
     # =====================================================
-    # PRIVATE OVERWRITES
+    # PRIVATE CHANNEL PERMISSIONS
     # =====================================================
 
-    def make_overwrites(self, guild, user):
+    def make_overwrites(
+        self,
+        guild,
+        user
+    ):
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
-                view_channel=False
-            ),
 
-            user: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
-            )
+            guild.default_role:
+                discord.PermissionOverwrite(
+                    view_channel=False
+                ),
+
+            user:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
         }
 
-        manager_role = guild.get_role(SUPPORT_ROLE_ID)
+        manager_role = guild.get_role(
+            SUPPORT_ROLE_ID
+        )
 
         if manager_role:
 
-            overwrites[manager_role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
+            overwrites[manager_role] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
             )
 
-        owner = guild.get_member(OWNER_ID)
+        owner = guild.get_member(
+            OWNER_ID
+        )
 
         if owner:
 
-            overwrites[owner] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
+            overwrites[owner] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
             )
 
         if guild.me:
 
-            overwrites[guild.me] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                manage_channels=True,
-                manage_messages=True
+            overwrites[guild.me] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True,
+                    manage_channels=True,
+                    manage_messages=True
+                )
             )
 
         return overwrites
@@ -826,7 +950,12 @@ class TicketCog(commands.Cog):
     # CREATE SUPPORT TICKET
     # =====================================================
 
-    async def create_support_ticket(self, guild, user, flow):
+    async def create_support_ticket(
+        self,
+        guild,
+        user,
+        flow
+    ):
 
         if guild is None:
             guild = self.bot.guilds[0]
@@ -845,6 +974,7 @@ class TicketCog(commands.Cog):
             return None
 
         number = self.data["next_ticket"]
+
         self.data["next_ticket"] += 1
 
         number_text = ticket_number(number)
@@ -877,14 +1007,23 @@ class TicketCog(commands.Cog):
             return None
 
         self.data["tickets"][number_text] = {
+
             "user_id": user.id,
+
             "channel_id": channel.id,
+
             "type": "support",
+
             "closed": False,
+
             "language": flow["language"],
+
             "language_emoji": flow["emoji"],
+
             "issue": flow["issue"],
+
             "issue_emoji": flow["issue_emoji"],
+
             "created_at": iso_now()
         }
 
@@ -917,7 +1056,9 @@ class TicketCog(commands.Cog):
             text=f"Ticket #{number_text}"
         )
 
-        await channel.send(embed=embed)
+        await channel.send(
+            embed=embed
+        )
 
         return {
             "number": number_text,
@@ -928,11 +1069,18 @@ class TicketCog(commands.Cog):
     # APPLICATION ANSWERS
     # =====================================================
 
-    async def process_application_message(self, message):
+    async def process_application_message(
+        self,
+        message
+    ):
 
-        user_id = str(message.author.id)
+        user_id = str(
+            message.author.id
+        )
 
-        flow = self.data["application_flows"].get(user_id)
+        flow = self.data["application_flows"].get(
+            user_id
+        )
 
         if not flow:
             return False
@@ -952,6 +1100,7 @@ class TicketCog(commands.Cog):
             return True
 
         flow["answers"].append(answer)
+
         flow["step"] += 1
 
         if flow["step"] < len(questions):
@@ -966,6 +1115,7 @@ class TicketCog(commands.Cog):
             return True
 
         app_type = flow["type"]
+
         answers = flow["answers"]
 
         del self.data["application_flows"][user_id]
@@ -979,10 +1129,17 @@ class TicketCog(commands.Cog):
         if application:
 
             self.data["applications"][user_id] = {
+
                 "type": app_type,
-                "channel_id": application["channel"].id,
-                "ticket_number": application["number"],
-                "submitted_at": iso_now()
+
+                "channel_id":
+                    application["channel"].id,
+
+                "ticket_number":
+                    application["number"],
+
+                "submitted_at":
+                    iso_now()
             }
 
             save_data(self.data)
@@ -1006,7 +1163,12 @@ class TicketCog(commands.Cog):
     # CREATE APPLICATION
     # =====================================================
 
-    async def create_application(self, user, app_type, answers):
+    async def create_application(
+        self,
+        user,
+        app_type,
+        answers
+    ):
 
         guild = self.bot.guilds[0]
 
@@ -1016,6 +1178,7 @@ class TicketCog(commands.Cog):
             return None
 
         number = self.data["next_ticket"]
+
         self.data["next_ticket"] += 1
 
         number_text = ticket_number(number)
@@ -1037,10 +1200,11 @@ class TicketCog(commands.Cog):
             )
 
         except Exception:
+
             return None
 
         title = (
-            "🟢 Staff┃|Host Application"
+            "🟢 Staff┃| Host Application"
             if app_type == "staff"
             else "🔴 Moderator Application"
         )
@@ -1077,7 +1241,10 @@ class TicketCog(commands.Cog):
             view=ApplicationDecisionView(self)
         )
 
-        for index, answer in enumerate(answers, start=1):
+        for index, answer in enumerate(
+            answers,
+            start=1
+        ):
 
             question = (
                 STAFF_QUESTIONS[index - 1]
@@ -1108,7 +1275,11 @@ class TicketCog(commands.Cog):
     # ACCEPT / REJECT
     # =====================================================
 
-    async def decide_application(self, interaction, accepted):
+    async def decide_application(
+        self,
+        interaction,
+        accepted
+    ):
 
         if not is_manager(interaction.user):
 
@@ -1122,11 +1293,18 @@ class TicketCog(commands.Cog):
         channel_id = interaction.channel.id
 
         target_user_id = None
+        application_type = None
 
         for user_id, application in self.data["applications"].items():
 
             if application.get("channel_id") == channel_id:
+
                 target_user_id = int(user_id)
+
+                application_type = application.get(
+                    "type"
+                )
+
                 break
 
         if target_user_id is None:
@@ -1139,29 +1317,119 @@ class TicketCog(commands.Cog):
             return
 
         try:
-            user = await self.bot.fetch_user(target_user_id)
+
+            user = await self.bot.fetch_user(
+                target_user_id
+            )
+
         except Exception:
+
             user = None
+
+        # =================================================
+        # ACCEPT
+        # =================================================
 
         if accepted:
 
-            result_text = (
-                "✅ **Your application has been accepted!**\n\n"
-                "Congratulations! A member of the team will contact you "
-                "with the next steps."
+            role_id = (
+                STAFF_HOST_ROLE_ID
+                if application_type == "staff"
+                else MODERATOR_ROLE_ID
             )
+
+            role = interaction.guild.get_role(
+                role_id
+            )
+
+            member = interaction.guild.get_member(
+                target_user_id
+            )
+
+            role_given = False
+
+            if role and member:
+
+                try:
+
+                    await member.add_roles(
+                        role,
+                        reason=(
+                            f"{application_type} application "
+                            f"accepted by {interaction.user}"
+                        )
+                    )
+
+                    role_given = True
+
+                except discord.Forbidden:
+
+                    role_given = False
+
+                except Exception:
+
+                    role_given = False
+
+            if application_type == "staff":
+
+                if role_given:
+
+                    result_text = (
+                        "✅ **Your Staff┃| Host application has been accepted!**\n\n"
+                        f"You have received the <@&{STAFF_HOST_ROLE_ID}> role."
+                    )
+
+                else:
+
+                    result_text = (
+                        "✅ **Your Staff┃| Host application has been accepted!**\n\n"
+                        "Your application was accepted, but the role could not "
+                        "be assigned automatically."
+                    )
+
+            else:
+
+                if role_given:
+
+                    result_text = (
+                        "✅ **Your Moderator application has been accepted!**\n\n"
+                        f"You have received the <@&{MODERATOR_ROLE_ID}> role."
+                    )
+
+                else:
+
+                    result_text = (
+                        "✅ **Your Moderator application has been accepted!**\n\n"
+                        "Your application was accepted, but the role could not "
+                        "be assigned automatically."
+                    )
+
+        # =================================================
+        # REJECT
+        # =================================================
 
         else:
 
-            result_text = (
-                "❌ **Your application has been rejected.**\n\n"
-                "Thank you for taking the time to apply."
-            )
+            if application_type == "staff":
+
+                result_text = (
+                    "❌ **Your Staff┃| Host application has been rejected.**\n\n"
+                    "Thank you for taking the time to apply."
+                )
+
+            else:
+
+                result_text = (
+                    "❌ **Your Moderator application has been rejected.**\n\n"
+                    "Thank you for taking the time to apply."
+                )
 
         if user:
 
             try:
-                await user.send(result_text)
+                await user.send(
+                    result_text
+                )
             except Exception:
                 pass
 
@@ -1175,7 +1443,9 @@ class TicketCog(commands.Cog):
             view=None
         )
 
-        del self.data["applications"][str(target_user_id)]
+        del self.data["applications"][
+            str(target_user_id)
+        ]
 
         save_data(self.data)
 
@@ -1200,12 +1470,16 @@ class TicketCog(commands.Cog):
         if message.guild is not None:
             return
 
-        handled = await self.process_application_message(message)
+        handled = await self.process_application_message(
+            message
+        )
 
         if handled:
             return
 
-        user_id = str(message.author.id)
+        user_id = str(
+            message.author.id
+        )
 
         ticket = None
         ticket_number_found = None
@@ -1220,6 +1494,7 @@ class TicketCog(commands.Cog):
 
                 ticket = data
                 ticket_number_found = number
+
                 break
 
         if not ticket:
@@ -1233,7 +1508,10 @@ class TicketCog(commands.Cog):
             return
 
         embed = discord.Embed(
-            description=message.content or "[No text]",
+            description=(
+                message.content
+                or "[No text]"
+            ),
             color=discord.Color.blurple()
         )
 
@@ -1250,9 +1528,11 @@ class TicketCog(commands.Cog):
         for attachment in message.attachments[:10]:
 
             try:
+
                 files.append(
                     await attachment.to_file()
                 )
+
             except Exception:
                 pass
 
@@ -1278,19 +1558,27 @@ class TicketPanelView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         custom_id="ticket:support"
     )
-    async def support(self, interaction, button):
+    async def support(
+        self,
+        interaction,
+        button
+    ):
 
         await self.cog.start_support(
             interaction
         )
 
     @discord.ui.button(
-        label="Staff┃|Host",
+        label="Staff┃| Host",
         emoji="🛡️",
         style=discord.ButtonStyle.success,
         custom_id="ticket:staff"
     )
-    async def staff(self, interaction, button):
+    async def staff(
+        self,
+        interaction,
+        button
+    ):
 
         await self.cog.start_application(
             interaction,
@@ -1303,7 +1591,11 @@ class TicketPanelView(discord.ui.View):
         style=discord.ButtonStyle.danger,
         custom_id="ticket:moderator"
     )
-    async def moderator(self, interaction, button):
+    async def moderator(
+        self,
+        interaction,
+        button
+    ):
 
         await self.cog.start_application(
             interaction,
@@ -1318,7 +1610,9 @@ class TicketPanelView(discord.ui.View):
 class LanguageView(discord.ui.View):
 
     def __init__(self, cog):
+
         super().__init__(timeout=None)
+
         self.cog = cog
 
         options = [
@@ -1340,7 +1634,10 @@ class LanguageView(discord.ui.View):
 
         self.add_item(select)
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         value = interaction.data["values"][0]
 
@@ -1357,7 +1654,9 @@ class LanguageView(discord.ui.View):
 class IssueView(discord.ui.View):
 
     def __init__(self, cog):
+
         super().__init__(timeout=None)
+
         self.cog = cog
 
         options = [
@@ -1379,7 +1678,10 @@ class IssueView(discord.ui.View):
 
         self.add_item(select)
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         value = interaction.data["values"][0]
 
@@ -1396,7 +1698,9 @@ class IssueView(discord.ui.View):
 class ApplicationDecisionView(discord.ui.View):
 
     def __init__(self, cog):
+
         super().__init__(timeout=None)
+
         self.cog = cog
 
     @discord.ui.button(
@@ -1405,7 +1709,11 @@ class ApplicationDecisionView(discord.ui.View):
         style=discord.ButtonStyle.success,
         custom_id="ticket:application_accept"
     )
-    async def accept(self, interaction, button):
+    async def accept(
+        self,
+        interaction,
+        button
+    ):
 
         await self.cog.decide_application(
             interaction,
@@ -1418,7 +1726,11 @@ class ApplicationDecisionView(discord.ui.View):
         style=discord.ButtonStyle.danger,
         custom_id="ticket:application_reject"
     )
-    async def reject(self, interaction, button):
+    async def reject(
+        self,
+        interaction,
+        button
+    ):
 
         await self.cog.decide_application(
             interaction,
@@ -1431,4 +1743,6 @@ class ApplicationDecisionView(discord.ui.View):
 # =========================================================
 
 async def setup(bot):
-    await bot.add_cog(TicketCog(bot))
+    await bot.add_cog(
+        TicketCog(bot)
+                            )
