@@ -355,7 +355,7 @@ class PlatformSelect(discord.ui.Select):
 
 
 # =========================================================
-# FEATURES COMPONENTS V2
+# FEATURES VIEW
 # =========================================================
 
 class FeaturesView(discord.ui.LayoutView):
@@ -540,7 +540,7 @@ class RemovePingRolesButton(discord.ui.Button):
 
 
 # =========================================================
-# PING COMPONENTS V2
+# PING VIEW
 # =========================================================
 
 class PingView(discord.ui.LayoutView):
@@ -663,6 +663,29 @@ class Message(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+
+    # =====================================================
+    # DELETE OWNER PREFIX MESSAGES
+    # =====================================================
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+
+        if message.author.bot:
+            return
+
+        # Delete every message from the owner that starts with !
+        if (
+            message.author.id == OWNER_ID
+            and message.content.startswith("!")
+        ):
+            try:
+                await message.delete()
+            except (discord.NotFound, discord.Forbidden):
+                pass
+
+        # Keep prefix commands working
+        await self.bot.process_commands(message)
 
     # =====================================================
     # !features panel
