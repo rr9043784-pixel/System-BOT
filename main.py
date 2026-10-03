@@ -990,7 +990,6 @@ clear_group = app_commands.Group(
     description="Clear messages"
 )
 
-
 @clear_group.command(
     name="message",
     description="Delete messages from a channel"
@@ -1005,36 +1004,60 @@ async def clear_message(
     channel: discord.TextChannel,
     number_of_messages: app_commands.Range[int, 1, 100]
 ):
-
     try:
+        # Сразу подтверждаем команду, чтобы Discord не отклонил ответ
+        await interaction.response.defer(ephemeral=True)
 
+        # Удаляем сообщения
         deleted = await channel.purge(
             limit=number_of_messages
         )
 
-        await interaction.response.send_message(
-            f"✅ Successfully deleted {len(deleted)} messages.",
-            ephemeral=True
+        # Сколько реально удалено
+        count = len(deleted)
+
+        # Отвечаем скрытым сообщением
+        await interaction.edit_original_response(
+            content=f"✅ Successfully deleted {count} "
+                    f"{'message' if count == 1 else 'messages'}."
         )
 
     except discord.Forbidden:
+        if interaction.response.is_done():
+            await interaction.edit_original_response(
+                content="❌ I don't have permission to delete messages in this channel."
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ I don't have permission to delete messages in this channel.",
+                ephemeral=True
+            )
 
-        await interaction.response.send_message(
-            "❌ I don't have permission to delete messages in this channel.",
-            ephemeral=True
-        )
+    except discord.HTTPException as e:
+        print(f"❌ Clear HTTP error: {e}")
 
-    except discord.HTTPException:
+        if interaction.response.is_done():
+            await interaction.edit_original_response(
+                content="❌ Failed to delete messages."
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Failed to delete messages.",
+                ephemeral=True
+            )
 
-        await interaction.response.send_message(
-            "❌ Failed to delete messages.",
-            ephemeral=True
-        )
+    except Exception as e:
+        print(f"❌ Clear error: {e}")
 
-
-bot.tree.add_command(
-    clear_group
-)
+        if interaction.response.is_done():
+            await interaction.edit_original_response(
+                content="❌ Something went wrong while deleting messages."
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Something went wrong while deleting messages.",
+                ephemeral=True
+             )
 
 
 # =========================================================
