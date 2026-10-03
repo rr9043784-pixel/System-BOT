@@ -11,17 +11,17 @@ from flask import Flask
 from threading import Thread
 
 
-# =========================
+# =========================================================
 # Tokens
-# =========================
+# =========================================================
 
 TOKEN = os.environ["DISCORD_TOKEN"]
 UB_TOKEN = os.environ["UNBELIEVABOAT_TOKEN"]
 
 
-# =========================
+# =========================================================
 # Settings
-# =========================
+# =========================================================
 
 OWNER_ID = 1176149190192152626
 
@@ -30,9 +30,9 @@ UB_GUILD_ID = "1520800006905266216"
 MONEY_EMOJI = "<:MoneyR:1534220684178231397>"
 
 
-# =========================
+# =========================================================
 # Flask
-# =========================
+# =========================================================
 
 app = Flask(__name__)
 
@@ -165,9 +165,9 @@ class MoneyDropView(discord.ui.View):
         self.update_button()
 
 
-    # =========================
+    # =====================================================
     # Money Format
-    # =========================
+    # =====================================================
 
     def money_text(self):
 
@@ -177,9 +177,9 @@ class MoneyDropView(discord.ui.View):
         )
 
 
-    # =========================
+    # =====================================================
     # Update Button
-    # =========================
+    # =====================================================
 
     def update_button(self):
 
@@ -196,9 +196,9 @@ class MoneyDropView(discord.ui.View):
         )
 
 
-    # =========================
+    # =====================================================
     # Create Embed
-    # =========================
+    # =====================================================
 
     def create_embed(self):
 
@@ -211,19 +211,21 @@ class MoneyDropView(discord.ui.View):
         if self.allowed_user_id is not None:
 
             restriction = (
-                f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
+                f"\n\n**Only:** "
+                f"<@{self.allowed_user_id}> can claim"
             )
 
         elif self.allowed_role_id is not None:
 
             restriction = (
-                f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
+                f"\n\n**Only:** "
+                f"<@&{self.allowed_role_id}> can claim"
             )
 
 
-        # =========================
+        # =================================================
         # Claimed Users
-        # =========================
+        # =================================================
 
         claimed_text = ""
 
@@ -231,7 +233,8 @@ class MoneyDropView(discord.ui.View):
 
             claimed_text = (
                 "\n\n**👥 Claimed by:**\n"
-                + "\n".join(
+                +
+                "\n".join(
                     f"• {name}"
                     for name in self.claimed_names
                 )
@@ -243,7 +246,8 @@ class MoneyDropView(discord.ui.View):
             description=(
                 "Click the button below to receive the reward.\n\n"
 
-                f"**Reward:** {self.money_text()}\n"
+                f"**Reward:** "
+                f"{self.money_text()}\n"
 
                 f"**Claims:** "
                 f"{claimed}/{self.quantity}\n"
@@ -261,9 +265,9 @@ class MoneyDropView(discord.ui.View):
         return embed
 
 
-    # =========================
+    # =====================================================
     # Claim Button
-    # =========================
+    # =====================================================
 
     @discord.ui.button(
         label="🎁 Claim reward 0/1",
@@ -279,9 +283,9 @@ class MoneyDropView(discord.ui.View):
         user = interaction.user
 
 
-        # =========================
+        # =================================================
         # Already Claimed
-        # =========================
+        # =================================================
 
         if user.id in self.claimed_users:
 
@@ -293,9 +297,9 @@ class MoneyDropView(discord.ui.View):
             return
 
 
-        # =========================
+        # =================================================
         # Full
-        # =========================
+        # =================================================
 
         if len(self.claimed_users) >= self.quantity:
 
@@ -307,9 +311,9 @@ class MoneyDropView(discord.ui.View):
             return
 
 
-        # =========================
+        # =================================================
         # User Restriction
-        # =========================
+        # =================================================
 
         if (
             self.allowed_user_id is not None
@@ -325,9 +329,9 @@ class MoneyDropView(discord.ui.View):
             return
 
 
-        # =========================
+        # =================================================
         # Role Restriction
-        # =========================
+        # =================================================
 
         if self.allowed_role_id is not None:
 
@@ -382,9 +386,9 @@ class MoneyDropView(discord.ui.View):
                 return
 
 
-        # =========================
+        # =================================================
         # Add Money
-        # =========================
+        # =================================================
 
         success = await add_ub_money(
             user.id,
@@ -402,19 +406,19 @@ class MoneyDropView(discord.ui.View):
             return
 
 
-        # =========================
+        # =================================================
         # Save Claim
-        # =========================
+        # =================================================
 
         self.claimed_users.add(
             user.id
         )
 
 
-        # =========================
+        # =================================================
         # Add Name
         # Maximum 10
-        # =========================
+        # =================================================
 
         if len(self.claimed_names) < 10:
 
@@ -423,16 +427,16 @@ class MoneyDropView(discord.ui.View):
             )
 
 
-        # =========================
+        # =================================================
         # Update Button
-        # =========================
+        # =================================================
 
         self.update_button()
 
 
-        # =========================
+        # =================================================
         # Update Embed
-        # =========================
+        # =================================================
 
         await interaction.response.edit_message(
             embed=self.create_embed(),
@@ -440,9 +444,9 @@ class MoneyDropView(discord.ui.View):
         )
 
 
-        # =========================
+        # =================================================
         # Personal Reward Message
-        # =========================
+        # =================================================
 
         await interaction.followup.send(
             (
@@ -465,8 +469,6 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
-        
-
         # =================================================
         # Load message.py
         # =================================================
@@ -486,6 +488,7 @@ class TournamentBot(commands.Bot):
             print(
                 f"❌ Failed to load message.py: {e}"
             )
+
 
         # =================================================
         # Sync Slash Commands
@@ -510,55 +513,6 @@ bot = TournamentBot(
     command_prefix="!",
     intents=intents
 )
-
-
-    # =========================
-    # Get Member
-    # =========================
-
-    async def get_member(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        if interaction.guild is None:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "This button can only be used inside a server.",
-                ephemeral=True
-            )
-
-            return None
-
-
-        try:
-
-            member = await interaction.guild.fetch_member(
-                interaction.user.id
-            )
-
-            return member
-
-        except discord.NotFound:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "Your member information could not be found.",
-                ephemeral=True
-            )
-
-            return None
-
-        except discord.HTTPException:
-
-            await interaction.response.send_message(
-                "❌ **Error**\n"
-                "I couldn't get your member information.",
-                ephemeral=True
-            )
-
-            return None
 
 
 # =========================================================
@@ -703,6 +657,7 @@ clear_group = app_commands.Group(
     description="Clear messages"
 )
 
+
 @clear_group.command(
     name="message",
     description="Delete messages from a channel"
@@ -717,60 +672,36 @@ async def clear_message(
     channel: discord.TextChannel,
     number_of_messages: app_commands.Range[int, 1, 100]
 ):
-    try:
-        # Сразу подтверждаем команду, чтобы Discord не отклонил ответ
-        await interaction.response.defer(ephemeral=True)
 
-        # Удаляем сообщения
+    try:
+
         deleted = await channel.purge(
             limit=number_of_messages
         )
 
-        # Сколько реально удалено
-        count = len(deleted)
-
-        # Отвечаем скрытым сообщением
-        await interaction.edit_original_response(
-            content=f"✅ Successfully deleted {count} "
-                    f"{'message' if count == 1 else 'messages'}."
+        await interaction.response.send_message(
+            f"✅ Successfully deleted {len(deleted)} messages.",
+            ephemeral=True
         )
 
     except discord.Forbidden:
-        if interaction.response.is_done():
-            await interaction.edit_original_response(
-                content="❌ I don't have permission to delete messages in this channel."
-            )
-        else:
-            await interaction.response.send_message(
-                "❌ I don't have permission to delete messages in this channel.",
-                ephemeral=True
-            )
 
-    except discord.HTTPException as e:
-        print(f"❌ Clear HTTP error: {e}")
+        await interaction.response.send_message(
+            "❌ I don't have permission to delete messages in this channel.",
+            ephemeral=True
+        )
 
-        if interaction.response.is_done():
-            await interaction.edit_original_response(
-                content="❌ Failed to delete messages."
-            )
-        else:
-            await interaction.response.send_message(
-                "❌ Failed to delete messages.",
-                ephemeral=True
-            )
+    except discord.HTTPException:
 
-    except Exception as e:
-        print(f"❌ Clear error: {e}")
+        await interaction.response.send_message(
+            "❌ Failed to delete messages.",
+            ephemeral=True
+        )
 
-        if interaction.response.is_done():
-            await interaction.edit_original_response(
-                content="❌ Something went wrong while deleting messages."
-            )
-        else:
-            await interaction.response.send_message(
-                "❌ Something went wrong while deleting messages.",
-                ephemeral=True
-            )
+
+bot.tree.add_command(
+    clear_group
+)
 
 
 # =========================================================
@@ -841,9 +772,9 @@ async def money_command(
 
     for arg in args:
 
-        # =========================
+        # =================================================
         # User
-        # =========================
+        # =================================================
 
         if arg.startswith("<@") and not arg.startswith("<@&"):
 
@@ -892,9 +823,9 @@ async def money_command(
             allowed_user_id = user_id
 
 
-        # =========================
+        # =================================================
         # Role
-        # =========================
+        # =================================================
 
         elif arg.startswith("<@&"):
 
@@ -942,9 +873,9 @@ async def money_command(
             allowed_role_id = role_id
 
 
-        # =========================
+        # =================================================
         # Quantity
-        # =========================
+        # =================================================
 
         else:
 
@@ -977,9 +908,9 @@ async def money_command(
             quantity = parsed_quantity
 
 
-    # =========================
+    # =====================================================
     # Check Role
-    # =========================
+    # =====================================================
 
     if allowed_role_id is not None:
 
@@ -1007,9 +938,9 @@ async def money_command(
             return
 
 
-    # =========================
+    # =====================================================
     # Create View
-    # =========================
+    # =====================================================
 
     view = MoneyDropView(
         amount=amount_int,
@@ -1019,9 +950,9 @@ async def money_command(
     )
 
 
-    # =========================
+    # =====================================================
     # Send Money Drop
-    # =========================
+    # =====================================================
 
     await ctx.send(
         embed=view.create_embed(),
@@ -1029,9 +960,9 @@ async def money_command(
     )
 
 
-    # =========================
+    # =====================================================
     # Delete Command
-    # =========================
+    # =====================================================
 
     try:
 
@@ -1049,25 +980,6 @@ async def money_command(
 # =========================================================
 # Prefix Command Errors
 # =========================================================
-
-@ping_command.error
-async def ping_command_error(
-    ctx: commands.Context,
-    error
-):
-
-    try:
-
-        await ctx.send(
-            "❌ **Error**\n"
-            "Something went wrong while processing the command.",
-            delete_after=5
-        )
-
-    except discord.HTTPException:
-
-        pass
-
 
 @money_command.error
 async def money_command_error(
