@@ -117,7 +117,6 @@ async def add_ub_money(
 
         return True
 
-
     except urllib.error.HTTPError as e:
 
         error_text = e.read().decode(
@@ -131,7 +130,6 @@ async def add_ub_money(
 
         return False
 
-
     except urllib.error.URLError as e:
 
         print(
@@ -139,7 +137,6 @@ async def add_ub_money(
         )
 
         return False
-
 
     except Exception as e:
 
@@ -480,9 +477,34 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
+        # Persistent ping panel
         self.add_view(
             PingPanel()
         )
+
+        # =================================================
+        # Load message.py
+        # =================================================
+
+        try:
+
+            await self.load_extension(
+                "message"
+            )
+
+            print(
+                "✅ message.py loaded!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load message.py: {e}"
+            )
+
+        # =================================================
+        # Sync Slash Commands
+        # =================================================
 
         try:
 
