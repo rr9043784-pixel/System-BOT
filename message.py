@@ -423,7 +423,11 @@ class FeaturesView(discord.ui.LayoutView):
                 "-# Select an option from the menus above."
             ),
 
-            accent_colour=discord.Colour.from_rgb(88, 101, 242),
+            accent_colour=discord.Colour.from_rgb(
+                88,
+                101,
+                242
+            ),
         )
 
         self.add_item(container)
@@ -451,21 +455,31 @@ class PingButton(discord.ui.Button):
 
         self.role_id = role_id
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(
+        self,
+        interaction: discord.Interaction
+    ):
 
-        role = interaction.guild.get_role(self.role_id)
+        role = interaction.guild.get_role(
+            self.role_id
+        )
 
         if role is None:
+
             await interaction.response.send_message(
                 "❌ The selected role could not be found.",
                 ephemeral=True,
             )
+
             return
 
         try:
+
             if role in interaction.user.roles:
 
-                await interaction.user.remove_roles(role)
+                await interaction.user.remove_roles(
+                    role
+                )
 
                 await interaction.response.send_message(
                     f"🔕 **{role.name}** notifications disabled.",
@@ -474,7 +488,9 @@ class PingButton(discord.ui.Button):
 
             else:
 
-                await interaction.user.add_roles(role)
+                await interaction.user.add_roles(
+                    role
+                )
 
                 await interaction.response.send_message(
                     f"🔔 **{role.name}** notifications enabled.",
@@ -482,12 +498,14 @@ class PingButton(discord.ui.Button):
                 )
 
         except discord.Forbidden:
+
             await interaction.response.send_message(
                 "❌ I don't have permission to manage this role.",
                 ephemeral=True,
             )
 
         except Exception:
+
             await interaction.response.send_message(
                 "❌ Something went wrong while changing your notification role.",
                 ephemeral=True,
@@ -501,6 +519,7 @@ class PingButton(discord.ui.Button):
 class RemovePingRolesButton(discord.ui.Button):
 
     def __init__(self):
+
         super().__init__(
             label="Remove all ping roles",
             emoji="❌",
@@ -508,7 +527,10 @@ class RemovePingRolesButton(discord.ui.Button):
             custom_id="features_remove_ping_roles_v2",
         )
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(
+        self,
+        interaction: discord.Interaction
+    ):
 
         roles_to_remove = [
             role
@@ -519,7 +541,10 @@ class RemovePingRolesButton(discord.ui.Button):
         try:
 
             if roles_to_remove:
-                await interaction.user.remove_roles(*roles_to_remove)
+
+                await interaction.user.remove_roles(
+                    *roles_to_remove
+                )
 
             await interaction.response.send_message(
                 "✅ All notification roles have been removed.",
@@ -527,12 +552,14 @@ class RemovePingRolesButton(discord.ui.Button):
             )
 
         except discord.Forbidden:
+
             await interaction.response.send_message(
                 "❌ I don't have permission to manage these roles.",
                 ephemeral=True,
             )
 
         except Exception:
+
             await interaction.response.send_message(
                 "❌ Something went wrong while removing your roles.",
                 ephemeral=True,
@@ -546,6 +573,7 @@ class RemovePingRolesButton(discord.ui.Button):
 class PingView(discord.ui.LayoutView):
 
     def __init__(self):
+
         super().__init__(timeout=None)
 
         container = discord.ui.Container(
@@ -649,7 +677,11 @@ class PingView(discord.ui.LayoutView):
                 "-# Click a button to enable or disable a notification role."
             ),
 
-            accent_colour=discord.Colour.from_rgb(88, 101, 242),
+            accent_colour=discord.Colour.from_rgb(
+                88,
+                101,
+                242
+            ),
         )
 
         self.add_item(container)
@@ -679,26 +711,44 @@ class Message(commands.Cog):
             message.author.id == OWNER_ID
             and message.content.startswith("!")
         ):
+
             try:
                 await message.delete()
-            except (discord.NotFound, discord.Forbidden):
+
+            except (
+                discord.NotFound,
+                discord.Forbidden
+            ):
                 pass
 
-        # Keep prefix commands working
-        await self.bot.process_commands(message)
+        # IMPORTANT:
+        # Do NOT call bot.process_commands(message) here.
+        #
+        # commands.Bot already has its own on_message()
+        # which processes prefix commands.
+        #
+        # Calling process_commands() here would make commands
+        # execute twice.
 
     # =====================================================
     # !features panel
     # =====================================================
 
     @commands.command(name="features")
-    async def features(self, ctx, action=None):
+    async def features(
+        self,
+        ctx,
+        action=None
+    ):
 
         # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
-        if action is None or action.lower() != "panel":
+        if (
+            action is None
+            or action.lower() != "panel"
+        ):
             return
 
         await ctx.send(
@@ -710,13 +760,20 @@ class Message(commands.Cog):
     # =====================================================
 
     @commands.command(name="ping")
-    async def ping(self, ctx, action=None):
+    async def ping(
+        self,
+        ctx,
+        action=None
+    ):
 
         # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
-        if action is None or action.lower() != "panel":
+        if (
+            action is None
+            or action.lower() != "panel"
+        ):
             return
 
         await ctx.send(
@@ -729,4 +786,6 @@ class Message(commands.Cog):
 # =========================================================
 
 async def setup(bot):
-    await bot.add_cog(Message(bot))
+    await bot.add_cog(
+        Message(bot)
+            )
