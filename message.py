@@ -3,6 +3,13 @@ from discord.ext import commands
 
 
 # =========================================================
+# OWNER
+# =========================================================
+
+OWNER_ID = 1176149190192152626
+
+
+# =========================================================
 # ROLE IDs
 # =========================================================
 
@@ -24,13 +31,6 @@ PC_ROLE = 1545280805905895504
 XBOX_ROLE = 1545281911151398942
 PLAYSTATION_ROLE = 1545281770818248805
 NINTENDO_ROLE = 1545283995665834086
-
-
-# =========================================================
-# OWNER
-# =========================================================
-
-OWNER_ID = 1176149190192152626
 
 
 # =========================================================
@@ -65,13 +65,14 @@ PLATFORM_ROLES = [
 # =========================================================
 
 async def replace_role(member, role_id, role_group):
+
     role = member.guild.get_role(role_id)
 
     if role is None:
         return False
 
-    # Remove old role from the same category
     for old_role_id in role_group:
+
         old_role = member.guild.get_role(old_role_id)
 
         if (
@@ -84,8 +85,8 @@ async def replace_role(member, role_id, role_group):
             except discord.Forbidden:
                 return False
 
-    # Add new role
     if role not in member.roles:
+
         try:
             await member.add_roles(role)
         except discord.Forbidden:
@@ -101,6 +102,7 @@ async def replace_role(member, role_id, role_group):
 class ColorSelect(discord.ui.Select):
 
     def __init__(self):
+
         options = [
             discord.SelectOption(
                 label="Black",
@@ -134,7 +136,7 @@ class ColorSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="features_color",
+            custom_id="features_color"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -148,13 +150,16 @@ class ColorSelect(discord.ui.Select):
         )
 
         if success:
+
             role = interaction.guild.get_role(role_id)
 
             await interaction.response.send_message(
                 f"🎨 Your nickname color is now **{role.name}**!",
                 ephemeral=True
             )
+
         else:
+
             await interaction.response.send_message(
                 "❌ I couldn't update your nickname color.",
                 ephemeral=True
@@ -168,6 +173,7 @@ class ColorSelect(discord.ui.Select):
 class LanguageSelect(discord.ui.Select):
 
     def __init__(self):
+
         options = [
             discord.SelectOption(
                 label="Russian",
@@ -186,7 +192,7 @@ class LanguageSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="features_language",
+            custom_id="features_language"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -200,13 +206,16 @@ class LanguageSelect(discord.ui.Select):
         )
 
         if success:
+
             role = interaction.guild.get_role(role_id)
 
             await interaction.response.send_message(
                 f"🌐 Your language is now **{role.name}**!",
                 ephemeral=True
             )
+
         else:
+
             await interaction.response.send_message(
                 "❌ I couldn't update your language.",
                 ephemeral=True
@@ -220,6 +229,7 @@ class LanguageSelect(discord.ui.Select):
 class PlatformSelect(discord.ui.Select):
 
     def __init__(self):
+
         options = [
             discord.SelectOption(
                 label="Mobile",
@@ -258,7 +268,7 @@ class PlatformSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="features_platform",
+            custom_id="features_platform"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -272,13 +282,16 @@ class PlatformSelect(discord.ui.Select):
         )
 
         if success:
+
             role = interaction.guild.get_role(role_id)
 
             await interaction.response.send_message(
                 f"📱 Your platform is now **{role.name}**!",
                 ephemeral=True
             )
+
         else:
+
             await interaction.response.send_message(
                 "❌ I couldn't update your platform.",
                 ephemeral=True
@@ -292,7 +305,10 @@ class PlatformSelect(discord.ui.Select):
 class FeaturesView(discord.ui.View):
 
     def __init__(self):
-        super().__init__(timeout=None)
+
+        super().__init__(
+            timeout=None
+        )
 
         self.add_item(ColorSelect())
         self.add_item(LanguageSelect())
@@ -306,20 +322,30 @@ class FeaturesView(discord.ui.View):
 class Message(commands.Cog):
 
     def __init__(self, bot):
+
         self.bot = bot
 
-    # -----------------------------------------------------
+    # =====================================================
     # !features panel
-    # -----------------------------------------------------
+    # =====================================================
 
-    @commands.command()
-    async def features(self, ctx, action=None):
+    @commands.command(
+        name="features"
+    )
+    async def features(
+        self,
+        ctx,
+        action=None
+    ):
 
-        # ONLY OWNER CAN USE THIS COMMAND
+        # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
-        if action is None or action.lower() != "panel":
+        if action is None:
+            return
+
+        if action.lower() != "panel":
             return
 
         embed = discord.Embed(
@@ -340,7 +366,11 @@ class Message(commands.Cog):
 
                 "⬇️ **Menu** ⬇️"
             ),
-            color=discord.Color.from_rgb(88, 101, 242)
+            color=discord.Color.from_rgb(
+                88,
+                101,
+                242
+            )
         )
 
         embed.set_footer(
@@ -358,7 +388,7 @@ class Message(commands.Cog):
 # =========================================================
 
 async def setup(bot):
-    await bot.add_cog(Message(bot))
 
-    # Register the view so menus continue working after restart
-    bot.add_view(FeaturesView())
+    await bot.add_cog(
+        Message(bot)
+    )
