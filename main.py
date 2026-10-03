@@ -11,28 +11,22 @@ from flask import Flask
 from threading import Thread
 
 
-# =========================================================
-# Tokens
-# =========================================================
+# =================================================
+# SETTINGS
+# =================================================
 
 TOKEN = os.environ["DISCORD_TOKEN"]
 UB_TOKEN = os.environ["UNBELIEVABOAT_TOKEN"]
 
-
-# =========================================================
-# Settings
-# =========================================================
-
 OWNER_ID = 1176149190192152626
-
 UB_GUILD_ID = "1520800006905266216"
 
 MONEY_EMOJI = "<:MoneyR:1534220684178231397>"
 
 
-# =========================================================
-# Flask
-# =========================================================
+# =================================================
+# FLASK
+# =================================================
 
 app = Flask(__name__)
 
@@ -51,14 +45,11 @@ def run_flask():
     )
 
 
-# =========================================================
-# UnbelievaBoat
-# =========================================================
+# =================================================
+# UNBELIEVABOAT
+# =================================================
 
-async def add_ub_money(
-    user_id: int,
-    amount: int
-):
+def add_ub_money(user_id: int, amount: int):
 
     url = (
         f"https://unbelievaboat.com/api/v1/"
@@ -73,55 +64,30 @@ async def add_ub_money(
     request = urllib.request.Request(
         url,
         data=data,
-        method="PATCH",
-        headers={
-            "Authorization": UB_TOKEN,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+        method="PATCH"
+    )
+
+    request.add_header(
+        "Authorization",
+        UB_TOKEN
+    )
+
+    request.add_header(
+        "Content-Type",
+        "application/json"
     )
 
     try:
 
-        response = await asyncio.to_thread(
-            urllib.request.urlopen,
-            request
-        )
+        with urllib.request.urlopen(request, timeout=10) as response:
 
-        response_body = response.read().decode(
-            "utf-8",
-            errors="ignore"
-        )
-
-        print(
-            f"✅ UnbelievaBoat reward sent: "
-            f"user={user_id}, amount={amount}"
-        )
-
-        if response_body:
-            print(
-                f"UB response: {response_body}"
-            )
-
-        return True
+            return response.status == 200
 
     except urllib.error.HTTPError as e:
 
-        error_text = e.read().decode(
-            errors="ignore"
-        )
-
         print(
-            f"❌ UnbelievaBoat API error "
-            f"{e.code}: {error_text}"
-        )
-
-        return False
-
-    except urllib.error.URLError as e:
-
-        print(
-            f"❌ UnbelievaBoat connection error: {e}"
+            f"UnbelievaBoat HTTP error: "
+            f"{e.code} {e.reason}"
         )
 
         return False
@@ -129,15 +95,15 @@ async def add_ub_money(
     except Exception as e:
 
         print(
-            f"❌ UnbelievaBoat error: {e}"
+            f"UnbelievaBoat error: {e}"
         )
 
         return False
 
 
-# =========================================================
-# Money Drop
-# =========================================================
+# =================================================
+# MONEY DROP VIEW
+# =================================================
 
 class MoneyDropView(discord.ui.View):
 
@@ -145,8 +111,8 @@ class MoneyDropView(discord.ui.View):
         self,
         amount: int,
         quantity: int,
-        allowed_user_id=None,
-        allowed_role_id=None
+        allowed_user_id: int | None = None,
+        allowed_role_id: int | None = None
     ):
 
         super().__init__(
@@ -162,119 +128,74 @@ class MoneyDropView(discord.ui.View):
         self.claimed_users = set()
         self.claimed_names = []
 
-        self.update_button()
-
-
-    # =====================================================
-    # Money Format
-    # =====================================================
-
-    def money_text(self):
-
-        return (
-            f"{MONEY_EMOJI} "
-            f"{self.amount:,}"
-        )
-
-
-    # =====================================================
-    # Update Button
-    # =====================================================
+        self.message = None
 
     def update_button(self):
 
-        claimed = len(
-            self.claimed_users
+        button = self.children[0]
+
+        button.label = (
+            f"🎁 Claim reward "
+            f"{len(self.claimed_users)}/{self.quantity}"
         )
 
-        self.claim_button.label = (
-            f"🎁 Claim reward {claimed}/{self.quantity}"
-        )
+        if len(self.claimed_users) >= self.quantity:
 
-        self.claim_button.disabled = (
-            claimed >= self.quantity
-        )
+            button.disabled = True
 
-
-    # =====================================================
-    # Create Embed
-    # =====================================================
-
-    def create_embed(self):
-
-        claimed = len(
-            self.claimed_users
-        )
-
-        restriction = ""
-
-        if self.allowed_user_id is not None:
-
-            restriction = (
-                f"\n\n**Only:** "
-                f"<@{self.allowed_user_id}> can claim"
-            )
-
-        elif self.allowed_role_id is not None:
-
-            restriction = (
-                f"\n\n**Only:** "
-                f"<@&{self.allowed_role_id}> can claim"
-            )
-
-
-        # =================================================
-        # Claimed Users
-        # =================================================
-
-        claimed_text = ""
-
-        if self.claimed_names:
-
-            claimed_text = (
-                "\n\n**👥 Claimed by:**\n"
-                +
-                "\n".join(
-                    f"• {name}"
-                    for name in self.claimed_names
-                )
-            )
-
+    def build_embed(self):
 
         embed = discord.Embed(
             title="💰 Money drop",
             description=(
-                "Click the button below to receive the reward.\n\n"
-
                 f"**Reward:** "
-                f"{self.money_text()}\n"
-
+                f"{MONEY_EMOJI} "
+                f"{self.amount:,}\n\n"
                 f"**Claims:** "
-                f"{claimed}/{self.quantity}\n"
-
-                f"**Full drop:** "
-                f"{'✅' if claimed >= self.quantity else '❌'}"
-
-                f"{restriction}"
-
-                f"{claimed_text}"
+                f"{len(self.claimed_users)}/"
+                f"{self.quantity}"
             ),
             color=discord.Color.green()
         )
 
+        if self.claimed_names:
+
+            shown_names = self.claimed_names[:10]
+
+            embed.add_field(
+                name="Claimed by",
+                value="\n".join(
+                    f"• {name}"
+                    for name in shown_names
+                ),
+                inline=False
+            )
+
+        if len(self.claimed_names) > 10:
+
+            embed.add_field(
+                name="More",
+                value=(
+                    f"+{len(self.claimed_names) - 10} "
+                    f"more"
+                ),
+                inline=False
+            )
+
+        if len(self.claimed_users) >= self.quantity:
+
+            embed.set_footer(
+                text="Full drop"
+            )
+
         return embed
-
-
-    # =====================================================
-    # Claim Button
-    # =====================================================
 
     @discord.ui.button(
         label="🎁 Claim reward 0/1",
         style=discord.ButtonStyle.success,
         custom_id="money_drop_claim"
     )
-    async def claim_button(
+    async def claim(
         self,
         interaction: discord.Interaction,
         button: discord.ui.Button
@@ -282,10 +203,9 @@ class MoneyDropView(discord.ui.View):
 
         user = interaction.user
 
-
-        # =================================================
-        # Already Claimed
-        # =================================================
+        # =============================================
+        # ALREADY CLAIMED
+        # =============================================
 
         if user.id in self.claimed_users:
 
@@ -296,10 +216,9 @@ class MoneyDropView(discord.ui.View):
 
             return
 
-
-        # =================================================
-        # Full
-        # =================================================
+        # =============================================
+        # FULL
+        # =============================================
 
         if len(self.claimed_users) >= self.quantity:
 
@@ -310,87 +229,53 @@ class MoneyDropView(discord.ui.View):
 
             return
 
+        # =============================================
+        # USER RESTRICTION
+        # =============================================
 
-        # =================================================
-        # User Restriction
-        # =================================================
+        if self.allowed_user_id is not None:
 
-        if (
-            self.allowed_user_id is not None
-            and user.id != self.allowed_user_id
-        ):
+            if user.id != self.allowed_user_id:
 
-            await interaction.response.send_message(
-                "❌ **You cannot claim this money drop.**\n"
-                "This reward is reserved for another user.",
-                ephemeral=True
-            )
+                await interaction.response.send_message(
+                    "❌ **You cannot claim this reward.**",
+                    ephemeral=True
+                )
 
-            return
+                return
 
-
-        # =================================================
-        # Role Restriction
-        # =================================================
+        # =============================================
+        # ROLE RESTRICTION
+        # =============================================
 
         if self.allowed_role_id is not None:
 
-            if interaction.guild is None:
+            if not isinstance(user, discord.Member):
 
                 await interaction.response.send_message(
-                    "❌ **This reward can only be claimed in a server.**",
+                    "❌ **You cannot claim this reward.**",
                     ephemeral=True
                 )
 
                 return
 
-
-            try:
-
-                member = await interaction.guild.fetch_member(
-                    user.id
-                )
-
-            except discord.HTTPException:
+            if self.allowed_role_id not in [
+                role.id for role in user.roles
+            ]:
 
                 await interaction.response.send_message(
-                    "❌ **I couldn't check your roles.**",
+                    "❌ **You cannot claim this reward.**",
                     ephemeral=True
                 )
 
                 return
 
+        # =============================================
+        # GIVE MONEY
+        # =============================================
 
-            role = interaction.guild.get_role(
-                self.allowed_role_id
-            )
-
-            if role is None:
-
-                await interaction.response.send_message(
-                    "❌ **The required role could not be found.**",
-                    ephemeral=True
-                )
-
-                return
-
-
-            if role not in member.roles:
-
-                await interaction.response.send_message(
-                    "❌ **You cannot claim this money drop.**\n"
-                    f"You need the {role.mention} role.",
-                    ephemeral=True
-                )
-
-                return
-
-
-        # =================================================
-        # Add Money
-        # =================================================
-
-        success = await add_ub_money(
+        success = await asyncio.to_thread(
+            add_ub_money,
             user.id,
             self.amount
         )
@@ -398,155 +283,153 @@ class MoneyDropView(discord.ui.View):
         if not success:
 
             await interaction.response.send_message(
-                "❌ **Something went wrong.**\n"
-                "The reward could not be added.",
+                "❌ **Failed to give the reward. Please try again later.**",
                 ephemeral=True
             )
 
             return
 
-
-        # =================================================
-        # Save Claim
-        # =================================================
+        # =============================================
+        # SAVE CLAIM
+        # =============================================
 
         self.claimed_users.add(
             user.id
         )
 
+        self.claimed_names.append(
+            user.display_name
+        )
 
-        # =================================================
-        # Add Name
-        # Maximum 10
-        # =================================================
-
-        if len(self.claimed_names) < 10:
-
-            self.claimed_names.append(
-                user.mention
-            )
-
-
-        # =================================================
-        # Update Button
-        # =================================================
+        # =============================================
+        # UPDATE
+        # =============================================
 
         self.update_button()
 
-
-        # =================================================
-        # Update Embed
-        # =================================================
-
         await interaction.response.edit_message(
-            embed=self.create_embed(),
+            embed=self.build_embed(),
             view=self
         )
 
-
-        # =================================================
-        # Personal Reward Message
-        # =================================================
-
-        await interaction.followup.send(
-            (
-                "🎉 **You received "
-                f"{self.money_text()}!**"
-            ),
-            ephemeral=True
-        )
-
-
-# =========================================================
-# Discord Bot
-# =========================================================
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-
-class TournamentBot(commands.Bot):
-
-    async def setup_hook(self):
-
-# =================================================
-# Load message.py
-# =================================================
-
-try:
-
-    await self.load_extension("message")
-
-    print(
-        "✅ message.py loaded!"
-    )
-
-except Exception as e:
-
-    print(
-        f"❌ Failed to load message.py: {e}"
-    )
-
-
-# =================================================
-# Load ticket.py
-# =================================================
-
-try:
-
-    await self.load_extension("ticket")
-
-    print(
-        "✅ ticket.py loaded!"
-    )
-
-except Exception as e:
-
-    print(
-        f"❌ Failed to load ticket.py: {e}"
-    )
-
-
-        # =================================================
-        # Sync Slash Commands
-        # =================================================
+        # =============================================
+        # SUCCESS MESSAGE
+        # =============================================
 
         try:
 
-            await self.tree.sync()
+            await interaction.followup.send(
+                f"🎉 **You received "
+                f"{MONEY_EMOJI} "
+                f"{self.amount:,}!**",
+                ephemeral=True
+            )
+
+        except Exception:
+
+            pass
+
+
+# =================================================
+# BOT
+# =================================================
+
+class TournamentBot(commands.Bot):
+
+    def __init__(self):
+
+        intents = discord.Intents.default()
+
+        intents.message_content = True
+
+        super().__init__(
+            command_prefix="!",
+            intents=intents
+        )
+
+    async def setup_hook(self):
+
+        # =============================================
+        # LOAD message.py
+        # =============================================
+
+        try:
+
+            await self.load_extension(
+                "message"
+            )
 
             print(
-                "✅ Slash commands synced!"
+                "✅ message.py loaded!"
             )
 
         except Exception as e:
 
             print(
-                f"❌ Failed to sync slash commands: {e}"
+                f"❌ Failed to load message.py: {e}"
+            )
+
+        # =============================================
+        # LOAD ticket.py
+        # =============================================
+
+        try:
+
+            await self.load_extension(
+                "ticket"
+            )
+
+            print(
+                "✅ ticket.py loaded!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load ticket.py: {e}"
+            )
+
+        # =============================================
+        # SYNC SLASH COMMANDS
+        # =============================================
+
+        try:
+
+            synced = await self.tree.sync()
+
+            print(
+                f"✅ Synced {len(synced)} slash command(s)"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Slash command sync failed: {e}"
             )
 
 
-bot = TournamentBot(
-    command_prefix="!",
-    intents=intents
-)
+bot = TournamentBot()
 
 
-# =========================================================
-# Bot Ready
-# =========================================================
+# =================================================
+# EVENTS
+# =================================================
 
 @bot.event
 async def on_ready():
 
     print(
-        f"🤖 Logged in as {bot.user}"
+        f"✅ Logged in as {bot.user}"
+    )
+
+    print(
+        f"🆔 Bot ID: {bot.user.id}"
     )
 
 
-# =========================================================
-# Owner Check
-# =========================================================
+# =================================================
+# OWNER CHECK
+# =================================================
 
 def owner_only():
 
@@ -561,169 +444,172 @@ def owner_only():
     )
 
 
-# =========================================================
-# /send
-# =========================================================
+# =================================================
+# /send message
+# =================================================
 
-send_group = app_commands.Group(
+@bot.tree.command(
     name="send",
-    description="Send messages"
-)
-
-
-@send_group.command(
-    name="message",
-    description="Send a message to a channel"
+    description="Send a bot message"
 )
 @app_commands.describe(
-    text="Text to send",
-    channel="Channel where the message will be sent"
+    text="Message to send",
+    channel="Channel to send the message in"
 )
 @owner_only()
 async def send_message(
     interaction: discord.Interaction,
     text: str,
-    channel: discord.TextChannel
+    channel: discord.TextChannel | None = None
 ):
 
-    try:
+    target = channel or interaction.channel
 
-        await channel.send(
-            f"**BOT:** {text}"
-        )
+    if target is None:
 
         await interaction.response.send_message(
-            "Message sent successfully.",
+            "❌ **Channel not found.**",
             ephemeral=True
         )
 
-    except discord.Forbidden:
+        return
 
-        await interaction.response.send_message(
-            "❌ I don't have permission to send messages in that channel.",
-            ephemeral=True
-        )
+    await target.send(
+        f"**BOT:** {text}"
+    )
 
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Failed to send the message.",
-            ephemeral=True
-        )
+    await interaction.response.send_message(
+        "✅ **Message sent.**",
+        ephemeral=True
+    )
 
 
-@send_group.command(
-    name="dms",
-    description="Send a direct message to a user"
+# =================================================
+# /send dms
+# =================================================
+
+@bot.tree.command(
+    name="send_dms",
+    description="Send a message to all server members via DM"
 )
 @app_commands.describe(
-    user="User to send the DM to",
-    message="Message to send"
+    text="Message to send"
 )
 @owner_only()
 async def send_dms(
     interaction: discord.Interaction,
-    user: discord.User,
-    message: str
+    text: str
 ):
+
+    await interaction.response.send_message(
+        "📨 **Sending DMs...**",
+        ephemeral=True
+    )
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        return
+
+    sent = 0
+    failed = 0
+
+    for member in guild.members:
+
+        if member.bot:
+            continue
+
+        try:
+
+            await member.send(
+                f"**BOT:** {text}\n"
+                f"-# server {guild.name}"
+            )
+
+            sent += 1
+
+        except Exception:
+
+            failed += 1
+
+        await asyncio.sleep(1)
 
     try:
 
-        server_name = (
-            interaction.guild.name
-            if interaction.guild
-            else "Unknown Server"
+        await interaction.edit_original_response(
+            content=(
+                f"✅ **DM sending finished.**\n"
+                f"Sent: `{sent}`\n"
+                f"Failed: `{failed}`"
+            )
         )
 
-        await user.send(
-            f"**BOT:** {message}\n"
-            f"-# Server: {server_name}"
-        )
+    except Exception:
 
-        await interaction.response.send_message(
-            "DM sent successfully.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ Could not send a DM. The user's DMs are closed.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Could not send the DM.",
-            ephemeral=True
-        )
+        pass
 
 
-bot.tree.add_command(
-    send_group
-)
+# =================================================
+# /clear message
+# =================================================
 
-
-# =========================================================
-# /clear
-# =========================================================
-
-clear_group = app_commands.Group(
+@bot.tree.command(
     name="clear",
-    description="Clear messages"
-)
-
-
-@clear_group.command(
-    name="message",
-    description="Delete messages from a channel"
+    description="Delete messages"
 )
 @app_commands.describe(
-    channel="Channel to clear",
-    number_of_messages="Number of messages to delete"
+    amount="Number of messages to delete"
 )
 @owner_only()
-async def clear_message(
+async def clear_messages(
     interaction: discord.Interaction,
-    channel: discord.TextChannel,
-    number_of_messages: app_commands.Range[int, 1, 100]
+    amount: app_commands.Range[int, 1, 100]
 ):
 
-    try:
+    await interaction.response.defer(
+        ephemeral=True
+    )
 
-        deleted = await channel.purge(
-            limit=number_of_messages
-        )
+    channel = interaction.channel
 
-        await interaction.response.send_message(
-            f"✅ Successfully deleted {len(deleted)} messages.",
+    if not isinstance(
+        channel,
+        discord.TextChannel
+    ):
+
+        await interaction.followup.send(
+            "❌ **This command can only be used in a text channel.**",
             ephemeral=True
         )
 
-    except discord.Forbidden:
+        return
 
-        await interaction.response.send_message(
-            "❌ I don't have permission to delete messages in this channel.",
+    deleted = await channel.purge(
+        limit=amount
+    )
+
+    # 1 message
+    if len(deleted) == 1:
+
+        await interaction.followup.send(
+            "🗑️ **Successfully deleted 1 message.**",
             ephemeral=True
         )
 
-    except discord.HTTPException:
+    # More than 1
+    else:
 
-        await interaction.response.send_message(
-            "❌ Failed to delete messages.",
+        await interaction.followup.send(
+            f"🗑️ **Successfully deleted "
+            f"{len(deleted)} messages.**",
             ephemeral=True
         )
 
 
-bot.tree.add_command(
-    clear_group
-)
-
-
-# =========================================================
+# =================================================
 # !money economy
-# =========================================================
+# =================================================
 
 @bot.command(
     name="money"
@@ -731,272 +617,137 @@ bot.tree.add_command(
 async def money_command(
     ctx: commands.Context,
     economy: str = None,
-    amount: str = None,
-    *args
+    amount: int = None,
+    target: str = None,
+    quantity: int = 1,
+    role: discord.Role = None
 ):
+
+    # =============================================
+    # OWNER ONLY
+    # =============================================
 
     if ctx.author.id != OWNER_ID:
 
-        await ctx.send(
-            "❌ **Permission denied**",
-            delete_after=5
-        )
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
 
         return
 
+    # =============================================
+    # CHECK SUBCOMMAND
+    # =============================================
 
-    if economy is None or economy.lower() != "economy":
+    if economy != "economy":
 
-        await ctx.send(
-            "❌ **Invalid command**\n"
-            "Use `!money economy <amount> [user/quantity/role]`.",
-            delete_after=5
-        )
+        try:
 
-        return
+            await ctx.message.delete()
 
+        except Exception:
 
-    try:
-
-        amount_int = int(amount)
-
-    except (TypeError, ValueError):
-
-        await ctx.send(
-            "❌ **Invalid amount.**\n"
-            "Amount must be a whole number.",
-            delete_after=5
-        )
+            pass
 
         return
 
+    # =============================================
+    # CHECK AMOUNT
+    # =============================================
 
-    if amount_int <= 0:
+    if amount is None or amount <= 0:
 
-        await ctx.send(
-            "❌ **Invalid amount.**\n"
-            "Amount must be greater than 0.",
-            delete_after=5
-        )
+        try:
+
+            await ctx.message.delete()
+
+        except Exception:
+
+            pass
 
         return
 
+    # =============================================
+    # CHECK QUANTITY
+    # =============================================
+
+    if quantity <= 0:
+
+        quantity = 1
+
+    # =============================================
+    # PARSE TARGET
+    # =============================================
 
     allowed_user_id = None
     allowed_role_id = None
-    quantity = 1
 
+    # Mentioned user
+    if ctx.message.mentions:
 
-    for arg in args:
-
-        # =================================================
-        # User
-        # =================================================
-
-        if arg.startswith("<@") and not arg.startswith("<@&"):
-
-            cleaned = (
-                arg
-                .replace("<@", "")
-                .replace("!", "")
-                .replace(">", "")
-            )
-
-            try:
-
-                user_id = int(cleaned)
-
-            except ValueError:
-
-                await ctx.send(
-                    "❌ **Invalid user mention.**",
-                    delete_after=5
-                )
-
-                return
-
-
-            if allowed_role_id is not None:
-
-                await ctx.send(
-                    "❌ You can choose **either a user or a role**, "
-                    "not both.",
-                    delete_after=5
-                )
-
-                return
-
-
-            if allowed_user_id is not None:
-
-                await ctx.send(
-                    "❌ Only one user can be selected.",
-                    delete_after=5
-                )
-
-                return
-
-
-            allowed_user_id = user_id
-
-
-        # =================================================
-        # Role
-        # =================================================
-
-        elif arg.startswith("<@&"):
-
-            cleaned = (
-                arg
-                .replace("<@&", "")
-                .replace(">", "")
-            )
-
-            try:
-
-                role_id = int(cleaned)
-
-            except ValueError:
-
-                await ctx.send(
-                    "❌ **Invalid role mention.**",
-                    delete_after=5
-                )
-
-                return
-
-
-            if allowed_user_id is not None:
-
-                await ctx.send(
-                    "❌ You can choose **either a user or a role**, "
-                    "not both.",
-                    delete_after=5
-                )
-
-                return
-
-
-            if allowed_role_id is not None:
-
-                await ctx.send(
-                    "❌ Only one role can be selected.",
-                    delete_after=5
-                )
-
-                return
-
-
-            allowed_role_id = role_id
-
-
-        # =================================================
-        # Quantity
-        # =================================================
-
-        else:
-
-            try:
-
-                parsed_quantity = int(arg)
-
-            except ValueError:
-
-                await ctx.send(
-                    "❌ **Invalid quantity.**\n"
-                    "Quantity must be a whole number.",
-                    delete_after=5
-                )
-
-                return
-
-
-            if parsed_quantity <= 0:
-
-                await ctx.send(
-                    "❌ **Invalid quantity.**\n"
-                    "Quantity must be greater than 0.",
-                    delete_after=5
-                )
-
-                return
-
-
-            quantity = parsed_quantity
-
-
-    # =====================================================
-    # Check Role
-    # =====================================================
-
-    if allowed_role_id is not None:
-
-        if ctx.guild is None:
-
-            await ctx.send(
-                "❌ This command can only be used in a server.",
-                delete_after=5
-            )
-
-            return
-
-
-        role = ctx.guild.get_role(
-            allowed_role_id
+        allowed_user_id = (
+            ctx.message.mentions[0].id
         )
 
-        if role is None:
+    # Role
+    if role is not None:
 
-            await ctx.send(
-                "❌ **The selected role could not be found.**",
-                delete_after=5
-            )
+        allowed_role_id = role.id
 
-            return
+    # =============================================
+    # DO NOT ALLOW BOTH
+    # =============================================
 
+    if (
+        allowed_user_id is not None
+        and allowed_role_id is not None
+    ):
 
-    # =====================================================
-    # Create View
-    # =====================================================
+        try:
+
+            await ctx.message.delete()
+
+        except Exception:
+
+            pass
+
+        return
+
+    # =============================================
+    # CREATE DROP
+    # =============================================
 
     view = MoneyDropView(
-        amount=amount_int,
+        amount=amount,
         quantity=quantity,
         allowed_user_id=allowed_user_id,
         allowed_role_id=allowed_role_id
     )
 
-
-    # =====================================================
-    # Send Money Drop
-    # =====================================================
-
-    await ctx.send(
-        embed=view.create_embed(),
+    message = await ctx.send(
+        embed=view.build_embed(),
         view=view
     )
 
+    view.message = message
 
-    # =====================================================
-    # Delete Command
-    # =====================================================
+    # =============================================
+    # DELETE COMMAND
+    # =============================================
 
     try:
 
         await ctx.message.delete()
 
-    except discord.Forbidden:
-
-        pass
-
-    except discord.HTTPException:
+    except Exception:
 
         pass
 
 
-# =========================================================
-# Prefix Command Errors
-# =========================================================
+# =================================================
+# PREFIX COMMAND ERROR
+# =================================================
 
 @money_command.error
 async def money_command_error(
@@ -1004,31 +755,23 @@ async def money_command_error(
     error
 ):
 
-    print(
-        f"❌ Money command error: {error}"
-    )
-
     try:
 
-        await ctx.send(
-            "❌ **Error**\n"
-            "Something went wrong while processing the command.",
-            delete_after=5
-        )
+        await ctx.message.delete()
 
-    except discord.HTTPException:
+    except Exception:
 
         pass
 
 
-# =========================================================
-# Slash Command Errors
-# =========================================================
+# =================================================
+# SLASH COMMAND ERROR
+# =================================================
 
 @bot.tree.error
 async def on_app_command_error(
     interaction: discord.Interaction,
-    error: app_commands.AppCommandError
+    error
 ):
 
     if isinstance(
@@ -1036,17 +779,30 @@ async def on_app_command_error(
         app_commands.CheckFailure
     ):
 
-        if not interaction.response.is_done():
+        if interaction.response.is_done():
 
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
+            await interaction.followup.send(
+                "❌ **You do not have permission to use this command.**",
                 ephemeral=True
             )
 
+        else:
 
-# =========================================================
-# Start Flask
-# =========================================================
+            await interaction.response.send_message(
+                "❌ **You do not have permission to use this command.**",
+                ephemeral=True
+            )
+
+        return
+
+    print(
+        f"Slash command error: {error}"
+    )
+
+
+# =================================================
+# START FLASK
+# =================================================
 
 Thread(
     target=run_flask,
@@ -1054,8 +810,8 @@ Thread(
 ).start()
 
 
-# =========================================================
-# Start Bot
-# =========================================================
+# =================================================
+# START BOT
+# =================================================
 
 bot.run(TOKEN)
