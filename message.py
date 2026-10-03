@@ -10,7 +10,7 @@ OWNER_ID = 1176149190192152626
 
 
 # =========================================================
-# ROLE IDS
+# FEATURE ROLE IDS
 # =========================================================
 
 # Language
@@ -31,6 +31,16 @@ PC_ROLE_ID = 1545280805905895504
 XBOX_ROLE_ID = 1545281911151398942
 PLAYSTATION_ROLE_ID = 1545281770818248805
 SWITCH_ROLE_ID = 1545283995665834086
+
+
+# =========================================================
+# PING ROLE IDS
+# =========================================================
+
+YOUTUBE_ROLE_ID = 1541715251018465351
+TOURNAMENT_ROLE_ID = 1541715118872731768
+GIVEAWAY_ROLE_ID = 1541716902752157798
+NEWS_ROLE_ID = 1541715546356060200
 
 
 # =========================================================
@@ -59,9 +69,16 @@ PLATFORM_ROLES = {
     SWITCH_ROLE_ID,
 }
 
+PING_ROLES = {
+    YOUTUBE_ROLE_ID,
+    TOURNAMENT_ROLE_ID,
+    GIVEAWAY_ROLE_ID,
+    NEWS_ROLE_ID,
+}
+
 
 # =========================================================
-# ROLE FUNCTION
+# FEATURE ROLE FUNCTION
 # =========================================================
 
 async def replace_role(
@@ -76,7 +93,6 @@ async def replace_role(
     if selected_role is None:
         return False
 
-    # Remove all other roles from the same group
     roles_to_remove = [
         role
         for role in member.roles
@@ -86,7 +102,6 @@ async def replace_role(
     if roles_to_remove:
         await member.remove_roles(*roles_to_remove)
 
-    # Add selected role if user doesn't already have it
     if selected_role not in member.roles:
         await member.add_roles(selected_role)
 
@@ -340,7 +355,7 @@ class PlatformSelect(discord.ui.Select):
 
 
 # =========================================================
-# COMPONENTS V2 FEATURES PANEL
+# FEATURES COMPONENTS V2
 # =========================================================
 
 class FeaturesView(discord.ui.LayoutView):
@@ -349,6 +364,7 @@ class FeaturesView(discord.ui.LayoutView):
         super().__init__(timeout=None)
 
         container = discord.ui.Container(
+
             discord.ui.TextDisplay(
                 "# ✨ Features\n"
                 "Choose your preferences using the menus below."
@@ -414,6 +430,232 @@ class FeaturesView(discord.ui.LayoutView):
 
 
 # =========================================================
+# PING BUTTON
+# =========================================================
+
+class PingButton(discord.ui.Button):
+
+    def __init__(
+        self,
+        label: str,
+        emoji: str,
+        role_id: int,
+        custom_id: str,
+    ):
+        super().__init__(
+            label=label,
+            emoji=emoji,
+            style=discord.ButtonStyle.secondary,
+            custom_id=custom_id,
+        )
+
+        self.role_id = role_id
+
+    async def callback(self, interaction: discord.Interaction):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if role is None:
+            await interaction.response.send_message(
+                "❌ The selected role could not be found.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            if role in interaction.user.roles:
+
+                await interaction.user.remove_roles(role)
+
+                await interaction.response.send_message(
+                    f"🔕 **{role.name}** notifications disabled.",
+                    ephemeral=True,
+                )
+
+            else:
+
+                await interaction.user.add_roles(role)
+
+                await interaction.response.send_message(
+                    f"🔔 **{role.name}** notifications enabled.",
+                    ephemeral=True,
+                )
+
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ I don't have permission to manage this role.",
+                ephemeral=True,
+            )
+
+        except Exception:
+            await interaction.response.send_message(
+                "❌ Something went wrong while changing your notification role.",
+                ephemeral=True,
+            )
+
+
+# =========================================================
+# REMOVE ALL PING ROLES
+# =========================================================
+
+class RemovePingRolesButton(discord.ui.Button):
+
+    def __init__(self):
+        super().__init__(
+            label="Remove all ping roles",
+            emoji="❌",
+            style=discord.ButtonStyle.danger,
+            custom_id="features_remove_ping_roles_v2",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+
+        roles_to_remove = [
+            role
+            for role in interaction.user.roles
+            if role.id in PING_ROLES
+        ]
+
+        try:
+
+            if roles_to_remove:
+                await interaction.user.remove_roles(*roles_to_remove)
+
+            await interaction.response.send_message(
+                "✅ All notification roles have been removed.",
+                ephemeral=True,
+            )
+
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ I don't have permission to manage these roles.",
+                ephemeral=True,
+            )
+
+        except Exception:
+            await interaction.response.send_message(
+                "❌ Something went wrong while removing your roles.",
+                ephemeral=True,
+            )
+
+
+# =========================================================
+# PING COMPONENTS V2
+# =========================================================
+
+class PingView(discord.ui.LayoutView):
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+        container = discord.ui.Container(
+
+            discord.ui.TextDisplay(
+                "# 🔔 Choose\n"
+                "Choose which notifications you want to receive."
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.TextDisplay(
+                "### ▶️ YouTube\n"
+                "Get notified about new YouTube content."
+            ),
+
+            discord.ui.ActionRow(
+                PingButton(
+                    "YouTube",
+                    "▶️",
+                    YOUTUBE_ROLE_ID,
+                    "ping_youtube_v2",
+                )
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.TextDisplay(
+                "### 🏆 Tournament\n"
+                "Get notified about tournaments and events."
+            ),
+
+            discord.ui.ActionRow(
+                PingButton(
+                    "Tournament",
+                    "🏆",
+                    TOURNAMENT_ROLE_ID,
+                    "ping_tournament_v2",
+                )
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.TextDisplay(
+                "### 🎁 Giveaway\n"
+                "Get notified about giveaways."
+            ),
+
+            discord.ui.ActionRow(
+                PingButton(
+                    "Giveaway",
+                    "🎁",
+                    GIVEAWAY_ROLE_ID,
+                    "ping_giveaway_v2",
+                )
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.TextDisplay(
+                "### 📰 News\n"
+                "Get notified about important server news."
+            ),
+
+            discord.ui.ActionRow(
+                PingButton(
+                    "News",
+                    "📰",
+                    NEWS_ROLE_ID,
+                    "ping_news_v2",
+                )
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.ActionRow(
+                RemovePingRolesButton()
+            ),
+
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            ),
+
+            discord.ui.TextDisplay(
+                "-# Click a button to enable or disable a notification role."
+            ),
+
+            accent_colour=discord.Colour.from_rgb(88, 101, 242),
+        )
+
+        self.add_item(container)
+
+
+# =========================================================
 # COG
 # =========================================================
 
@@ -422,19 +664,41 @@ class Message(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # =====================================================
+    # !features panel
+    # =====================================================
+
     @commands.command(name="features")
     async def features(self, ctx, action=None):
 
-        # Only OWNER can create the panel
+        # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
         if action is None or action.lower() != "panel":
             return
 
-        view = FeaturesView()
+        await ctx.send(
+            view=FeaturesView()
+        )
 
-        await ctx.send(view=view)
+    # =====================================================
+    # !ping panel
+    # =====================================================
+
+    @commands.command(name="ping")
+    async def ping(self, ctx, action=None):
+
+        # Only owner can create the panel
+        if ctx.author.id != OWNER_ID:
+            return
+
+        if action is None or action.lower() != "panel":
+            return
+
+        await ctx.send(
+            view=PingView()
+        )
 
 
 # =========================================================
