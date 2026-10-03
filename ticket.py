@@ -641,6 +641,31 @@ class TicketCog(commands.Cog):
                 pass
 
     # =====================================================
+    # CHECK ANY OPEN TICKET
+    # =====================================================
+
+    def has_open_ticket(self, user_id):
+        user_id = str(user_id)
+
+        for ticket in self.data["tickets"].values():
+
+            if (
+                str(ticket.get("user_id")) == user_id
+                and not ticket.get("closed")
+            ):
+                return True
+
+        for application in self.data["applications"].values():
+
+            if (
+                str(application.get("user_id")) == user_id
+                and not application.get("closed")
+            ):
+                return True
+
+        return False
+
+    # =====================================================
     # SUPPORT BUTTON
     # =====================================================
 
@@ -650,20 +675,25 @@ class TicketCog(commands.Cog):
             interaction.user.id
         )
 
-        for ticket in self.data["tickets"].values():
+        if self.has_open_ticket(user_id):
 
-            if (
-                str(ticket["user_id"]) == user_id
-                and ticket["type"] == "support"
-                and not ticket.get("closed")
-            ):
+            await interaction.response.send_message(
+                "🎫 You already have an open ticket. "
+                "Please close it before opening a new one.",
+                ephemeral=True
+            )
 
-                await interaction.response.send_message(
-                    "🎫 You already have an open Support Ticket.",
-                    ephemeral=True
-                )
+            return
 
-                return
+        if user_id in self.data["application_flows"]:
+
+            await interaction.response.send_message(
+                "🎫 You are already completing an application. "
+                "Please finish it before opening another ticket.",
+                ephemeral=True
+            )
+
+            return
 
         try:
 
@@ -698,6 +728,43 @@ class TicketCog(commands.Cog):
             interaction.user.id
         )
 
+        # =================================================
+        # CHECK ANY OPEN TICKET
+        # =================================================
+
+        if self.has_open_ticket(user_id):
+
+            await interaction.response.send_message(
+                "🎫 You already have an open ticket. "
+                "Please close it before opening a new one.",
+                ephemeral=True
+            )
+
+            return
+
+        if user_id in self.data["support_flows"]:
+
+            await interaction.response.send_message(
+                "🎫 You are already setting up a Support Ticket. "
+                "Please finish it before opening another ticket.",
+                ephemeral=True
+            )
+
+            return
+
+        if user_id in self.data["application_flows"]:
+
+            await interaction.response.send_message(
+                "📋 You are already completing an application.",
+                ephemeral=True
+            )
+
+            return
+
+        # =================================================
+        # CHECK EXISTING ROLE
+        # =================================================
+
         if isinstance(
             interaction.user,
             discord.Member
@@ -727,6 +794,10 @@ class TicketCog(commands.Cog):
 
                 return
 
+        # =================================================
+        # BLOCK CHECK
+        # =================================================
+
         block = self.data["blocks"].get(
             user_id
         )
@@ -755,38 +826,6 @@ class TicketCog(commands.Cog):
                     )
 
                     return
-
-        application = self.data["applications"].get(
-            user_id
-        )
-
-        if (
-            application
-            and application.get("type") == app_type
-        ):
-
-            await interaction.response.send_message(
-                "📋 You already have an active application of this type.",
-                ephemeral=True
-            )
-
-            return
-
-        flow = self.data["application_flows"].get(
-            user_id
-        )
-
-        if (
-            flow
-            and flow.get("type") == app_type
-        ):
-
-            await interaction.response.send_message(
-                "📋 You are already completing an application.",
-                ephemeral=True
-            )
-
-            return
 
         questions = (
             STAFF_QUESTIONS
@@ -1212,6 +1251,7 @@ class TicketCog(commands.Cog):
             return True
 
         app_type = flow["type"]
+
         answers = flow["answers"]
 
         del self.data[
@@ -1232,6 +1272,8 @@ class TicketCog(commands.Cog):
 
                 "type": app_type,
 
+                "user_id": message.author.id,
+
                 "channel_id":
                     application["channel"].id,
 
@@ -1239,7 +1281,9 @@ class TicketCog(commands.Cog):
                     application["number"],
 
                 "submitted_at":
-                    iso_now()
+                    iso_now(),
+
+                "closed": False
             }
 
             save_data(self.data)
@@ -1456,6 +1500,10 @@ class TicketCog(commands.Cog):
 
             user = None
 
+        # =================================================
+        # ACCEPT
+        # =================================================
+
         if accepted:
 
             if application_type == "staff":
@@ -1490,6 +1538,10 @@ class TicketCog(commands.Cog):
 
                 return
 
+            # =============================================
+            # ROLE HIERARCHY
+            # =============================================
+
             if interaction.guild.me.top_role <= role:
 
                 await interaction.response.send_message(
@@ -1499,6 +1551,10 @@ class TicketCog(commands.Cog):
                 )
 
                 return
+
+            # =============================================
+            # ALREADY HAS ROLE
+            # =============================================
 
             if any(
                 r.id == role_id
@@ -1511,6 +1567,10 @@ class TicketCog(commands.Cog):
                 )
 
                 return
+
+            # =============================================
+            # GIVE ROLE
+            # =============================================
 
             try:
 
@@ -1547,7 +1607,7 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Staff┃| Host application "
                     "has been accepted!**\n\n"
-                    "You have received the Staff┃| Host role."
+                    f"You have received the Staff┃| Host role."
                 )
 
             else:
@@ -1555,8 +1615,12 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Moderator application "
                     "has been accepted!**\n\n"
-                    "You have received the Moderator role."
+                    f"You have received the Moderator role."
                 )
+
+        # =================================================
+        # REJECT
+        # =================================================
 
         else:
 
@@ -1622,20 +1686,12 @@ class TicketCog(commands.Cog):
         if message.guild is not None:
             return
 
-        # =================================================
-        # APPLICATION
-        # =================================================
-
         handled = await self.process_application_message(
             message
         )
 
         if handled:
             return
-
-        # =================================================
-        # SUPPORT TICKET
-        # =================================================
 
         user_id = str(
             message.author.id
@@ -1692,9 +1748,11 @@ class TicketCog(commands.Cog):
         ):
 
             try:
+
                 files.append(
                     await attachment.to_file()
                 )
+
             except Exception:
                 pass
 
@@ -1703,7 +1761,6 @@ class TicketCog(commands.Cog):
             files=files
         )
 
-        # ONLY SUPPORT TICKET gets delivery confirmation
         try:
             await message.channel.send(
                 "**Support:** Your message has been delivered. ✅"
@@ -1919,4 +1976,4 @@ class ApplicationDecisionView(discord.ui.View):
 async def setup(bot):
     await bot.add_cog(
         TicketCog(bot)
-)
+                )
