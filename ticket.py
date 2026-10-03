@@ -1,15 +1,15 @@
 import os
 import json
 import calendar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 
 import discord
 from discord.ext import commands, tasks
 
 
-# =========================================================
+# =========================
 # SETTINGS
-# =========================================================
+# =========================
 
 OWNER_ID = 1176149190192152626
 
@@ -17,34 +17,29 @@ TICKET_CATEGORY_ID = 1555925139546439700
 SUPPORT_ROLE_ID = 1527295101867524106
 AFTER_CLOSE_CHANNEL_ID = 1527278068526219305
 
+# Role given after application is accepted
 STAFF_HOST_ROLE_ID = 1542739534343700500
 MODERATOR_ROLE_ID = 1539734753736134856
 
 DATA_FILE = "ticket_data.json"
 
 
-# =========================================================
+# =========================
 # DATA
-# =========================================================
+# =========================
 
 DEFAULT_DATA = {
-    "panel": {
-        "message_id": None,
-        "channel_id": None
-    },
+    "panel": None,
     "next_ticket": 1,
     "tickets": {},
     "applications": {},
-    "blocks": {},
-    "support_flows": {},
-    "application_flows": {}
+    "blocks": {}
 }
 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        save_data(DEFAULT_DATA)
-        return json.loads(json.dumps(DEFAULT_DATA))
+        return DEFAULT_DATA.copy()
 
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -52,82 +47,57 @@ def load_data():
 
         for key, value in DEFAULT_DATA.items():
             if key not in data:
-                data[key] = json.loads(json.dumps(value))
+                data[key] = value
 
         return data
 
     except Exception:
-        return json.loads(json.dumps(DEFAULT_DATA))
+        return DEFAULT_DATA.copy()
 
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-# =========================================================
+# =========================
 # HELPERS
-# =========================================================
+# =========================
 
-def utc_now():
-    return datetime.now(timezone.utc)
-
-
-def iso_now():
-    return utc_now().isoformat()
+def is_owner(member):
+    return member.id == OWNER_ID
 
 
-def parse_date(value):
-    try:
-        return datetime.fromisoformat(value)
-    except Exception:
-        return utc_now()
+def is_support(member):
+    return any(role.id == SUPPORT_ROLE_ID for role in member.roles)
 
 
-def add_one_month(dt):
-    year = dt.year
-    month = dt.month
-
-    if month == 12:
-        year += 1
-        month = 1
-    else:
-        month += 1
-
-    day = min(dt.day, calendar.monthrange(year, month)[1])
-
-    return dt.replace(
-        year=year,
-        month=month,
-        day=day
-    )
+def is_owner_or_support(member):
+    return is_owner(member) or is_support(member)
 
 
-def format_date(value):
-    return parse_date(value).strftime("%B %d, %Y at %H:%M UTC")
+def get_ticket_number(channel_id):
+    data = load_data()
+
+    for number, ticket in data["tickets"].items():
+        if ticket.get("channel_id") == channel_id:
+            return number
+
+    return None
 
 
-def ticket_number(number):
-    return f"{number:04d}"
+def get_application(channel_id):
+    data = load_data()
+    return data["applications"].get(str(channel_id))
 
 
-def is_manager(member):
-    return (
-        isinstance(member, discord.Member)
-        and (
-            member.id == OWNER_ID
-            or any(role.id == SUPPORT_ROLE_ID for role in member.roles)
-        )
-    )
+def has_role(member, role_id):
+    return any(role.id == role_id for role in member.roles)
 
 
-def get_category(guild):
-    return guild.get_channel(TICKET_CATEGORY_ID)
-
-
-# =========================================================
-# OPTIONS
-# =========================================================
+# =========================
+# LANGUAGES
+# =========================
 
 LANGUAGES = [
     ("🇬🇧", "English", "English"),
@@ -143,22 +113,31 @@ LANGUAGES = [
     ("🇪🇸", "Spanish", "Spanish"),
 ]
 
+
+# =========================
+# ISSUES
+# =========================
+
 ISSUES = [
-    ("❓", "Question", "Question"),
-    ("🚨", "Report", "Report"),
-    ("🐛", "Bug", "Bug"),
-    ("🤖", "Bot Bug", "Bot Bug"),
-    ("ℹ️", "Other", "Other"),
+    ("❓", "Question"),
+    ("🚨", "Report"),
+    ("🐛", "Bug"),
+    ("🤖", "Bot Bug"),
+    ("📌", "Other"),
 ]
 
 
-STAFF_QUESTIONS = [
+# =========================
+# APPLICATION QUESTIONS
+# =========================
+
+STAFF_HOST_QUESTIONS = [
     "🛡️ Which role are you applying for — Staff or Host?",
     "📝 Why do you want this role and why do you think you are suitable for it?",
     "🕐 How much time can you usually dedicate to the server?",
     "📋 Do you have any experience working on other servers?",
     "❓ Is there anything else you would like to add to your application?",
-    "🏆 At what times will you be able to create tournaments?",
+    "🏆 At what times will you be able to create tournaments?"
 ]
 
 
@@ -168,22 +147,22 @@ MODERATOR_QUESTIONS = [
     "🕐 How much time can you dedicate to the server?",
     "📋 Do you have any moderation experience on other servers?",
     "⚖️ What would you do if your friend broke the rules?",
-    "🧠 What would you do if two members started having a conflict?",
+    "🧠 What would you do if two members started having a conflict?"
 ]
 
 
-# =========================================================
+# =========================
 # COG
-# =========================================================
+# =========================
 
 class TicketCog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.data = load_data()
 
         self.check_blocks.start()
 
+        # Persistent views
         bot.add_view(TicketPanelView(self))
         bot.add_view(LanguageView(self))
         bot.add_view(IssueView(self))
@@ -192,131 +171,108 @@ class TicketCog(commands.Cog):
     def cog_unload(self):
         self.check_blocks.cancel()
 
-    # =====================================================
-    # BLOCK CHECK
-    # =====================================================
+    # =========================
+    # BLOCK CHECKER
+    # =========================
 
     @tasks.loop(minutes=1)
     async def check_blocks(self):
+        data = load_data()
 
         changed = False
-        now = utc_now()
+        now = datetime.utcnow().timestamp()
 
-        for user_id, block in list(self.data["blocks"].items()):
+        for user_id, user_blocks in list(data["blocks"].items()):
 
-            expires = parse_date(block["expires_at"])
+            if not isinstance(user_blocks, dict):
+                continue
 
-            if now >= expires:
+            for block_type, expires_at in list(user_blocks.items()):
 
-                guild_id = block.get("guild_id")
-                guild = self.bot.get_guild(guild_id) if guild_id else None
+                if expires_at <= now:
+                    del user_blocks[block_type]
+                    changed = True
 
-                user = None
-
-                if guild:
-                    user = guild.get_member(int(user_id))
-
-                if user is None:
                     try:
                         user = await self.bot.fetch_user(int(user_id))
-                    except Exception:
-                        pass
 
-                if user:
+                        if block_type == "staff":
+                            role_name = "Staff┃| Host"
+                        else:
+                            role_name = "Moderator"
 
-                    try:
                         await user.send(
-                            f"✅ Your **{block['type']}** application block has expired.\n\n"
-                            f"You can now submit a new application."
+                            f"**Ticket:** Your **{role_name}** application block has expired. "
+                            f"You can apply again."
                         )
+
                     except Exception:
                         pass
 
-                del self.data["blocks"][user_id]
-                changed = True
+            if not user_blocks:
+                del data["blocks"][user_id]
 
         if changed:
-            save_data(self.data)
+            save_data(data)
 
     @check_blocks.before_loop
-    async def before_block_check(self):
+    async def before_check_blocks(self):
         await self.bot.wait_until_ready()
 
-    # =====================================================
+    # =========================
     # !ticket
-    # =====================================================
+    # =========================
 
     @commands.group(name="ticket", invoke_without_command=True)
     async def ticket(self, ctx):
-
-        if not is_manager(ctx.author):
-            await ctx.send(
-                "You do not have permission to use ticket commands.",
-                delete_after=5
-            )
+        if not is_owner(ctx.author):
             return
 
-        if ctx.invoked_subcommand is None:
-            await ctx.send(
-                "Available commands:\n"
-                "`!ticket panel`\n"
-                "`!ticket block <user> staff`\n"
-                "`!ticket block <user> moder`",
-                delete_after=10
-            )
+        await ctx.send(
+            "**Ticket Commands:**\n"
+            "`!ticket panel`\n"
+            "`!ticket block <user> staff`\n"
+            "`!ticket block <user> moder`"
+        )
 
-    # =====================================================
+    # =========================
     # !ticket panel
-    # =====================================================
+    # =========================
 
     @ticket.command(name="panel")
     async def ticket_panel(self, ctx):
 
-        if not is_manager(ctx.author):
-            await ctx.send(
-                "You do not have permission to use this command.",
-                delete_after=5
-            )
+        if not is_owner(ctx.author):
             return
 
-        panel_message_id = self.data["panel"].get("message_id")
-        panel_channel_id = self.data["panel"].get("channel_id")
+        data = load_data()
 
-        if panel_message_id and panel_channel_id:
-
+        # Don't create duplicate panel
+        if data.get("panel"):
             try:
-                channel = self.bot.get_channel(panel_channel_id)
+                channel = self.bot.get_channel(data["panel"]["channel_id"])
 
                 if channel:
-                    await channel.fetch_message(panel_message_id)
+                    await channel.fetch_message(data["panel"]["message_id"])
 
-                    await ctx.send(
-                        "Ticket panel has already been created.",
-                        delete_after=5
-                    )
-
-                    try:
-                        await ctx.message.delete()
-                    except Exception:
-                        pass
-
+                    await ctx.message.delete()
                     return
 
             except Exception:
                 pass
 
         embed = discord.Embed(
-            title="Support Center",
+            title="Support & Applications",
             description=(
-                "Choose the type of request you want to create.\n\n"
-                "🔵 **Support Ticket**\n"
-                "For questions, reports, bugs and other support requests.\n\n"
-                "🟢 **Staff┃| Host**\n"
-                "Submit an application for Staff or Host.\n\n"
-                "🔴 **Moderator**\n"
-                "Submit an application for Moderator."
+                "Choose an option below.\n\n"
+                "🛠️ **Support Ticket**\n"
+                "Contact the support team.\n\n"
+                "🛡️ **Staff┃| Host**\n"
+                "Apply for Staff or Host.\n\n"
+                "🔨 **Moderator**\n"
+                "Apply for Moderator."
             ),
-            color=discord.Color.blurple()
+            color=discord.Color.dark_gray()
         )
 
         message = await ctx.send(
@@ -324,1227 +280,537 @@ class TicketCog(commands.Cog):
             view=TicketPanelView(self)
         )
 
-        self.data["panel"]["message_id"] = message.id
-        self.data["panel"]["channel_id"] = ctx.channel.id
+        data["panel"] = {
+            "channel_id": message.channel.id,
+            "message_id": message.id
+        }
 
-        save_data(self.data)
+        save_data(data)
 
         try:
             await ctx.message.delete()
         except Exception:
             pass
 
-    # =====================================================
+    # =========================
     # !ticket block
-    # =====================================================
+    # =========================
 
     @ticket.command(name="block")
-    async def ticket_block(
-        self,
-        ctx,
-        member: discord.Member,
-        application_type: str
-    ):
+    async def ticket_block(self, ctx, user: discord.Member = None, block_type: str = None):
 
-        if not is_manager(ctx.author):
+        if not is_owner(ctx.author):
+            return
+
+        if user is None or block_type is None:
             await ctx.send(
-                "You do not have permission to use this command.",
+                "Usage: `!ticket block <user> staff` or "
+                "`!ticket block <user> moder`",
                 delete_after=5
             )
             return
 
-        application_type = application_type.lower()
+        block_type = block_type.lower()
 
-        if application_type not in ("staff", "moder"):
+        if block_type not in ("staff", "moder"):
             await ctx.send(
-                "Use `staff` or `moder`.",
-                delete_after=7
+                "Invalid type. Use `staff` or `moder`.",
+                delete_after=5
             )
             return
 
-        block_name = (
-            "Staff┃|Host"
-            if application_type == "staff"
-            else "Moderator"
-        )
+        data = load_data()
 
-        now = utc_now()
-        expires = add_one_month(now)
+        user_id = str(user.id)
 
-        self.data["blocks"][str(member.id)] = {
-            "type": block_name,
-            "blocked_at": now.isoformat(),
-            "expires_at": expires.isoformat(),
-            "guild_id": ctx.guild.id
-        }
+        if user_id not in data["blocks"]:
+            data["blocks"][user_id] = {}
 
-        save_data(self.data)
+        expires = (
+            datetime.utcnow() + timedelta(days=30)
+        ).timestamp()
 
-        embed = discord.Embed(
-            title="🔒 Application Blocked",
-            color=discord.Color.red()
-        )
+        data["blocks"][user_id][block_type] = expires
 
-        embed.add_field(
-            name="User",
-            value=member.mention,
-            inline=False
-        )
+        save_data(data)
 
-        embed.add_field(
-            name="Application",
-            value=block_name,
-            inline=True
-        )
-
-        embed.add_field(
-            name="Available again",
-            value=format_date(expires.isoformat()),
-            inline=False
-        )
-
-        await ctx.send(embed=embed)
+        role_name = "Staff┃| Host" if block_type == "staff" else "Moderator"
 
         try:
-            await member.send(
-                f"🔒 Your **{block_name}** application has been blocked.\n\n"
-                f"📅 Blocked: **{format_date(now.isoformat())}**\n"
-                f"🔓 Available again: **{format_date(expires.isoformat())}**"
+            await user.send(
+                f"**Ticket:** You have been blocked from applying for "
+                f"**{role_name}** for 1 month."
             )
         except Exception:
             pass
 
-    # =====================================================
+        await ctx.send(
+            f"Blocked {user.mention} from **{role_name}** applications for 1 month.",
+            delete_after=5
+        )
+
+    # =========================
     # !answer ticket
-    # =====================================================
+    # =========================
 
     @commands.command(name="answer")
-    async def answer(
-        self,
-        ctx,
-        subcommand=None,
-        number=None,
-        *,
-        text=None
-    ):
+    async def answer(self, ctx, ticket_word=None, ticket_number=None, *, message=None):
 
-        if not is_manager(ctx.author):
-            await ctx.send(
-                "You do not have permission to use this command.",
-                delete_after=5
-            )
+        if not is_owner_or_support(ctx.author):
             return
 
-        if subcommand != "ticket" or number is None or not text:
-            await ctx.send(
-                "Usage: `!answer ticket <number> <message>`",
-                delete_after=7
-            )
+        if ticket_word != "ticket" or ticket_number is None or message is None:
             return
 
-        ticket = self.data["tickets"].get(str(number))
+        data = load_data()
+
+        ticket = data["tickets"].get(str(ticket_number))
 
         if not ticket:
-            await ctx.send(
-                "Ticket not found.",
-                delete_after=5
-            )
             return
 
-        if ticket.get("closed"):
-            await ctx.send(
-                "This ticket is already closed.",
-                delete_after=5
-            )
+        user_id = ticket.get("user_id")
+        channel_id = ticket.get("channel_id")
+
+        try:
+            user = await self.bot.fetch_user(int(user_id))
+        except Exception:
             return
 
         try:
-            user = await self.bot.fetch_user(
-                int(ticket["user_id"])
-            )
-
-            await user.send(
-                f"**Support:** {text}"
-            )
-
-        except discord.Forbidden:
-
-            await ctx.send(
-                "I could not send a DM to this user.",
-                delete_after=5
-            )
-
-            return
-
-        channel = self.bot.get_channel(
-            ticket["channel_id"]
-        )
-
-        if channel:
-
-            embed = discord.Embed(
-                description=f"**Support:** {text}",
-                color=discord.Color.light_grey()
-            )
-
-            embed.set_author(
-                name=f"Support • {ctx.author.display_name}"
-            )
-
-            await channel.send(
-                embed=embed
-            )
-
-        try:
-            await ctx.message.delete()
+            await user.send(f"**Support:** {message}")
         except Exception:
             pass
 
-    # =====================================================
+        channel = self.bot.get_channel(channel_id)
+
+        if channel:
+            await channel.send(
+                f"**Support:** {message}"
+            )
+
+    # =========================
     # !close ticket
-    # =====================================================
+    # =========================
 
     @commands.command(name="close")
-    async def close(
-        self,
-        ctx,
-        subcommand=None,
-        number=None
-    ):
+    async def close(self, ctx, ticket_word=None, ticket_number=None):
 
-        if not is_manager(ctx.author):
-            await ctx.send(
-                "You do not have permission to use this command.",
-                delete_after=5
-            )
+        if not is_owner_or_support(ctx.author):
             return
 
-        if subcommand != "ticket" or number is None:
-            await ctx.send(
-                "Usage: `!close ticket <number>`",
-                delete_after=7
-            )
+        if ticket_word != "ticket" or ticket_number is None:
             return
 
-        ticket = self.data["tickets"].get(str(number))
+        data = load_data()
+
+        ticket = data["tickets"].get(str(ticket_number))
 
         if not ticket:
-            await ctx.send(
-                "Ticket not found.",
-                delete_after=5
-            )
             return
 
-        if ticket.get("closed"):
-            await ctx.send(
-                "This ticket is already closed.",
-                delete_after=5
-            )
-            return
+        user_id = ticket.get("user_id")
+        channel_id = ticket.get("channel_id")
 
         try:
-
-            user = await self.bot.fetch_user(
-                int(ticket["user_id"])
-            )
-
-            close_channel = self.bot.get_channel(
-                AFTER_CLOSE_CHANNEL_ID
-            )
-
-            if close_channel:
-                link = close_channel.jump_url
-            else:
-                link = (
-                    f"https://discord.com/channels/"
-                    f"{ctx.guild.id}/{AFTER_CLOSE_CHANNEL_ID}"
-                )
-
-            await user.send(
-                "🔒 **Your ticket has been closed.**\n\n"
-                f"To create a new ticket, go to {link}"
-            )
-
+            user = await self.bot.fetch_user(int(user_id))
         except Exception:
-            pass
+            user = None
 
-        ticket["closed"] = True
+        after_channel = self.bot.get_channel(AFTER_CLOSE_CHANNEL_ID)
 
-        save_data(self.data)
-
-        channel = self.bot.get_channel(
-            ticket["channel_id"]
+        after_link = (
+            after_channel.mention
+            if after_channel
+            else "the after-close channel"
         )
+
+        if user:
+            try:
+                await user.send(
+                    f"**Support:** Your ticket has been closed.\n"
+                    f"You can continue here: {after_link}"
+                )
+            except Exception:
+                pass
+
+        channel = self.bot.get_channel(channel_id)
 
         if channel:
-
             try:
-
-                await channel.delete(
-                    reason=f"Ticket {number} closed by {ctx.author}"
-                )
-
+                await channel.delete()
             except Exception:
                 pass
 
-    # =====================================================
-    # SUPPORT BUTTON
-    # =====================================================
+        del data["tickets"][str(ticket_number)]
+        save_data(data)
 
-    async def start_support(self, interaction):
 
-        user_id = str(interaction.user.id)
+    # =========================
+    # CREATE APPLICATION
+    # =========================
 
-        for ticket in self.data["tickets"].values():
+    async def start_application(self, interaction, application_type):
 
-            if (
-                str(ticket["user_id"]) == user_id
-                and ticket["type"] == "support"
-                and not ticket.get("closed")
-            ):
+        member = interaction.user
 
+        # =================================
+        # ROLE CHECK
+        # =================================
+
+        if application_type == "staff":
+
+            if has_role(member, STAFF_HOST_ROLE_ID):
                 await interaction.response.send_message(
-                    "🎫 You already have an open Support Ticket.",
+                    "❌ You already have the **Staff┃| Host** role.",
                     ephemeral=True
                 )
-
                 return
 
-        try:
-
-            await interaction.user.send(
-                "🌐 **Choose your language for the support ticket:**",
-                view=LanguageView(self)
-            )
-
-            await interaction.response.send_message(
-                "📩 Please check your DMs.",
-                ephemeral=True
-            )
-
-        except discord.Forbidden:
-
-            await interaction.response.send_message(
-                "❌ I could not send you a DM. Please enable DMs from this server.",
-                ephemeral=True
-            )
-
-    # =====================================================
-    # APPLICATION BUTTON
-    # =====================================================
-
-    async def start_application(
-        self,
-        interaction,
-        app_type
-    ):
-
-        user_id = str(interaction.user.id)
-
-        # =================================================
-        # CHECK EXISTING ROLE
-        # =================================================
-
-        if isinstance(interaction.user, discord.Member):
-
-            required_role_id = (
-                STAFF_HOST_ROLE_ID
-                if app_type == "staff"
-                else MODERATOR_ROLE_ID
-            )
-
-            if any(
-                role.id == required_role_id
-                for role in interaction.user.roles
-            ):
-
-                role_name = (
-                    "Staff┃| Host"
-                    if app_type == "staff"
-                    else "Moderator"
-                )
-
-                await interaction.response.send_message(
-                    f"❌ You already have the **{role_name}** role.",
-                    ephemeral=True
-                )
-
-                return
-
-        # =================================================
-        # BLOCK CHECK
-        # =================================================
-
-        block = self.data["blocks"].get(user_id)
-
-        if block:
-
-            expires = parse_date(
-                block["expires_at"]
-            )
-
-            if utc_now() < expires:
-
-                correct_type = (
-                    "Staff┃| Host"
-                    if app_type == "staff"
-                    else "Moderator"
-                )
-
-                if block["type"] == correct_type:
-
-                    await interaction.response.send_message(
-                        f"🔒 You cannot submit a **{correct_type}** application yet.\n\n"
-                        f"📅 Blocked: **{format_date(block['blocked_at'])}**\n"
-                        f"🔓 You can apply again: **{format_date(block['expires_at'])}**",
-                        ephemeral=True
-                    )
-
-                    return
-
-        # =================================================
-        # ACTIVE APPLICATION
-        # =================================================
-
-        application = self.data["applications"].get(
-            user_id
-        )
-
-        if (
-            application
-            and application.get("type") == app_type
-        ):
-
-            await interaction.response.send_message(
-                "📋 You already have an active application of this type.",
-                ephemeral=True
-            )
-
-            return
-
-        flow = self.data["application_flows"].get(
-            user_id
-        )
-
-        if (
-            flow
-            and flow.get("type") == app_type
-        ):
-
-            await interaction.response.send_message(
-                "📋 You are already completing an application.",
-                ephemeral=True
-            )
-
-            return
-
-        questions = (
-            STAFF_QUESTIONS
-            if app_type == "staff"
-            else MODERATOR_QUESTIONS
-        )
-
-        self.data["application_flows"][user_id] = {
-            "type": app_type,
-            "step": 0,
-            "answers": []
-        }
-
-        save_data(self.data)
-
-        title = (
-            "🟢 Staff┃| Host Application"
-            if app_type == "staff"
-            else "🔴 Moderator Application"
-        )
-
-        try:
-
-            await interaction.user.send(
-                f"{title}\n\n"
-                f"**Question 1/{len(questions)}**\n"
-                f"{questions[0]}"
-            )
-
-            await interaction.response.send_message(
-                "📩 Please check your DMs.",
-                ephemeral=True
-            )
-
-        except discord.Forbidden:
-
-            del self.data["application_flows"][user_id]
-
-            save_data(self.data)
-
-            await interaction.response.send_message(
-                "❌ I could not send you a DM. Please enable DMs from this server.",
-                ephemeral=True
-            )
-
-    # =====================================================
-    # LANGUAGE SELECT
-    # =====================================================
-
-    async def select_language(
-        self,
-        interaction,
-        value
-    ):
-
-        user_id = str(interaction.user.id)
-
-        emoji, name, _ = next(
-            item for item in LANGUAGES
-            if item[2] == value
-        )
-
-        self.data["support_flows"][user_id] = {
-            "language": name,
-            "emoji": emoji
-        }
-
-        save_data(self.data)
-
-        await interaction.response.edit_message(
-            content=f"✅ **Language selected:** {emoji} {name}",
-            view=None
-        )
-
-        await interaction.followup.send(
-            "📌 **Choose the type of issue:**",
-            view=IssueView(self)
-        )
-
-    # =====================================================
-    # ISSUE SELECT
-    # =====================================================
-
-    async def select_issue(
-        self,
-        interaction,
-        value
-    ):
-
-        user_id = str(interaction.user.id)
-
-        flow = self.data["support_flows"].get(
-            user_id
-        )
-
-        if not flow:
-
-            await interaction.response.send_message(
-                "❌ This ticket setup has expired. Please start again.",
-                ephemeral=True
-            )
-
-            return
-
-        emoji, name, _ = next(
-            item for item in ISSUES
-            if item[2] == value
-        )
-
-        flow["issue"] = name
-        flow["issue_emoji"] = emoji
-
-        save_data(self.data)
-
-        await interaction.response.edit_message(
-            content=f"✅ **Issue selected:** {emoji} {name}",
-            view=None
-        )
-
-        ticket = await self.create_support_ticket(
-            interaction.guild,
-            interaction.user,
-            flow
-        )
-
-        if ticket:
-
-            del self.data["support_flows"][user_id]
-
-            save_data(self.data)
-
-            await interaction.followup.send(
-                "🎫 **Support request created**\n\n"
-                "Your request is now in our support system.\n\n"
-                f"🌐 **Language:** {flow['emoji']} {flow['language']}\n"
-                f"📌 **Issue:** {flow['issue_emoji']} {flow['issue']}\n\n"
-                "📝 **Tell us what happened**\n"
-                "Send your problem in your next message. You can also include useful details or screenshots.\n\n"
-                "💬 **Stay in this DM**\n"
-                "Our support team will review your request and contact you here."
-            )
-
-    # =====================================================
-    # PRIVATE CHANNEL PERMISSIONS
-    # =====================================================
-
-    def make_overwrites(
-        self,
-        guild,
-        user
-    ):
-
-        overwrites = {
-
-            guild.default_role:
-                discord.PermissionOverwrite(
-                    view_channel=False
-                ),
-
-            user:
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    read_message_history=True
-                )
-        }
-
-        manager_role = guild.get_role(
-            SUPPORT_ROLE_ID
-        )
-
-        if manager_role:
-
-            overwrites[manager_role] = (
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    read_message_history=True
-                )
-            )
-
-        owner = guild.get_member(
-            OWNER_ID
-        )
-
-        if owner:
-
-            overwrites[owner] = (
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    read_message_history=True
-                )
-            )
-
-        if guild.me:
-
-            overwrites[guild.me] = (
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    read_message_history=True,
-                    manage_channels=True,
-                    manage_messages=True
-                )
-            )
-
-        return overwrites
-
-    # =====================================================
-    # CREATE SUPPORT TICKET
-    # =====================================================
-
-    async def create_support_ticket(
-        self,
-        guild,
-        user,
-        flow
-    ):
-
-        if guild is None:
-            guild = self.bot.guilds[0]
-
-        category = get_category(guild)
-
-        if category is None:
-
-            try:
-                await user.send(
-                    "❌ The ticket category could not be found."
-                )
-            except Exception:
-                pass
-
-            return None
-
-        number = self.data["next_ticket"]
-
-        self.data["next_ticket"] += 1
-
-        number_text = ticket_number(number)
-
-        channel_name = f"🛠️┃| {user.display_name}"
-
-        overwrites = self.make_overwrites(
-            guild,
-            user
-        )
-
-        try:
-
-            channel = await guild.create_text_channel(
-                name=channel_name,
-                category=category,
-                overwrites=overwrites,
-                reason=f"Support Ticket #{number_text}"
-            )
-
-        except Exception as e:
-
-            try:
-                await user.send(
-                    f"❌ I could not create your ticket channel.\n`{e}`"
-                )
-            except Exception:
-                pass
-
-            return None
-
-        self.data["tickets"][number_text] = {
-
-            "user_id": user.id,
-
-            "channel_id": channel.id,
-
-            "type": "support",
-
-            "closed": False,
-
-            "language": flow["language"],
-
-            "language_emoji": flow["emoji"],
-
-            "issue": flow["issue"],
-
-            "issue_emoji": flow["issue_emoji"],
-
-            "created_at": iso_now()
-        }
-
-        save_data(self.data)
-
-        embed = discord.Embed(
-            title=f"🎫 Support Ticket #{number_text}",
-            color=discord.Color.blurple()
-        )
-
-        embed.add_field(
-            name="User",
-            value=f"{user.mention}\n`{user}`",
-            inline=False
-        )
-
-        embed.add_field(
-            name="Language",
-            value=f"{flow['emoji']} {flow['language']}",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Issue",
-            value=f"{flow['issue_emoji']} {flow['issue']}",
-            inline=True
-        )
-
-        embed.set_footer(
-            text=f"Ticket #{number_text}"
-        )
-
-        await channel.send(
-            embed=embed
-        )
-
-        return {
-            "number": number_text,
-            "channel": channel
-        }
-
-    # =====================================================
-    # APPLICATION ANSWERS
-    # =====================================================
-
-    async def process_application_message(
-        self,
-        message
-    ):
-
-        user_id = str(
-            message.author.id
-        )
-
-        flow = self.data["application_flows"].get(
-            user_id
-        )
-
-        if not flow:
-            return False
-
-        questions = (
-            STAFF_QUESTIONS
-            if flow["type"] == "staff"
-            else MODERATOR_QUESTIONS
-        )
-
-        answer = message.content.strip()
-
-        if not answer and message.attachments:
-            answer = "[Attachment]"
-
-        if not answer:
-            return True
-
-        flow["answers"].append(answer)
-
-        flow["step"] += 1
-
-        if flow["step"] < len(questions):
-
-            save_data(self.data)
-
-            await message.channel.send(
-                f"**Question {flow['step'] + 1}/{len(questions)}**\n"
-                f"{questions[flow['step']]}"
-            )
-
-            return True
-
-        app_type = flow["type"]
-
-        answers = flow["answers"]
-
-        del self.data["application_flows"][user_id]
-
-        application = await self.create_application(
-            message.author,
-            app_type,
-            answers
-        )
-
-        if application:
-
-            self.data["applications"][user_id] = {
-
-                "type": app_type,
-
-                "channel_id":
-                    application["channel"].id,
-
-                "ticket_number":
-                    application["number"],
-
-                "submitted_at":
-                    iso_now()
-            }
-
-            save_data(self.data)
-
-            await message.channel.send(
-                "✅ **Application submitted!**\n\n"
-                "Please wait **1–2 days** and we will contact you with the result."
-            )
+            role_name = "Staff┃| Host"
 
         else:
 
-            save_data(self.data)
+            if has_role(member, MODERATOR_ROLE_ID):
+                await interaction.response.send_message(
+                    "❌ You already have the **Moderator** role.",
+                    ephemeral=True
+                )
+                return
 
-            await message.channel.send(
-                "❌ Your application could not be created. Please contact support."
-            )
+            role_name = "Moderator"
 
-        return True
+        # =================================
+        # BLOCK CHECK
+        # =================================
 
-    # =====================================================
-    # CREATE APPLICATION
-    # =====================================================
+        data = load_data()
 
-    async def create_application(
-        self,
-        user,
-        app_type,
-        answers
-    ):
+        user_blocks = data["blocks"].get(str(member.id), {})
 
-        guild = self.bot.guilds[0]
+        if application_type in user_blocks:
 
-        category = get_category(guild)
+            expires_at = user_blocks[application_type]
 
-        if category is None:
-            return None
+            if expires_at > datetime.utcnow().timestamp():
 
-        number = self.data["next_ticket"]
+                expires = datetime.fromtimestamp(expires_at).strftime(
+                    "%d.%m.%Y"
+                )
 
-        self.data["next_ticket"] += 1
+                await interaction.response.send_message(
+                    f"❌ You are blocked from applying for "
+                    f"**{role_name}** until **{expires}**.",
+                    ephemeral=True
+                )
+                return
 
-        number_text = ticket_number(number)
+        # =================================
+        # EXISTING APPLICATION
+        # =================================
 
-        channel_name = f"🛠️┃| {user.display_name}"
+        for application in data["applications"].values():
 
-        overwrites = self.make_overwrites(
-            guild,
-            user
+            if application.get("user_id") == member.id:
+                await interaction.response.send_message(
+                    "❌ You already have an active application.",
+                    ephemeral=True
+                )
+                return
+
+        await interaction.response.send_message(
+            "📩 Check your DMs.",
+            ephemeral=True
         )
 
         try:
+            await member.send(
+                f"**Application:** You are applying for **{role_name}**.\n\n"
+                "Please answer the questions below."
+            )
+        except Exception:
+            return
 
-            channel = await guild.create_text_channel(
-                name=channel_name,
-                category=category,
-                overwrites=overwrites,
-                reason=f"{app_type} application #{number_text}"
+        questions = (
+            STAFF_HOST_QUESTIONS
+            if application_type == "staff"
+            else MODERATOR_QUESTIONS
+        )
+
+        answers = []
+
+        for question in questions:
+
+            try:
+                await member.send(question)
+
+                def check(message):
+                    return (
+                        message.author.id == member.id
+                        and isinstance(message.channel, discord.DMChannel)
+                    )
+
+                answer = await self.bot.wait_for(
+                    "message",
+                    timeout=1800,
+                    check=check
+                )
+
+                answers.append(answer.content)
+
+            except Exception:
+
+                try:
+                    await member.send(
+                        "❌ Your application timed out."
+                    )
+                except Exception:
+                    pass
+
+                return
+
+        guild = interaction.guild
+
+        category = guild.get_channel(TICKET_CATEGORY_ID)
+
+        if category is None:
+            return
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=False
+            ),
+
+            member: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True
+            )
+        }
+
+        support_role = guild.get_role(SUPPORT_ROLE_ID)
+
+        if support_role:
+            overwrites[support_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True
             )
 
-        except Exception:
-
-            return None
-
-        title = (
-            "🟢 Staff┃| Host Application"
-            if app_type == "staff"
-            else "🔴 Moderator Application"
+        overwrites[guild.me] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True
         )
+
+        channel = await guild.create_text_channel(
+            name=f"🛠️┃| {member.display_name}",
+            category=category,
+            overwrites=overwrites
+        )
+
+        application_id = str(channel.id)
+
+        data = load_data()
+
+        data["applications"][application_id] = {
+            "user_id": member.id,
+            "type": application_type,
+            "role_name": role_name,
+            "answers": answers,
+            "channel_id": channel.id
+        }
+
+        save_data(data)
 
         embed = discord.Embed(
-            title=title,
-            color=(
-                discord.Color.green()
-                if app_type == "staff"
-                else discord.Color.red()
+            title=f"{role_name} Application",
+            color=discord.Color.dark_gray()
+        )
+
+        embed.set_author(
+            name=str(member),
+            icon_url=member.display_avatar.url
+        )
+
+        for index, answer in enumerate(answers):
+
+            if application_type == "staff":
+                question = STAFF_HOST_QUESTIONS[index]
+            else:
+                question = MODERATOR_QUESTIONS[index]
+
+            embed.add_field(
+                name=question,
+                value=answer[:1024] if answer else "No answer",
+                inline=False
             )
-        )
 
-        embed.add_field(
-            name="Applicant",
-            value=f"{user.mention}\n`{user}`",
-            inline=False
-        )
-
-        embed.add_field(
-            name="Application",
-            value=app_type,
-            inline=True
-        )
-
-        embed.add_field(
-            name="Ticket",
-            value=f"#{number_text}",
-            inline=True
+        embed.set_footer(
+            text=f"Applicant ID: {member.id}"
         )
 
         await channel.send(
+            content=f"<@&{SUPPORT_ROLE_ID}>",
             embed=embed,
             view=ApplicationDecisionView(self)
         )
 
-        for index, answer in enumerate(
-            answers,
-            start=1
-        ):
-
-            question = (
-                STAFF_QUESTIONS[index - 1]
-                if app_type == "staff"
-                else MODERATOR_QUESTIONS[index - 1]
+        try:
+            await member.send(
+                f"**Application:** Your **{role_name}** application "
+                f"has been submitted successfully."
             )
+        except Exception:
+            pass
 
-            answer_embed = discord.Embed(
-                color=discord.Color.light_grey()
-            )
+    # =========================
+    # SUPPORT TICKET
+    # =========================
 
-            answer_embed.add_field(
-                name=question,
-                value=answer[:1024],
-                inline=False
-            )
-
-            await channel.send(
-                embed=answer_embed
-            )
-
-        return {
-            "number": number_text,
-            "channel": channel
-        }
-
-    # =====================================================
-    # ACCEPT / REJECT
-    # =====================================================
-
-    async def decide_application(
+    async def create_support_ticket(
         self,
         interaction,
-        accepted
+        language,
+        issue
     ):
 
-        if not is_manager(interaction.user):
+        member = interaction.user
+        guild = interaction.guild
 
-            await interaction.response.send_message(
-                "❌ You do not have permission to decide applications.",
-                ephemeral=True
-            )
+        data = load_data()
 
-            return
+        # Only one support ticket
+        for ticket in data["tickets"].values():
 
-        channel_id = interaction.channel.id
+            if ticket.get("user_id") == member.id:
 
-        target_user_id = None
-        application_type = None
-
-        for user_id, application in self.data["applications"].items():
-
-            if application.get("channel_id") == channel_id:
-
-                target_user_id = int(user_id)
-
-                application_type = application.get(
-                    "type"
+                await interaction.response.send_message(
+                    "❌ You already have an open Support Ticket.",
+                    ephemeral=True
                 )
+                return
 
-                break
+        await interaction.response.send_message(
+            "📩 Check your DMs.",
+            ephemeral=True
+        )
 
-        if target_user_id is None:
+        category = guild.get_channel(TICKET_CATEGORY_ID)
 
-            await interaction.response.send_message(
-                "❌ Application not found.",
-                ephemeral=True
+        if category is None:
+            return
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=False
+            ),
+
+            member: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True
+            )
+        }
+
+        support_role = guild.get_role(SUPPORT_ROLE_ID)
+
+        if support_role:
+            overwrites[support_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True
             )
 
-            return
+        overwrites[guild.me] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True
+        )
+
+        number = data["next_ticket"]
+        data["next_ticket"] += 1
+
+        channel = await guild.create_text_channel(
+            name=f"🛠️┃| {member.display_name}",
+            category=category,
+            overwrites=overwrites
+        )
+
+        data["tickets"][str(number)] = {
+            "user_id": member.id,
+            "channel_id": channel.id,
+            "language": language,
+            "issue": issue
+        }
+
+        save_data(data)
+
+        await channel.send(
+            f"<@&{SUPPORT_ROLE_ID}>\n"
+            f"**Ticket #{number}**\n\n"
+            f"**User:** {member.mention}\n"
+            f"**Language:** {language}\n"
+            f"**Issue:** {issue}\n\n"
+            f"Waiting for the user's message..."
+        )
 
         try:
-
-            user = await self.bot.fetch_user(
-                target_user_id
+            await member.send(
+                f"**Support Ticket #{number}** has been created successfully.\n\n"
+                "Please send your problem in this DM."
             )
-
         except Exception:
+            pass
 
-            user = None
-
-        # =================================================
-        # ACCEPT
-        # =================================================
-
-        if accepted:
-
-            role_id = (
-                STAFF_HOST_ROLE_ID
-                if application_type == "staff"
-                else MODERATOR_ROLE_ID
-            )
-
-            role = interaction.guild.get_role(
-                role_id
-            )
-
-            member = interaction.guild.get_member(
-                target_user_id
-            )
-
-            role_given = False
-
-            if role and member:
-
-                try:
-
-                    await member.add_roles(
-                        role,
-                        reason=(
-                            f"{application_type} application "
-                            f"accepted by {interaction.user}"
-                        )
-                    )
-
-                    role_given = True
-
-                except discord.Forbidden:
-
-                    role_given = False
-
-                except Exception:
-
-                    role_given = False
-
-            if application_type == "staff":
-
-                if role_given:
-
-                    result_text = (
-                        "✅ **Your Staff┃| Host application has been accepted!**\n\n"
-                        f"You have received the <@&{STAFF_HOST_ROLE_ID}> role."
-                    )
-
-                else:
-
-                    result_text = (
-                        "✅ **Your Staff┃| Host application has been accepted!**\n\n"
-                        "Your application was accepted, but the role could not "
-                        "be assigned automatically."
-                    )
-
-            else:
-
-                if role_given:
-
-                    result_text = (
-                        "✅ **Your Moderator application has been accepted!**\n\n"
-                        f"You have received the <@&{MODERATOR_ROLE_ID}> role."
-                    )
-
-                else:
-
-                    result_text = (
-                        "✅ **Your Moderator application has been accepted!**\n\n"
-                        "Your application was accepted, but the role could not "
-                        "be assigned automatically."
-                    )
-
-        # =================================================
-        # REJECT
-        # =================================================
-
-        else:
-
-            if application_type == "staff":
-
-                result_text = (
-                    "❌ **Your Staff┃| Host application has been rejected.**\n\n"
-                    "Thank you for taking the time to apply."
-                )
-
-            else:
-
-                result_text = (
-                    "❌ **Your Moderator application has been rejected.**\n\n"
-                    "Thank you for taking the time to apply."
-                )
-
-        if user:
-
-            try:
-                await user.send(
-                    result_text
-                )
-            except Exception:
-                pass
-
-        await interaction.response.edit_message(
-            content=(
-                "✅ **Application Accepted**"
-                if accepted
-                else "❌ **Application Rejected**"
-            ),
-            embed=None,
-            view=None
-        )
-
-        del self.data["applications"][
-            str(target_user_id)
-        ]
-
-        save_data(self.data)
-
-        await interaction.channel.delete(
-            reason=(
-                "Application accepted"
-                if accepted
-                else "Application rejected"
-            )
-        )
-
-    # =====================================================
+    # =========================
     # DM LISTENER
-    # =====================================================
+    # =========================
 
     @commands.Cog.listener()
     async def on_message(self, message):
 
-        if message.author.bot:
-            return
-
+        # IMPORTANT:
+        # Do not process guild commands here.
+        # main.py should call bot.process_commands(message) once.
         if message.guild is not None:
             return
 
-        handled = await self.process_application_message(
-            message
-        )
-
-        if handled:
+        if message.author.bot:
             return
 
-        user_id = str(
-            message.author.id
-        )
+        data = load_data()
 
-        ticket = None
-        ticket_number_found = None
+        for number, ticket in data["tickets"].items():
 
-        for number, data in self.data["tickets"].items():
+            if ticket.get("user_id") != message.author.id:
+                continue
 
-            if (
-                str(data["user_id"]) == user_id
-                and data["type"] == "support"
-                and not data.get("closed")
-            ):
+            channel = self.bot.get_channel(
+                ticket.get("channel_id")
+            )
 
-                ticket = data
-                ticket_number_found = number
+            if channel:
 
-                break
-
-        if not ticket:
-            return
-
-        channel = self.bot.get_channel(
-            ticket["channel_id"]
-        )
-
-        if not channel:
-            return
-
-        embed = discord.Embed(
-            description=(
-                message.content
-                or "[No text]"
-            ),
-            color=discord.Color.blurple()
-        )
-
-        embed.set_author(
-            name=f"{message.author} • User"
-        )
-
-        embed.set_footer(
-            text=f"Ticket #{ticket_number_found}"
-        )
-
-        files = []
-
-        for attachment in message.attachments[:10]:
-
-            try:
-
-                files.append(
-                    await attachment.to_file()
+                await channel.send(
+                    f"**User:** {message.content}"
                 )
 
+            try:
+                await message.channel.send(
+                    "✅ Your message has been sent to the support team."
+                )
             except Exception:
                 pass
 
-        await channel.send(
-            embed=embed,
-            files=files
-        )
+            return
 
 
-# =========================================================
+# =========================
 # PANEL VIEW
-# =========================================================
+# =========================
 
 class TicketPanelView(discord.ui.View):
 
@@ -1554,31 +820,50 @@ class TicketPanelView(discord.ui.View):
 
     @discord.ui.button(
         label="Support Ticket",
-        emoji="🎫",
-        style=discord.ButtonStyle.primary,
-        custom_id="ticket:support"
+        emoji="🛠️",
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_support"
     )
     async def support(
         self,
-        interaction,
-        button
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
 
-        await self.cog.start_support(
-            interaction
+        await interaction.response.send_message(
+            "📩 Check your DMs.",
+            ephemeral=True
         )
+
+        try:
+            await interaction.user.send(
+                "**Support Ticket**\n\n"
+                "Please select your language:",
+                view=LanguageView(self.cog)
+            )
+        except Exception:
+            pass
 
     @discord.ui.button(
         label="Staff┃| Host",
         emoji="🛡️",
-        style=discord.ButtonStyle.success,
-        custom_id="ticket:staff"
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_staff_host"
     )
     async def staff(
         self,
-        interaction,
-        button
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
+
+        member = interaction.user
+
+        if has_role(member, STAFF_HOST_ROLE_ID):
+            await interaction.response.send_message(
+                "❌ You already have the **Staff┃| Host** role.",
+                ephemeral=True
+            )
+            return
 
         await self.cog.start_application(
             interaction,
@@ -1588,161 +873,333 @@ class TicketPanelView(discord.ui.View):
     @discord.ui.button(
         label="Moderator",
         emoji="🔨",
-        style=discord.ButtonStyle.danger,
-        custom_id="ticket:moderator"
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_moderator"
     )
     async def moderator(
         self,
-        interaction,
-        button
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
+
+        member = interaction.user
+
+        if has_role(member, MODERATOR_ROLE_ID):
+            await interaction.response.send_message(
+                "❌ You already have the **Moderator** role.",
+                ephemeral=True
+            )
+            return
 
         await self.cog.start_application(
             interaction,
-            "moderator"
+            "moder"
         )
 
 
-# =========================================================
+# =========================
 # LANGUAGE VIEW
-# =========================================================
+# =========================
 
 class LanguageView(discord.ui.View):
 
     def __init__(self, cog):
-
         super().__init__(timeout=None)
-
         self.cog = cog
 
-        options = [
+    @discord.ui.select(
+        placeholder="Select your language",
+        custom_id="ticket_language",
+        options=[
             discord.SelectOption(
                 label=name,
-                value=value,
-                emoji=emoji
+                emoji=emoji,
+                value=value
             )
             for emoji, name, value in LANGUAGES
         ]
-
-        select = discord.ui.Select(
-            placeholder="Choose your language",
-            options=options,
-            custom_id="ticket:language"
-        )
-
-        select.callback = self.callback
-
-        self.add_item(select)
-
-    async def callback(
+    )
+    async def language(
         self,
-        interaction
+        interaction: discord.Interaction,
+        select: discord.ui.Select
     ):
 
-        value = interaction.data["values"][0]
+        language = select.values[0]
 
-        await self.cog.select_language(
-            interaction,
-            value
+        await interaction.response.edit_message(
+            content=f"Language selected: **{language}**\n\n"
+                    "Now select your issue.",
+            view=IssueView(self.cog)
         )
 
 
-# =========================================================
+# =========================
 # ISSUE VIEW
-# =========================================================
+# =========================
 
 class IssueView(discord.ui.View):
 
     def __init__(self, cog):
-
         super().__init__(timeout=None)
-
         self.cog = cog
 
-        options = [
+    @discord.ui.select(
+        placeholder="Select your issue",
+        custom_id="ticket_issue",
+        options=[
             discord.SelectOption(
-                label=name,
-                value=value,
-                emoji=emoji
+                label=label,
+                emoji=emoji,
+                value=label
             )
-            for emoji, name, value in ISSUES
+            for emoji, label in ISSUES
         ]
-
-        select = discord.ui.Select(
-            placeholder="Choose your issue",
-            options=options,
-            custom_id="ticket:issue"
-        )
-
-        select.callback = self.callback
-
-        self.add_item(select)
-
-    async def callback(
+    )
+    async def issue(
         self,
-        interaction
+        interaction: discord.Interaction,
+        select: discord.ui.Select
     ):
 
-        value = interaction.data["values"][0]
+        issue = select.values[0]
 
-        await self.cog.select_issue(
+        # We need language from the previous message.
+        # If unavailable, use English.
+        language = "English"
+
+        await interaction.response.edit_message(
+            content=(
+                f"Language: **{language}**\n"
+                f"Issue: **{issue}**\n\n"
+                "Creating your ticket..."
+            ),
+            view=None
+        )
+
+        await self.cog.create_support_ticket(
             interaction,
-            value
+            language,
+            issue
         )
 
 
-# =========================================================
-# ACCEPT / REJECT VIEW
-# =========================================================
+# =========================
+# APPLICATION DECISION VIEW
+# =========================
 
 class ApplicationDecisionView(discord.ui.View):
 
     def __init__(self, cog):
-
         super().__init__(timeout=None)
-
         self.cog = cog
 
     @discord.ui.button(
         label="Accept",
         emoji="✅",
         style=discord.ButtonStyle.success,
-        custom_id="ticket:application_accept"
+        custom_id="application_accept"
     )
     async def accept(
         self,
-        interaction,
-        button
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
 
-        await self.cog.decide_application(
-            interaction,
-            True
+        if not is_owner_or_support(interaction.user):
+            await interaction.response.send_message(
+                "❌ You do not have permission to do this.",
+                ephemeral=True
+            )
+            return
+
+        application = get_application(
+            interaction.channel.id
         )
+
+        if not application:
+            await interaction.response.send_message(
+                "❌ Application data was not found.",
+                ephemeral=True
+            )
+            return
+
+        guild = interaction.guild
+
+        user_id = application["user_id"]
+        application_type = application["type"]
+
+        member = guild.get_member(user_id)
+
+        if member is None:
+            try:
+                member = await guild.fetch_member(user_id)
+            except Exception:
+                await interaction.response.send_message(
+                    "❌ I could not find the applicant in the server.",
+                    ephemeral=True
+                )
+                return
+
+        # =========================
+        # SELECT ROLE
+        # =========================
+
+        if application_type == "staff":
+            role_id = STAFF_HOST_ROLE_ID
+            role_name = "Staff┃| Host"
+        else:
+            role_id = MODERATOR_ROLE_ID
+            role_name = "Moderator"
+
+        role = guild.get_role(role_id)
+
+        if role is None:
+            await interaction.response.send_message(
+                f"❌ The **{role_name}** role was not found.",
+                ephemeral=True
+            )
+            return
+
+        # =========================
+        # ROLE HIERARCHY CHECK
+        # =========================
+
+        if guild.me.top_role <= role:
+            await interaction.response.send_message(
+                f"❌ I cannot give **{role_name}** because my bot role "
+                f"is not higher than that role.",
+                ephemeral=True
+            )
+            return
+
+        # =========================
+        # GIVE ROLE
+        # =========================
+
+        try:
+            await member.add_roles(
+                role,
+                reason="Application accepted"
+            )
+
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"❌ I could not give **{role_name}** to the applicant.\n"
+                "Please check my Manage Roles permission and role hierarchy.",
+                ephemeral=True
+            )
+            return
+
+        except Exception:
+            await interaction.response.send_message(
+                f"❌ An error occurred while giving **{role_name}**.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message(
+            f"✅ Application accepted. **{role_name}** has been given.",
+            ephemeral=True
+        )
+
+        # Disable buttons before deletion
+        for item in self.children:
+            item.disabled = True
+
+        try:
+            await interaction.message.edit(
+                view=self
+            )
+        except Exception:
+            pass
+
+        try:
+            await member.send(
+                f"🎉 **Your application has been accepted!**\n\n"
+                f"You have received the **{role_name}** role."
+            )
+        except Exception:
+            pass
+
+        data = load_data()
+
+        data["applications"].pop(
+            str(interaction.channel.id),
+            None
+        )
+
+        save_data(data)
+
+        await interaction.channel.delete()
 
     @discord.ui.button(
         label="Reject",
         emoji="❌",
         style=discord.ButtonStyle.danger,
-        custom_id="ticket:application_reject"
+        custom_id="application_reject"
     )
     async def reject(
         self,
-        interaction,
-        button
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
 
-        await self.cog.decide_application(
-            interaction,
-            False
+        if not is_owner_or_support(interaction.user):
+            await interaction.response.send_message(
+                "❌ You do not have permission to do this.",
+                ephemeral=True
+            )
+            return
+
+        application = get_application(
+            interaction.channel.id
         )
 
+        if not application:
+            await interaction.response.send_message(
+                "❌ Application data was not found.",
+                ephemeral=True
+            )
+            return
 
-# =========================================================
+        user_id = application["user_id"]
+
+        try:
+            member = await interaction.guild.fetch_member(
+                user_id
+            )
+        except Exception:
+            member = None
+
+        await interaction.response.send_message(
+            "❌ Application rejected.",
+            ephemeral=True
+        )
+
+        if member:
+            try:
+                await member.send(
+                    "❌ **Your application has been rejected.**"
+                )
+            except Exception:
+                pass
+
+        data = load_data()
+
+        data["applications"].pop(
+            str(interaction.channel.id),
+            None
+        )
+
+        save_data(data)
+
+        await interaction.channel.delete()
+
+
+# =========================
 # SETUP
-# =========================================================
+# =========================
 
 async def setup(bot):
-    await bot.add_cog(
-        TicketCog(bot)
-                            )
+    await bot.add_cog(TicketCog(bot))
