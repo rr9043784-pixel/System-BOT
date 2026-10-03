@@ -504,7 +504,7 @@ class RemovePingRolesButton(discord.ui.Button):
         super().__init__(
             label="Remove all ping roles",
             emoji="❌",
-            style=discord.ButtonStyle.danger,
+            style=discord.ButtonStyle.secondary,
             custom_id="features_remove_ping_roles_v2",
         )
 
