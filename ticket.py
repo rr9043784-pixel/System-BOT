@@ -1576,7 +1576,7 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Staff┃| Host application "
                     "has been accepted!**\n\n"
-                    f"You have received the <@&{STAFF_HOST_ROLE_ID}> role."
+                    f"You have received the Staff┃| Host role."
                 )
 
             else:
@@ -1584,7 +1584,7 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Moderator application "
                     "has been accepted!**\n\n"
-                    f"You have received the <@&{MODERATOR_ROLE_ID}> role."
+                    f"You have received the Moderator role."
                 )
 
         # =================================================
