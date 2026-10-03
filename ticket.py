@@ -1646,92 +1646,98 @@ class TicketCog(commands.Cog):
     # DM LISTENER
     # =====================================================
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
+@commands.Cog.listener()
+async def on_message(self, message):
 
-        if message.author.bot:
-            return
+    if message.author.bot:
+        return
 
-        # IMPORTANT:
-        # Guild messages are NOT processed here.
-        # Prefix commands are processed only by main.py.
-        if message.guild is not None:
-            return
+    # IMPORTANT:
+    # Guild messages are NOT processed here.
+    # Prefix commands are processed only by main.py.
+    if message.guild is not None:
+        return
 
-        handled = await self.process_application_message(
-            message
-        )
+    handled = await self.process_application_message(
+        message
+    )
 
-        if handled:
-            return
+    if handled:
+        return
 
-        user_id = str(
-            message.author.id
-        )
+    user_id = str(
+        message.author.id
+    )
 
-        ticket = None
-        ticket_number_found = None
+    ticket = None
+    ticket_number_found = None
 
-        for number, data in (
-            self.data["tickets"].items()
+    for number, data in (
+        self.data["tickets"].items()
+    ):
+
+        if (
+            str(data["user_id"]) == user_id
+            and data["type"] == "support"
+            and not data.get("closed")
         ):
 
-            if (
-                str(data["user_id"]) == user_id
-                and data["type"] == "support"
-                and not data.get("closed")
-            ):
+            ticket = data
+            ticket_number_found = number
 
-                ticket = data
-                ticket_number_found = number
+            break
 
-                break
+    if not ticket:
+        return
 
-        if not ticket:
-            return
+    # Add checkmark reaction to the user's DM
+    try:
+        await message.add_reaction("✅")
+    except Exception:
+        pass
 
-        channel = self.bot.get_channel(
-            ticket["channel_id"]
-        )
+    channel = self.bot.get_channel(
+        ticket["channel_id"]
+    )
 
-        if not channel:
-            return
+    if not channel:
+        return
 
-        embed = discord.Embed(
-            description=(
-                message.content
-                or "[No text]"
-            ),
-            color=discord.Color.blurple()
-        )
+    embed = discord.Embed(
+        description=(
+            message.content
+            or "[No text]"
+        ),
+        color=discord.Color.blurple()
+    )
 
-        embed.set_author(
-            name=f"{message.author} • User"
-        )
+    embed.set_author(
+        name=f"{message.author} • User"
+    )
 
-        embed.set_footer(
-            text=f"Ticket #{ticket_number_found}"
-        )
+    embed.set_footer(
+        text=f"Ticket #{ticket_number_found}"
+    )
 
-        files = []
+    files = []
 
-        for attachment in (
-            message.attachments[:10]
-        ):
+    for attachment in (
+        message.attachments[:10]
+    ):
 
-            try:
+        try:
 
-                files.append(
-                    await attachment.to_file()
-                )
+            files.append(
+                await attachment.to_file()
+            )
 
-            except Exception:
-                pass
+        except Exception:
+            pass
 
-        await channel.send(
-            embed=embed,
-            files=files
-        )
+    await channel.send(
+        embed=embed,
+        files=files
+            )
 
 
 # =========================================================
