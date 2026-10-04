@@ -2,7 +2,6 @@ import os
 import json
 import asyncio
 import urllib.request
-import urllib.error
 
 import discord
 from discord.ext import commands
@@ -90,10 +89,10 @@ class MoneyDropView(discord.ui.View):
         self.button.callback = self.claim
         self.add_item(self.button)
 
-    def get_text(self):
+    def get_embed(self):
         claimed = len(self.claimed_users)
 
-        text = (
+        description = (
             "Click the button below to receive the reward.\n\n"
             f"**Reward:** {MONEY_EMOJI} {self.amount:,}\n"
             f"**Claims:** {claimed}/{self.quantity}\n"
@@ -102,22 +101,27 @@ class MoneyDropView(discord.ui.View):
         )
 
         if self.allowed_user_id:
-            text += (
+            description += (
                 f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
             )
 
         elif self.allowed_role_id:
-            text += (
+            description += (
                 f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
             )
 
         if self.claimed_names:
-            text += "\n\n**Claimed by:**"
+            description += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
-                text += f"\n• {name}"
+                description += f"\n• {name}"
 
-        return text
+        embed = discord.Embed(
+            description=description,
+            color=discord.Color.green()
+        )
+
+        return embed
 
     async def claim(self, interaction: discord.Interaction):
 
@@ -192,8 +196,13 @@ class MoneyDropView(discord.ui.View):
                 self.button.disabled = True
 
             await interaction.response.edit_message(
-                content=self.get_text(),
+                embed=self.get_embed(),
                 view=self
+            )
+
+            await interaction.followup.send(
+                f"✅ You received **{MONEY_EMOJI} {self.amount:,}**.",
+                ephemeral=True
             )
 
 
@@ -248,10 +257,10 @@ class ChestDropView(discord.ui.View):
             "ultra": "⚡"
         }[self.chest_type]
 
-    def get_text(self):
+    def get_embed(self):
         claimed = len(self.claimed_users)
 
-        text = (
+        description = (
             "Click the button below to receive the reward.\n\n"
             f"**Reward:** {self.chest_emoji()} "
             f"{self.amount} × {self.chest_name()}\n"
@@ -261,22 +270,27 @@ class ChestDropView(discord.ui.View):
         )
 
         if self.allowed_user_id:
-            text += (
+            description += (
                 f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
             )
 
         elif self.allowed_role_id:
-            text += (
+            description += (
                 f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
             )
 
         if self.claimed_names:
-            text += "\n\n**Claimed by:**"
+            description += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
-                text += f"\n• {name}"
+                description += f"\n• {name}"
 
-        return text
+        embed = discord.Embed(
+            description=description,
+            color=discord.Color.green()
+        )
+
+        return embed
 
     async def claim(self, interaction: discord.Interaction):
 
@@ -368,8 +382,14 @@ class ChestDropView(discord.ui.View):
                 self.button.disabled = True
 
             await interaction.response.edit_message(
-                content=self.get_text(),
+                embed=self.get_embed(),
                 view=self
+            )
+
+            await interaction.followup.send(
+                f"✅ You received **{self.amount} × "
+                f"{self.chest_name()}** {self.chest_emoji()}.",
+                ephemeral=True
             )
 
 
@@ -427,7 +447,7 @@ class Drops(commands.Cog):
         )
 
         await ctx.send(
-            content=view.get_text(),
+            embed=view.get_embed(),
             view=view
         )
 
@@ -504,7 +524,7 @@ class Drops(commands.Cog):
         )
 
         await ctx.send(
-            content=view.get_text(),
+            embed=view.get_embed(),
             view=view
         )
 
