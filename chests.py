@@ -4,6 +4,7 @@ import random
 import asyncio
 import tempfile
 import time
+import shutil
 
 import discord
 import numpy as np
@@ -89,6 +90,7 @@ class Chests(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.data_load_failed = False
         self.data = self.load_data()
 
         self.save_lock = asyncio.Lock()
@@ -104,6 +106,7 @@ class Chests(commands.Cog):
             return {"users": {}}
 
         try:
+
             with open(
                 DATA_FILE,
                 "r",
@@ -113,6 +116,12 @@ class Chests(commands.Cog):
 
             if not isinstance(data, dict):
                 raise ValueError("Invalid data")
+
+            if not isinstance(
+                data.get("users"),
+                dict
+            ):
+                raise ValueError("Invalid users data")
 
             data.setdefault("users", {})
 
@@ -124,9 +133,57 @@ class Chests(commands.Cog):
                 f"❌ Failed to load {DATA_FILE}: {e}"
             )
 
+            backup_file = DATA_FILE + ".bak"
+
+            if os.path.exists(backup_file):
+
+                try:
+
+                    with open(
+                        backup_file,
+                        "r",
+                        encoding="utf-8"
+                    ) as file:
+                        backup_data = json.load(file)
+
+                    if (
+                        isinstance(backup_data, dict)
+                        and isinstance(
+                            backup_data.get("users"),
+                            dict
+                        )
+                    ):
+
+                        print(
+                            "✅ Restored chest data from backup."
+                        )
+
+                        return backup_data
+
+                except Exception as backup_error:
+
+                    print(
+                        "❌ Failed to load backup: "
+                        f"{repr(backup_error)}"
+                    )
+
+            self.data_load_failed = True
+
+            print(
+                "⚠️ Chest data is unavailable. "
+                "Saving is disabled to protect existing data."
+            )
+
             return {"users": {}}
 
     async def save_data(self):
+
+        if self.data_load_failed:
+
+            raise RuntimeError(
+                "Chest data could not be loaded. "
+                "Saving is disabled to prevent data loss."
+            )
 
         async with self.save_lock:
 
@@ -160,6 +217,24 @@ class Chests(commands.Cog):
                         file.fileno()
                     )
 
+                if os.path.exists(DATA_FILE):
+
+                    backup_file = DATA_FILE + ".bak"
+
+                    try:
+
+                        shutil.copy2(
+                            DATA_FILE,
+                            backup_file
+                        )
+
+                    except OSError as backup_error:
+
+                        print(
+                            "⚠️ Could not create backup: "
+                            f"{repr(backup_error)}"
+                        )
+
                 os.replace(
                     temp_path,
                     DATA_FILE
@@ -173,6 +248,43 @@ class Chests(commands.Cog):
                     pass
 
                 raise
+
+    async def hidden_error(
+        self,
+        interaction,
+        user_id,
+        key="error",
+        **kwargs
+    ):
+
+        message = self.t(
+            user_id,
+            key,
+            **kwargs
+        )
+
+        try:
+
+            if interaction.response.is_done():
+
+                await interaction.followup.send(
+                    message,
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.response.send_message(
+                    message,
+                    ephemeral=True
+                )
+
+        except Exception as e:
+
+            print(
+                "❌ Failed to send hidden error: "
+                f"{repr(e)}"
+            )
 
     def get_user_data(self, user_id):
 
@@ -1394,13 +1506,10 @@ class Chests(commands.Cog):
 
                 if self.has_ultra_role(member):
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "ultra_block"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "ultra_block"
                     )
 
                     return
@@ -1411,13 +1520,10 @@ class Chests(commands.Cog):
 
                 if user["chests"] <= 0:
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "no_chests"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "no_chests"
                     )
 
                     return
@@ -1537,23 +1643,11 @@ class Chests(commands.Cog):
                 f"❌ Normal chest error: {repr(e)}"
             )
 
-            try:
-
-                await interaction.edit_original_response(
-                    content=self.t(
-                        user_id,
-                        "error"
-                    ),
-                    embed=None,
-                    view=None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Error sending normal chest error: "
-                    f"{repr(error)}"
-                )
+            await self.hidden_error(
+                interaction,
+                user_id,
+                "error"
+            )
 
     # =========================================================
     # NORMAL OPEN ALL
@@ -1698,13 +1792,10 @@ class Chests(commands.Cog):
 
                 if self.has_ultra_role(member):
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "ultra_block"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "ultra_block"
                     )
 
                     return
@@ -1715,13 +1806,10 @@ class Chests(commands.Cog):
 
                 if user["mega_chests"] <= 0:
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "no_chests"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "no_chests"
                     )
 
                     return
@@ -1843,23 +1931,11 @@ class Chests(commands.Cog):
                 f"❌ Mega chest error: {repr(e)}"
             )
 
-            try:
-
-                await interaction.edit_original_response(
-                    content=self.t(
-                        user_id,
-                        "error"
-                    ),
-                    embed=None,
-                    view=None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Error sending mega chest error: "
-                    f"{repr(error)}"
-                )
+            await self.hidden_error(
+                interaction,
+                user_id,
+                "error"
+            )
 
     # =========================================================
     # ULTRA OPEN
@@ -1882,13 +1958,10 @@ class Chests(commands.Cog):
 
                 if self.has_ultra_role(member):
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "ultra_block"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "ultra_block"
                     )
 
                     return
@@ -1899,13 +1972,10 @@ class Chests(commands.Cog):
 
                 if user["ultra_chests"] <= 0:
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "no_chests"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "no_chests"
                     )
 
                     return
@@ -2032,23 +2102,11 @@ class Chests(commands.Cog):
                 f"❌ Ultra chest error: {repr(e)}"
             )
 
-            try:
-
-                await interaction.edit_original_response(
-                    content=self.t(
-                        user_id,
-                        "error"
-                    ),
-                    embed=None,
-                    view=None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Error sending ultra chest error: "
-                    f"{repr(error)}"
-                )
+            await self.hidden_error(
+                interaction,
+                user_id,
+                "error"
+            )
 
     # =========================================================
     # DAILY
@@ -2070,13 +2128,10 @@ class Chests(commands.Cog):
 
                 if self.has_ultra_role(member):
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "daily_block"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "daily_block"
                     )
 
                     return
@@ -2091,16 +2146,13 @@ class Chests(commands.Cog):
 
                 if user["daily_next"] > now:
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "daily_unavailable",
-                            timestamp=(
-                                f"<t:{user['daily_next']}:R>"
-                            )
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "daily_unavailable",
+                        timestamp=(
+                            f"<t:{user['daily_next']}:R>"
+                        )
                     )
 
                     return
@@ -2197,23 +2249,11 @@ class Chests(commands.Cog):
                 f"❌ Daily error: {repr(e)}"
             )
 
-            try:
-
-                await interaction.edit_original_response(
-                    content=self.t(
-                        user_id,
-                        "error"
-                    ),
-                    embed=None,
-                    view=None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Error sending daily error: "
-                    f"{repr(error)}"
-                )
+            await self.hidden_error(
+                interaction,
+                user_id,
+                "error"
+            )
 
     # =========================================================
     # WEEKLY
@@ -2235,13 +2275,10 @@ class Chests(commands.Cog):
 
                 if self.has_ultra_role(member):
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "weekly_block"
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "weekly_block"
                     )
 
                     return
@@ -2256,16 +2293,13 @@ class Chests(commands.Cog):
 
                 if user["weekly_next"] > now:
 
-                    await interaction.edit_original_response(
-                        content=self.t(
-                            user_id,
-                            "weekly_unavailable",
-                            timestamp=(
-                                f"<t:{user['weekly_next']}:R>"
-                            )
-                        ),
-                        embed=None,
-                        view=None
+                    await self.hidden_error(
+                        interaction,
+                        user_id,
+                        "weekly_unavailable",
+                        timestamp=(
+                            f"<t:{user['weekly_next']}:R>"
+                        )
                     )
 
                     return
@@ -2319,23 +2353,11 @@ class Chests(commands.Cog):
                 f"❌ Weekly error: {repr(e)}"
             )
 
-            try:
-
-                await interaction.edit_original_response(
-                    content=self.t(
-                        user_id,
-                        "error"
-                    ),
-                    embed=None,
-                    view=None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Error sending weekly error: "
-                    f"{repr(error)}"
-                )
+            await self.hidden_error(
+                interaction,
+                user_id,
+                "error"
+            )
 
     # =========================================================
     # LANGUAGE VIEW
@@ -2639,133 +2661,4 @@ class Chests(commands.Cog):
             }
 
             await interaction.response.send_message(
-                f"✅ Added **{amount:,} "
-                f"{names[chest_type]}** to <@{user_id}>.",
-                ephemeral=True
-            )
-
-    class AdminChestsView(
-        discord.ui.View
-    ):
-
-        def __init__(
-            self,
-            cog
-        ):
-
-            super().__init__(
-                timeout=None
-            )
-
-            self.cog = cog
-
-        @discord.ui.button(
-            label="Add Chests",
-            emoji="🎁",
-            style=discord.ButtonStyle.primary,
-            custom_id="admin_chests_add"
-        )
-        async def add_chests(
-            self,
-            interaction,
-            button
-        ):
-
-            if interaction.user.id != OWNER_ID:
-
-                await interaction.response.send_message(
-                    "❌ You do not have permission to use this.",
-                    ephemeral=True
-                )
-
-                return
-
-            await interaction.response.send_modal(
-                self.cog.AdminChestModal(
-                    self.cog
-                )
-            )
-
-    # =========================================================
-    # COMMAND
-    # =========================================================
-
-    @commands.command(
-        name="chests"
-    )
-    async def chests_command(
-        self,
-        ctx
-    ):
-
-        user = self.get_user_data(
-            ctx.author.id
-        )
-
-        if not user.get("language"):
-
-            embed = discord.Embed(
-                title="🌐 Выберите язык / Select your language",
-                description=(
-                    "🇷🇺 Выберите русский язык или английский.\n"
-                    "🇬🇧 Choose Russian or English."
-                ),
-                color=discord.Color.blurple()
-            )
-
-            view = self.LanguageView(
-                self,
-                ctx.author.id
-            )
-
-            await ctx.send(
-                content=ctx.author.mention,
-                embed=embed,
-                view=view
-            )
-
-        else:
-
-            view = self.MainView(
-                self,
-                ctx.author.id
-            )
-
-            await ctx.send(
-                content=(
-                    f"{self.t(ctx.author.id, 'title')} "
-                    f"{ctx.author.mention}"
-                ),
-                embed=view.embed(),
-                view=view
-            )
-
-        try:
-
-            await ctx.message.delete()
-
-        except (
-            discord.Forbidden,
-            discord.HTTPException
-        ):
-
-            pass
-
-
-# =============================================================
-# SETUP
-# =============================================================
-
-async def setup(bot):
-
-    cog = Chests(bot)
-
-    await bot.add_cog(
-        cog
-    )
-
-    bot.add_view(
-        Chests.AdminChestsView(cog)
-    )
-
-    print("✅ Chests cog loaded!")
+                f"✅
