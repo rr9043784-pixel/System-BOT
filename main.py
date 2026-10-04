@@ -4,7 +4,7 @@ import json
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 
@@ -21,6 +21,8 @@ TOKEN = os.environ["DISCORD_TOKEN"]
 # =================================================
 
 OWNER_ID = 1176149190192152626
+
+STATS_DATA_FILE = "stats_data.json"
 
 
 # =================================================
@@ -49,6 +51,64 @@ def run_flask():
         host="0.0.0.0",
         port=port
     )
+
+
+# =================================================
+# Stats Data
+# =================================================
+
+def load_stats_data():
+
+    if not os.path.exists(STATS_DATA_FILE):
+
+        return {
+            "message_id": None,
+            "channel_id": None,
+            "guild_id": None
+        }
+
+    try:
+
+        with open(
+            STATS_DATA_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            return json.load(f)
+
+    except Exception:
+
+        return {
+            "message_id": None,
+            "channel_id": None,
+            "guild_id": None
+        }
+
+
+def save_stats_data(data):
+
+    temp_file = STATS_DATA_FILE + ".tmp"
+
+    with open(
+        temp_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            data,
+            f,
+            indent=4
+        )
+
+    os.replace(
+        temp_file,
+        STATS_DATA_FILE
+    )
+
+
+stats_data = load_stats_data()
 
 
 # =================================================
@@ -184,6 +244,10 @@ async def on_ready():
         f"🤖 Logged in as {bot.user}"
     )
 
+    if not update_stats_message.is_running():
+
+        update_stats_message.start()
+
 
 # =================================================
 # Owner Check
@@ -200,6 +264,410 @@ def owner_only():
     return app_commands.check(
         predicate
     )
+
+
+# =================================================
+# STATS
+# =================================================
+
+def build_stats_text(guild: discord.Guild):
+
+    members = guild.members
+
+    total_members = len(members)
+
+    humans = sum(
+        1
+        for member in members
+        if not member.bot
+    )
+
+    bots_count = sum(
+        1
+        for member in members
+        if member.bot
+    )
+
+    online = sum(
+        1
+        for member in members
+        if member.status == discord.Status.online
+    )
+
+    idle = sum(
+        1
+        for member in members
+        if member.status == discord.Status.idle
+    )
+
+    dnd = sum(
+        1
+        for member in members
+        if member.status == discord.Status.dnd
+    )
+
+    offline = sum(
+        1
+        for member in members
+        if member.status == discord.Status.offline
+    )
+
+
+    # =================================================
+    # Devices
+    # =================================================
+
+    pc = 0
+    mobile = 0
+
+    for member in members:
+
+        if member.bot:
+            continue
+
+        if member.status == discord.Status.offline:
+            continue
+
+        client_status = member.client_status
+
+        if not client_status:
+            continue
+
+        if "mobile" in client_status:
+
+            mobile += 1
+
+        elif "desktop" in client_status or "web" in client_status:
+
+            pc += 1
+
+
+    # =================================================
+    # Channels
+    # =================================================
+
+    text_channels = sum(
+        1
+        for channel in guild.channels
+        if isinstance(
+            channel,
+            discord.TextChannel
+        )
+    )
+
+    voice_channels = sum(
+        1
+        for channel in guild.channels
+        if isinstance(
+            channel,
+            discord.VoiceChannel
+        )
+    )
+
+    categories = sum(
+        1
+        for channel in guild.channels
+        if isinstance(
+            channel,
+            discord.CategoryChannel
+        )
+    )
+
+
+    # =================================================
+    # Roles
+    # =================================================
+
+    roles = max(
+        len(guild.roles) - 1,
+        0
+    )
+
+
+    # =================================================
+    # Boosts
+    # =================================================
+
+    boosts = guild.premium_subscription_count or 0
+
+    boost_level = guild.premium_tier
+
+    if isinstance(
+        boost_level,
+        discord.PremiumTier
+    ):
+
+        boost_level_text = boost_level.name.replace(
+            "tier_",
+            "Tier "
+        )
+
+    else:
+
+        boost_level_text = str(
+            boost_level
+        )
+
+
+    # =================================================
+    # Created
+    # =================================================
+
+    created = (
+        f"<t:{int(guild.created_at.timestamp())}:F>"
+    )
+
+
+    # =================================================
+    # Updated
+    # =================================================
+
+    updated = (
+        f"<t:{int(discord.utils.utcnow().timestamp())}:R>"
+    )
+
+
+    return (
+        "📊 **BOT Statistics**\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        f"👥 **Members:** {total_members:,}\n"
+        f"👤 Humans: {humans:,}\n"
+        f"🤖 Bots: {bots_count:,}\n"
+        "\n"
+        "🟢 **Status**\n"
+        f"Online: {online:,}\n"
+        f"Idle: {idle:,}\n"
+        f"Do Not Disturb: {dnd:,}\n"
+        f"Offline: {offline:,}\n"
+        "\n"
+        "📱 **Devices**\n"
+        f"PC: {pc:,}\n"
+        f"Mobile: {mobile:,}\n"
+        "\n"
+        "📁 **Channels**\n"
+        f"Text: {text_channels:,}\n"
+        f"Voice: {voice_channels:,}\n"
+        f"Categories: {categories:,}\n"
+        "\n"
+        f"🎭 **Roles:** {roles:,}\n"
+        "\n"
+        "🚀 **Server Boosts**\n"
+        f"Boosts: {boosts:,}\n"
+        f"Level: {boost_level_text}\n"
+        "\n"
+        f"📅 **Server Created:** {created}\n"
+        f"🔄 **Updated:** {updated}\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    )
+
+
+async def update_stats_for_guild(
+    guild: discord.Guild
+):
+
+    global stats_data
+
+    if not guild:
+
+        return
+
+
+    text = build_stats_text(
+        guild
+    )
+
+
+    # =================================================
+    # Existing message
+    # =================================================
+
+    message_id = stats_data.get(
+        "message_id"
+    )
+
+    channel_id = stats_data.get(
+        "channel_id"
+    )
+
+    guild_id = stats_data.get(
+        "guild_id"
+    )
+
+
+    if (
+        message_id
+        and channel_id
+        and guild_id == guild.id
+    ):
+
+        channel = guild.get_channel(
+            channel_id
+        )
+
+        if channel:
+
+            try:
+
+                message = await channel.fetch_message(
+                    message_id
+                )
+
+                await message.edit(
+                    content=text
+                )
+
+                return
+
+            except (
+                discord.NotFound,
+                discord.HTTPException
+            ):
+
+                pass
+
+
+    # =================================================
+    # Create new stats message
+    # =================================================
+
+    channel = None
+
+    if channel_id:
+
+        channel = guild.get_channel(
+            channel_id
+        )
+
+
+    if channel is None:
+
+        channel = guild.system_channel
+
+
+    if channel is None:
+
+        text_channels = [
+            channel
+            for channel in guild.text_channels
+            if channel.permissions_for(
+                guild.me
+            ).send_messages
+        ]
+
+        if text_channels:
+
+            channel = text_channels[0]
+
+
+    if channel is None:
+
+        return
+
+
+    try:
+
+        message = await channel.send(
+            text
+        )
+
+        stats_data = {
+            "message_id": message.id,
+            "channel_id": channel.id,
+            "guild_id": guild.id
+        }
+
+        save_stats_data(
+            stats_data
+        )
+
+    except (
+        discord.Forbidden,
+        discord.HTTPException
+    ):
+
+        pass
+
+
+@bot.command(
+    name="stats"
+)
+async def stats_command(
+    ctx,
+    option=None
+):
+
+    if ctx.author.id != OWNER_ID:
+
+        return
+
+
+    if option is None:
+
+        return
+
+
+    if option.lower() != "bot":
+
+        return
+
+
+    try:
+
+        await ctx.message.delete()
+
+    except (
+        discord.Forbidden,
+        discord.HTTPException
+    ):
+
+        pass
+
+
+    if ctx.guild is None:
+
+        return
+
+
+    await update_stats_for_guild(
+        ctx.guild
+    )
+
+
+@tasks.loop(
+    minutes=1
+)
+async def update_stats_message():
+
+    guild_id = stats_data.get(
+        "guild_id"
+    )
+
+    if not guild_id:
+
+        return
+
+
+    guild = bot.get_guild(
+        guild_id
+    )
+
+    if not guild:
+
+        return
+
+
+    await update_stats_for_guild(
+        guild
+    )
+
+
+@update_stats_message.before_loop
+async def before_stats_loop():
+
+    await bot.wait_until_ready()
 
 
 # =================================================
@@ -337,10 +805,18 @@ async def clear_message(
             limit=number_of_messages
         )
 
-        await interaction.response.send_message(
-            f"✅ Successfully deleted {len(deleted)} messages.",
-            ephemeral=True
-        )
+        if len(deleted) == 1:
+
+            await interaction.response.send_message(
+                "1",
+                ephemeral=True
+            )
+
+        else:
+
+            await interaction.response.defer(
+                ephemeral=True
+            )
 
     except discord.Forbidden:
 
