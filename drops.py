@@ -1,7 +1,8 @@
 import os
-import json
 import asyncio
+import json
 import urllib.request
+import urllib.error
 
 import discord
 from discord.ext import commands
@@ -23,11 +24,11 @@ MONEY_EMOJI = "<:MoneyR:1534220684178231397>"
 # UNBELIEVABOAT
 # =========================
 
-async def add_ub_money(user_id: int, amount: int) -> bool:
+async def add_ub_money(user_id, amount):
 
     url = (
-        f"https://unbelievaboat.com/api/v1/guilds/"
-        f"{UB_GUILD_ID}/users/{user_id}"
+        f"https://unbelievaboat.com/api/"
+        f"v1/guilds/{UB_GUILD_ID}/users/{user_id}"
     )
 
     data = json.dumps({
@@ -35,37 +36,38 @@ async def add_ub_money(user_id: int, amount: int) -> bool:
         "reason": "Money Drop"
     }).encode("utf-8")
 
-    headers = {
-        "Authorization": UB_TOKEN,
-        "Content-Type": "application/json",
-    }
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method="PATCH"
+    )
 
-    def request():
+    request.add_header(
+        "Authorization",
+        UB_TOKEN
+    )
 
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers=headers,
-            method="PATCH",
+    request.add_header(
+        "Content-Type",
+        "application/json"
+    )
+
+    try:
+
+        await asyncio.to_thread(
+            urllib.request.urlopen,
+            request
         )
 
-        try:
+        return True
 
-            with urllib.request.urlopen(
-                req,
-                timeout=15
-            ) as response:
+    except Exception:
 
-                return 200 <= response.status < 300
-
-        except Exception:
-            return False
-
-    return await asyncio.to_thread(request)
+        return False
 
 
 # =========================
-# MONEY DROP
+# MONEY DROP VIEW
 # =========================
 
 class MoneyDropView(discord.ui.View):
@@ -249,7 +251,7 @@ class MoneyDropView(discord.ui.View):
 
 
 # =========================
-# CHEST DROP
+# CHEST DROP VIEW
 # =========================
 
 class ChestDropView(discord.ui.View):
@@ -308,6 +310,14 @@ class ChestDropView(discord.ui.View):
     def chest_key(self):
 
         return {
+            "normal": "chests",
+            "mega": "mega_chests",
+            "ultra": "ultra_chests"
+        }[self.chest_type]
+
+    def chest_add_key(self):
+
+        return {
             "normal": "chest",
             "mega": "mega",
             "ultra": "ultra"
@@ -350,6 +360,7 @@ class ChestDropView(discord.ui.View):
             description += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
+
                 description += f"\n• {name}"
 
         return discord.Embed(
@@ -440,7 +451,7 @@ class ChestDropView(discord.ui.View):
             success = await chests.add_chests(
                 user_id,
                 self.amount,
-                self.chest_key()
+                self.chest_add_key()
             )
 
             if not success:
@@ -494,10 +505,12 @@ class ChestDropView(discord.ui.View):
 class Drops(commands.Cog):
 
     def __init__(self, bot):
+
         self.bot = bot
 
+
     # =========================
-    # !money economy
+    # MONEY
     # =========================
 
     @commands.command(name="money")
@@ -556,13 +569,16 @@ class Drops(commands.Cog):
         )
 
         try:
+
             await ctx.message.delete()
 
         except Exception:
+
             pass
 
+
     # =========================
-    # !drop
+    # CHEST DROP
     # =========================
 
     @commands.command(name="drop")
@@ -572,8 +588,7 @@ class Drops(commands.Cog):
         chest_type=None,
         amount=None,
         quantity=None,
-        target_role: discord.Role = None,
-        target_user: discord.User = None
+        target=None
     ):
 
         if ctx.author.id != OWNER_ID:
@@ -621,8 +636,28 @@ class Drops(commands.Cog):
         if amount <= 0 or quantity <= 0:
             return
 
-        if target_user and target_role:
-            return
+        target_user = None
+        target_role = None
+
+        if target is not None:
+
+            if isinstance(
+                target,
+                discord.Member
+            ):
+
+                target_user = target
+
+            elif isinstance(
+                target,
+                discord.Role
+            ):
+
+                target_role = target
+
+            else:
+
+                return
 
         view = ChestDropView(
             bot=self.bot,
@@ -647,13 +682,16 @@ class Drops(commands.Cog):
         )
 
         try:
+
             await ctx.message.delete()
 
         except Exception:
+
             pass
 
+
     # =========================
-    # !remove
+    # REMOVE CHESTS
     # =========================
 
     @commands.command(name="remove")
@@ -674,17 +712,18 @@ class Drops(commands.Cog):
         chest_type = chest_type.lower()
 
         aliases = {
-            "normal": "chest",
-            "chest": "chest",
-            "chests": "chest",
 
-            "mega": "mega",
-            "mega-chest": "mega",
-            "mega_chest": "mega",
+            "normal": "chests",
+            "chest": "chests",
+            "chests": "chests",
 
-            "ultra": "ultra",
-            "ultra-chest": "ultra",
-            "ultra_chest": "ultra"
+            "mega": "mega_chests",
+            "mega-chest": "mega_chests",
+            "mega_chest": "mega_chests",
+
+            "ultra": "ultra_chests",
+            "ultra-chest": "ultra_chests",
+            "ultra_chest": "ultra_chests"
         }
 
         if chest_type not in aliases:
@@ -693,14 +732,22 @@ class Drops(commands.Cog):
         chest_key = aliases[chest_type]
 
         try:
+
             amount = int(amount)
-        except (TypeError, ValueError):
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
             return
 
         if amount <= 0:
             return
 
-        chests = self.bot.get_cog("Chests")
+        chests = self.bot.get_cog(
+            "Chests"
+        )
 
         if chests is None:
             return
@@ -714,10 +761,12 @@ class Drops(commands.Cog):
         )
 
         if current_amount < amount:
+
             await ctx.send(
                 f"❌ {target_user.mention} does not have "
                 f"enough chests."
             )
+
             return
 
         user_data[chest_key] = (
@@ -732,8 +781,11 @@ class Drops(commands.Cog):
         )
 
         try:
+
             await ctx.message.delete()
+
         except Exception:
+
             pass
 
 
@@ -749,4 +801,4 @@ async def setup(bot):
 
     print(
         "✅ Drops cog loaded!"
-            )
+    )
