@@ -786,6 +786,19 @@ class Message(commands.Cog):
 # =========================================================
 
 async def setup(bot):
+
     await bot.add_cog(
         Message(bot)
-            )
+    )
+
+    # Register persistent views after bot restart
+    bot.add_view(
+        FeaturesView()
+    )
+
+    bot.add_view(
+        PingView()
+    )
+
+    print("✅ FeaturesView and PingView registered!")
+
