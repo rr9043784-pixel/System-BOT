@@ -151,6 +151,7 @@ LANGUAGES = [
     ("🇪🇸", "Spanish", "Spanish"),
 ]
 
+
 ISSUES = [
     ("❓", "Question", "Question"),
     ("🚨", "Report", "Report"),
@@ -285,7 +286,8 @@ class TicketCog(commands.Cog):
                 "Available commands:\n"
                 "`!ticket panel`\n"
                 "`!ticket block <user> staff`\n"
-                "`!ticket block <user> moder`",
+                "`!ticket block <user> moder`\n"
+                "`!ticket blocks`",
                 delete_after=10
             )
 
@@ -450,6 +452,115 @@ class TicketCog(commands.Cog):
                 f"📅 Blocked: **{format_date(now.isoformat())}**\n"
                 f"🔓 Available again: **{format_date(expires.isoformat())}**"
             )
+        except Exception:
+            pass
+
+    # =====================================================
+    # !ticket blocks
+    # =====================================================
+
+    @ticket.command(name="blocks")
+    async def ticket_blocks(self, ctx):
+
+        if not is_manager(ctx.author):
+            await ctx.send(
+                "You do not have permission to use this command.",
+                delete_after=5
+            )
+            return
+
+        now = utc_now()
+        changed = False
+
+        # Remove expired blocks first
+        for user_id, block in list(
+            self.data["blocks"].items()
+        ):
+
+            expires = parse_date(
+                block["expires_at"]
+            )
+
+            if now >= expires:
+                del self.data["blocks"][user_id]
+                changed = True
+
+        if changed:
+            save_data(self.data)
+
+        # No active blocks
+        if not self.data["blocks"]:
+
+            await ctx.send(
+                "🔒 **Active Application Blocks**\n\n"
+                "There are currently no active application blocks.",
+                delete_after=10
+            )
+
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+
+            return
+
+        embed = discord.Embed(
+            title="🔒 Active Application Blocks",
+            color=discord.Color.red()
+        )
+
+        for user_id, block in self.data["blocks"].items():
+
+            try:
+                member = ctx.guild.get_member(
+                    int(user_id)
+                )
+
+                if member:
+                    user_text = (
+                        f"{member.mention}\n"
+                        f"`{member}`"
+                    )
+                else:
+                    user_text = f"<@{user_id}>"
+
+            except Exception:
+                user_text = f"<@{user_id}>"
+
+            block_type = block.get(
+                "type",
+                "Unknown"
+            )
+
+            expires_at = format_date(
+                block.get(
+                    "expires_at",
+                    utc_now().isoformat()
+                )
+            )
+
+            embed.add_field(
+                name=f"👤 {user_text}",
+                value=(
+                    f"📋 **Application:** {block_type}\n"
+                    f"🔓 **Available again:** {expires_at}"
+                ),
+                inline=False
+            )
+
+        embed.set_footer(
+            text=(
+                f"Total active blocks: "
+                f"{len(self.data['blocks'])}"
+            )
+        )
+
+        await ctx.send(
+            embed=embed
+        )
+
+        try:
+            await ctx.message.delete()
         except Exception:
             pass
 
@@ -728,10 +839,6 @@ class TicketCog(commands.Cog):
             interaction.user.id
         )
 
-        # =================================================
-        # CHECK ANY OPEN TICKET
-        # =================================================
-
         if self.has_open_ticket(user_id):
 
             await interaction.response.send_message(
@@ -761,10 +868,6 @@ class TicketCog(commands.Cog):
 
             return
 
-        # =================================================
-        # CHECK EXISTING ROLE
-        # =================================================
-
         if isinstance(
             interaction.user,
             discord.Member
@@ -793,10 +896,6 @@ class TicketCog(commands.Cog):
                 )
 
                 return
-
-        # =================================================
-        # BLOCK CHECK
-        # =================================================
 
         block = self.data["blocks"].get(
             user_id
@@ -1251,7 +1350,6 @@ class TicketCog(commands.Cog):
             return True
 
         app_type = flow["type"]
-
         answers = flow["answers"]
 
         del self.data[
@@ -1500,10 +1598,6 @@ class TicketCog(commands.Cog):
 
             user = None
 
-        # =================================================
-        # ACCEPT
-        # =================================================
-
         if accepted:
 
             if application_type == "staff":
@@ -1538,10 +1632,6 @@ class TicketCog(commands.Cog):
 
                 return
 
-            # =============================================
-            # ROLE HIERARCHY
-            # =============================================
-
             if interaction.guild.me.top_role <= role:
 
                 await interaction.response.send_message(
@@ -1551,10 +1641,6 @@ class TicketCog(commands.Cog):
                 )
 
                 return
-
-            # =============================================
-            # ALREADY HAS ROLE
-            # =============================================
 
             if any(
                 r.id == role_id
@@ -1567,10 +1653,6 @@ class TicketCog(commands.Cog):
                 )
 
                 return
-
-            # =============================================
-            # GIVE ROLE
-            # =============================================
 
             try:
 
@@ -1607,7 +1689,7 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Staff┃| Host application "
                     "has been accepted!**\n\n"
-                    f"You have received the Staff┃| Host role."
+                    "You have received the Staff┃| Host role."
                 )
 
             else:
@@ -1615,12 +1697,8 @@ class TicketCog(commands.Cog):
                 result_text = (
                     "✅ **Your Moderator application "
                     "has been accepted!**\n\n"
-                    f"You have received the Moderator role."
+                    "You have received the Moderator role."
                 )
-
-        # =================================================
-        # REJECT
-        # =================================================
 
         else:
 
@@ -1976,4 +2054,4 @@ class ApplicationDecisionView(discord.ui.View):
 async def setup(bot):
     await bot.add_cog(
         TicketCog(bot)
-                )
+        )
