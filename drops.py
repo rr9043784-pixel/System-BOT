@@ -32,7 +32,7 @@ async def add_ub_money(user_id: int, amount: int) -> bool:
 
     data = json.dumps({
         "cash": amount,
-        "reason": "Money Drop",
+        "reason": "Money Drop"
     }).encode("utf-8")
 
     headers = {
@@ -51,8 +51,6 @@ async def add_ub_money(user_id: int, amount: int) -> bool:
         try:
             with urllib.request.urlopen(req, timeout=15) as response:
                 return 200 <= response.status < 300
-        except (urllib.error.HTTPError, urllib.error.URLError):
-            return False
         except Exception:
             return False
 
@@ -60,17 +58,17 @@ async def add_ub_money(user_id: int, amount: int) -> bool:
 
 
 # =========================
-# MONEY DROP VIEW
+# MONEY DROP
 # =========================
 
 class MoneyDropView(discord.ui.View):
 
     def __init__(
         self,
-        amount: int,
-        quantity: int,
-        allowed_user_id: int | None = None,
-        allowed_role_id: int | None = None,
+        amount,
+        quantity,
+        allowed_user_id=None,
+        allowed_role_id=None
     ):
         super().__init__(timeout=None)
 
@@ -84,53 +82,51 @@ class MoneyDropView(discord.ui.View):
 
         self.lock = asyncio.Lock()
 
-        self.claim_button = discord.ui.Button(
+        self.button = discord.ui.Button(
             label=f"🎁 Claim reward 0/{quantity}",
-            style=discord.ButtonStyle.green,
-            custom_id="money_drop_claim",
+            style=discord.ButtonStyle.green
         )
 
-        self.claim_button.callback = self.claim_reward
-        self.add_item(self.claim_button)
+        self.button.callback = self.claim
+        self.add_item(self.button)
 
-    def create_embed(self):
+    def get_text(self):
         claimed = len(self.claimed_users)
 
-        description = (
-            f"{MONEY_EMOJI} **Reward:** {self.amount:,}\n\n"
-            f"**👥 Claims:** {claimed}/{self.quantity}"
+        text = (
+            "Click the button below to receive the reward.\n\n"
+            f"**Reward:** {MONEY_EMOJI} {self.amount:,}\n"
+            f"**Claims:** {claimed}/{self.quantity}\n"
+            f"**Full drop:** "
+            f"{'✅' if claimed >= self.quantity else '❌'}"
         )
 
-        if self.allowed_user_id is not None:
-            description += (
+        if self.allowed_user_id:
+            text += (
                 f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
             )
 
-        elif self.allowed_role_id is not None:
-            description += (
+        elif self.allowed_role_id:
+            text += (
                 f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
             )
 
         if self.claimed_names:
-            description += "\n\n**👥 Claimed by:**"
+            text += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
-                description += f"\n• {name}"
+                text += f"\n• {name}"
 
-        return discord.Embed(
-            title="💰 Money drop",
-            description=description,
-            color=discord.Color.green(),
-        )
+        return text
 
-    async def claim_reward(self, interaction: discord.Interaction):
+    async def claim(self, interaction: discord.Interaction):
 
         async with self.lock:
 
             if len(self.claimed_users) >= self.quantity:
                 await interaction.response.send_message(
-                    "This money drop is already full.",
-                    ephemeral=True,
+                    "This drop is already full.",
+                    ephemeral=True
                 )
                 return
 
@@ -139,7 +135,7 @@ class MoneyDropView(discord.ui.View):
             if user_id in self.claimed_users:
                 await interaction.response.send_message(
                     "You already claimed this reward.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
                 return
 
@@ -148,8 +144,8 @@ class MoneyDropView(discord.ui.View):
                 and user_id != self.allowed_user_id
             ):
                 await interaction.response.send_message(
-                    "You cannot claim this money drop.",
-                    ephemeral=True,
+                    "You cannot claim this reward.",
+                    ephemeral=True
                 )
                 return
 
@@ -157,8 +153,8 @@ class MoneyDropView(discord.ui.View):
 
                 if not isinstance(interaction.user, discord.Member):
                     await interaction.response.send_message(
-                        "You cannot claim this money drop.",
-                        ephemeral=True,
+                        "You cannot claim this reward.",
+                        ephemeral=True
                     )
                     return
 
@@ -166,20 +162,20 @@ class MoneyDropView(discord.ui.View):
                     role.id for role in interaction.user.roles
                 ]:
                     await interaction.response.send_message(
-                        "You cannot claim this money drop.",
-                        ephemeral=True,
+                        "You cannot claim this reward.",
+                        ephemeral=True
                     )
                     return
 
             success = await add_ub_money(
                 user_id,
-                self.amount,
+                self.amount
             )
 
             if not success:
                 await interaction.response.send_message(
                     "❌ **Error** The reward could not be given.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
                 return
 
@@ -188,31 +184,21 @@ class MoneyDropView(discord.ui.View):
 
             claimed = len(self.claimed_users)
 
-            self.claim_button.label = (
+            self.button.label = (
                 f"🎁 Claim reward {claimed}/{self.quantity}"
             )
 
             if claimed >= self.quantity:
-                self.claim_button.disabled = True
+                self.button.disabled = True
 
-            try:
-                await interaction.message.edit(
-                    content="**Money drop**",
-                    embed=self.create_embed(),
-                    view=self,
-                )
-            except Exception:
-                pass
-
-            await interaction.response.send_message(
-                f"🎉 **You received "
-                f"{MONEY_EMOJI} {self.amount:,}!**",
-                ephemeral=True,
+            await interaction.response.edit_message(
+                content=self.get_text(),
+                view=self
             )
 
 
 # =========================
-# CHEST DROP VIEW
+# CHEST DROP
 # =========================
 
 class ChestDropView(discord.ui.View):
@@ -220,11 +206,11 @@ class ChestDropView(discord.ui.View):
     def __init__(
         self,
         bot,
-        chest_type: str,
-        amount: int,
-        quantity: int,
-        allowed_user_id: int | None = None,
-        allowed_role_id: int | None = None,
+        chest_type,
+        amount,
+        quantity,
+        allowed_user_id=None,
+        allowed_role_id=None
     ):
         super().__init__(timeout=None)
 
@@ -232,7 +218,6 @@ class ChestDropView(discord.ui.View):
         self.chest_type = chest_type
         self.amount = amount
         self.quantity = quantity
-
         self.allowed_user_id = allowed_user_id
         self.allowed_role_id = allowed_role_id
 
@@ -241,75 +226,66 @@ class ChestDropView(discord.ui.View):
 
         self.lock = asyncio.Lock()
 
-        self.claim_button = discord.ui.Button(
+        self.button = discord.ui.Button(
             label=f"🎁 Claim reward 0/{quantity}",
-            style=discord.ButtonStyle.green,
-            custom_id=f"chest_drop_{chest_type}",
+            style=discord.ButtonStyle.green
         )
 
-        self.claim_button.callback = self.claim_reward
-        self.add_item(self.claim_button)
+        self.button.callback = self.claim
+        self.add_item(self.button)
 
     def chest_name(self):
-
-        names = {
-            "chest": "Normal Chest",
+        return {
+            "normal": "Normal Chest",
             "mega": "Mega Chest",
-            "ultra": "Ultra Chest",
-        }
-
-        return names[self.chest_type]
+            "ultra": "Ultra Chest"
+        }[self.chest_type]
 
     def chest_emoji(self):
-
-        emojis = {
-            "chest": "🎁",
+        return {
+            "normal": "🎁",
             "mega": "💎",
-            "ultra": "⚡",
-        }
+            "ultra": "⚡"
+        }[self.chest_type]
 
-        return emojis[self.chest_type]
-
-    def create_embed(self):
-
+    def get_text(self):
         claimed = len(self.claimed_users)
 
-        description = (
-            f"{self.chest_emoji()} **Reward:** "
-            f"{self.amount} × {self.chest_name()}\n\n"
-            f"**👥 Claims:** {claimed}/{self.quantity}"
+        text = (
+            "Click the button below to receive the reward.\n\n"
+            f"**Reward:** {self.chest_emoji()} "
+            f"{self.amount} × {self.chest_name()}\n"
+            f"**Claims:** {claimed}/{self.quantity}\n"
+            f"**Full drop:** "
+            f"{'✅' if claimed >= self.quantity else '❌'}"
         )
 
-        if self.allowed_user_id is not None:
-            description += (
+        if self.allowed_user_id:
+            text += (
                 f"\n\n**Only:** <@{self.allowed_user_id}> can claim"
             )
 
-        elif self.allowed_role_id is not None:
-            description += (
+        elif self.allowed_role_id:
+            text += (
                 f"\n\n**Only:** <@&{self.allowed_role_id}> can claim"
             )
 
         if self.claimed_names:
-            description += "\n\n**👥 Claimed by:**"
+            text += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
-                description += f"\n• {name}"
+                text += f"\n• {name}"
 
-        return discord.Embed(
-            title="🎁 Chest drop",
-            description=description,
-            color=discord.Color.green(),
-        )
+        return text
 
-    async def claim_reward(self, interaction: discord.Interaction):
+    async def claim(self, interaction: discord.Interaction):
 
         async with self.lock:
 
             if len(self.claimed_users) >= self.quantity:
                 await interaction.response.send_message(
-                    "This chest drop is already full.",
-                    ephemeral=True,
+                    "This drop is already full.",
+                    ephemeral=True
                 )
                 return
 
@@ -318,7 +294,7 @@ class ChestDropView(discord.ui.View):
             if user_id in self.claimed_users:
                 await interaction.response.send_message(
                     "You already claimed this reward.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
                 return
 
@@ -327,8 +303,8 @@ class ChestDropView(discord.ui.View):
                 and user_id != self.allowed_user_id
             ):
                 await interaction.response.send_message(
-                    "You cannot claim this chest drop.",
-                    ephemeral=True,
+                    "You cannot claim this reward.",
+                    ephemeral=True
                 )
                 return
 
@@ -336,8 +312,8 @@ class ChestDropView(discord.ui.View):
 
                 if not isinstance(interaction.user, discord.Member):
                     await interaction.response.send_message(
-                        "You cannot claim this chest drop.",
-                        ephemeral=True,
+                        "You cannot claim this reward.",
+                        ephemeral=True
                     )
                     return
 
@@ -345,8 +321,8 @@ class ChestDropView(discord.ui.View):
                     role.id for role in interaction.user.roles
                 ]:
                     await interaction.response.send_message(
-                        "You cannot claim this chest drop.",
-                        ephemeral=True,
+                        "You cannot claim this reward.",
+                        ephemeral=True
                     )
                     return
 
@@ -355,20 +331,27 @@ class ChestDropView(discord.ui.View):
             if chests is None:
                 await interaction.response.send_message(
                     "❌ **Error** The chest system is unavailable.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
                 return
 
             try:
+                chest_key = {
+                    "normal": "chests",
+                    "mega": "mega_chests",
+                    "ultra": "ultra_chests"
+                }[self.chest_type]
+
                 await chests.add_chests(
                     user_id,
                     self.amount,
-                    chest_type=self.chest_type,
+                    chest_key
                 )
+
             except Exception:
                 await interaction.response.send_message(
                     "❌ **Error** The reward could not be given.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
                 return
 
@@ -377,26 +360,16 @@ class ChestDropView(discord.ui.View):
 
             claimed = len(self.claimed_users)
 
-            self.claim_button.label = (
+            self.button.label = (
                 f"🎁 Claim reward {claimed}/{self.quantity}"
             )
 
             if claimed >= self.quantity:
-                self.claim_button.disabled = True
+                self.button.disabled = True
 
-            try:
-                await interaction.message.edit(
-                    content="**Chest drop**",
-                    embed=self.create_embed(),
-                    view=self,
-                )
-            except Exception:
-                pass
-
-            await interaction.response.send_message(
-                f"🎉 **You received "
-                f"{self.amount} × {self.chest_name()}!**",
-                ephemeral=True,
+            await interaction.response.edit_message(
+                content=self.get_text(),
+                view=self
             )
 
 
@@ -410,7 +383,7 @@ class Drops(commands.Cog):
         self.bot = bot
 
     # =========================
-    # !MONEY ECONOMY
+    # !money economy
     # =========================
 
     @commands.command(name="money")
@@ -418,10 +391,10 @@ class Drops(commands.Cog):
         self,
         ctx,
         subcommand=None,
-        amount: int | None = None,
-        quantity: int = 1,
-        target_user: discord.User | None = None,
-        target_role: discord.Role | None = None,
+        amount=None,
+        quantity=None,
+        target_user: discord.User = None,
+        target_role: discord.Role = None
     ):
 
         if ctx.author.id != OWNER_ID:
@@ -430,34 +403,32 @@ class Drops(commands.Cog):
         if subcommand != "economy":
             return
 
-        if amount is None or amount <= 0:
+        try:
+            amount = int(amount)
+            quantity = int(quantity)
+        except (TypeError, ValueError):
             return
 
-        if quantity <= 0 or quantity > 1000:
+        if amount <= 0 or quantity <= 0:
             return
 
-        if target_user is not None and target_role is not None:
+        if target_user and target_role:
             return
 
         view = MoneyDropView(
             amount=amount,
             quantity=quantity,
             allowed_user_id=(
-                target_user.id
-                if target_user is not None
-                else None
+                target_user.id if target_user else None
             ),
             allowed_role_id=(
-                target_role.id
-                if target_role is not None
-                else None
-            ),
+                target_role.id if target_role else None
+            )
         )
 
-        message = await ctx.send(
-            content="**Money drop**",
-            embed=view.create_embed(),
-            view=view,
+        await ctx.send(
+            content=view.get_text(),
+            view=view
         )
 
         try:
@@ -465,58 +436,58 @@ class Drops(commands.Cog):
         except Exception:
             pass
 
-        view.message_id = message.id
-
     # =========================
-    # !DROP
+    # !drop
     # =========================
 
     @commands.command(name="drop")
     async def drop(
         self,
         ctx,
-        chest_type: str,
-        amount: int,
-        quantity: int,
-        target_role: discord.Role | None = None,
-        target_user: discord.User | None = None,
+        chest_type=None,
+        amount=None,
+        quantity=None,
+        target_role: discord.Role = None,
+        target_user: discord.User = None
     ):
 
         if ctx.author.id != OWNER_ID:
             return
 
+        if chest_type is None:
+            return
+
         chest_type = chest_type.lower()
 
         aliases = {
-            "normal": "chest",
-            "chest": "chest",
-            "chests": "chest",
+            "normal": "normal",
+            "chest": "normal",
+            "chests": "normal",
 
             "mega": "mega",
-            "megachest": "mega",
+            "mega-chest": "mega",
             "mega_chest": "mega",
 
             "ultra": "ultra",
-            "ultrachest": "ultra",
-            "ultra_chest": "ultra",
+            "ultra-chest": "ultra",
+            "ultra_chest": "ultra"
         }
 
         if chest_type not in aliases:
-            await ctx.send(
-                "❌ **Error** Use `normal`, `mega` or `ultra`.",
-                delete_after=5,
-            )
             return
 
         chest_type = aliases[chest_type]
 
-        if amount <= 0:
+        try:
+            amount = int(amount)
+            quantity = int(quantity)
+        except (TypeError, ValueError):
             return
 
-        if quantity <= 0 or quantity > 1000:
+        if amount <= 0 or quantity <= 0:
             return
 
-        if target_user is not None and target_role is not None:
+        if target_user and target_role:
             return
 
         view = ChestDropView(
@@ -525,21 +496,16 @@ class Drops(commands.Cog):
             amount=amount,
             quantity=quantity,
             allowed_user_id=(
-                target_user.id
-                if target_user is not None
-                else None
+                target_user.id if target_user else None
             ),
             allowed_role_id=(
-                target_role.id
-                if target_role is not None
-                else None
-            ),
+                target_role.id if target_role else None
+            )
         )
 
-        message = await ctx.send(
-            content="**Chest drop**",
-            embed=view.create_embed(),
-            view=view,
+        await ctx.send(
+            content=view.get_text(),
+            view=view
         )
 
         try:
@@ -547,17 +513,11 @@ class Drops(commands.Cog):
         except Exception:
             pass
 
-        view.message_id = message.id
-
 
 # =========================
 # SETUP
 # =========================
 
 async def setup(bot):
-
-    await bot.add_cog(
-        Drops(bot)
-    )
-
+    await bot.add_cog(Drops(bot))
     print("✅ Drops cog loaded!")
