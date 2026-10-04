@@ -39,6 +39,7 @@ class Chests(commands.Cog):
         self.bot = bot
         self.data = self.load_data()
         self.save_lock = asyncio.Lock()
+        self.open_lock = asyncio.Lock()
 
     # =================================================
     # DATA
@@ -64,7 +65,9 @@ class Chests(commands.Cog):
 
     async def save_data(self):
         async with self.save_lock:
-            directory = os.path.dirname(os.path.abspath(DATA_FILE))
+            directory = os.path.dirname(
+                os.path.abspath(DATA_FILE)
+            )
 
             fd, temp_path = tempfile.mkstemp(
                 dir=directory,
@@ -73,23 +76,33 @@ class Chests(commands.Cog):
             )
 
             try:
-                with os.fdopen(fd, "w", encoding="utf-8") as file:
+                with os.fdopen(
+                    fd,
+                    "w",
+                    encoding="utf-8"
+                ) as file:
+
                     json.dump(
                         self.data,
                         file,
                         ensure_ascii=False,
                         indent=4
                     )
+
                     file.flush()
                     os.fsync(file.fileno())
 
-                os.replace(temp_path, DATA_FILE)
+                os.replace(
+                    temp_path,
+                    DATA_FILE
+                )
 
             except Exception:
                 try:
                     os.remove(temp_path)
                 except OSError:
                     pass
+
                 raise
 
     def get_user_data(self, user_id):
@@ -116,7 +129,12 @@ class Chests(commands.Cog):
 
         return user
 
-    async def add_chests(self, user_id, amount, chest_type="chest"):
+    async def add_chests(
+        self,
+        user_id,
+        amount,
+        chest_type="chest"
+    ):
         try:
             amount = int(amount)
         except (TypeError, ValueError):
@@ -129,10 +147,13 @@ class Chests(commands.Cog):
 
         if chest_type == "chest":
             user["chests"] += amount
+
         elif chest_type == "mega":
             user["mega_chests"] += amount
+
         elif chest_type == "ultra":
             user["ultra_chests"] += amount
+
         else:
             return False
 
@@ -144,153 +165,199 @@ class Chests(commands.Cog):
     # =================================================
 
     def language(self, user_id):
-        return self.get_user_data(user_id).get("language") or "en"
+        return (
+            self.get_user_data(user_id).get("language")
+            or "en"
+        )
 
     def text(self, user_id, key, **kwargs):
+
         lang = self.language(user_id)
 
         texts = {
+
             "chests_title": {
                 "en": "🎁 Chests",
                 "ru": "🎁 Сундуки"
             },
+
             "language": {
                 "en": "🌐 Language: 🇬🇧 English",
                 "ru": "🌐 Язык: 🇷🇺 Русский"
             },
+
             "chest": {
                 "en": "🎁 Chest: {value}",
                 "ru": "🎁 Сундук: {value}"
             },
+
             "mega": {
                 "en": "💎 Mega Chest: {value}",
                 "ru": "💎 Мега-сундук: {value}"
             },
+
             "ultra": {
                 "en": "⚡ Ultra Chest: {value}",
                 "ru": "⚡ Ультра-сундук: {value}"
             },
+
             "total": {
                 "en": "Total: {value} Chests",
                 "ru": "Всего: {value} сундуков"
             },
+
             "daily_available": {
                 "en": "📅 Daily Chest: Available",
                 "ru": "📅 Ежедневный сундук: Доступен"
             },
+
             "weekly_available": {
                 "en": "📆 Weekly Mega Chest: Available",
                 "ru": "📆 Еженедельный мега-сундук: Доступен"
             },
+
             "daily_next": {
                 "en": "📅 Daily Chest: Available {timestamp}",
                 "ru": "📅 Ежедневный сундук: Доступен {timestamp}"
             },
+
             "weekly_next": {
                 "en": "📆 Weekly Mega Chest: Available {timestamp}",
                 "ru": "📆 Еженедельный мега-сундук: Доступен {timestamp}"
             },
+
             "chest_opened": {
                 "en": "🎁 Chest Opened!",
                 "ru": "🎁 Сундук открыт!"
             },
+
             "mega_opened": {
                 "en": "💎 Mega Chest Opened!",
                 "ru": "💎 Мега-сундук открыт!"
             },
+
             "ultra_opened": {
                 "en": "⚡ Ultra Chest Opened!",
                 "ru": "⚡ Ультра-сундук открыт!"
             },
+
             "daily_claimed": {
                 "en": "📅 Daily Chest claimed!",
                 "ru": "📅 Ежедневный сундук получен!"
             },
+
             "weekly_claimed": {
                 "en": "📆 Weekly Mega Chest claimed!",
                 "ru": "📆 Еженедельный мега-сундук получен!"
             },
+
             "reward": {
                 "en": "🏆 Reward:",
                 "ru": "🏆 Награда:"
             },
+
             "bonus": {
                 "en": "💎 Bonus:",
                 "ru": "💎 Бонус:"
             },
+
             "mega_bonus": {
                 "en": "+1 Mega Chest",
                 "ru": "+1 Мега-сундук"
             },
+
             "ultra_bonus": {
                 "en": "+1 Ultra Chest",
                 "ru": "+1 Ультра-сундук"
             },
+
             "current_higher": {
                 "en": "⬇️ Your current role is higher.\nThe reward was not given.",
                 "ru": "⬇️ Ваша текущая роль выше.\nНаграда не была выдана."
             },
+
             "remaining": {
                 "en": "📦 Chest remaining: {value}",
                 "ru": "📦 Осталось сундуков: {value}"
             },
+
             "mega_remaining": {
                 "en": "💎 Mega Chest remaining: {value}",
                 "ru": "💎 Осталось мега-сундуков: {value}"
             },
+
             "ultra_remaining": {
                 "en": "⚡ Ultra Chest remaining: {value}",
                 "ru": "⚡ Осталось ультра-сундуков: {value}"
             },
+
             "opened_all": {
                 "en": "🎁 Opened All",
                 "ru": "🎁 Открыты все"
             },
+
             "opened": {
                 "en": "Opened:",
                 "ru": "Открыто:"
             },
+
             "rewards": {
                 "en": "Rewards:",
                 "ru": "Награды:"
             },
+
             "no_chests": {
                 "en": "❌ You don't have any of these chests.",
                 "ru": "❌ У вас нет таких сундуков."
             },
+
             "ultra_block": {
                 "en": "❌ You cannot open any chests because you already have the 💎 Ultra role.",
                 "ru": "❌ Вы не можете открывать сундуки, потому что у вас уже есть роль 💎 Ultra."
             },
+
             "daily_block": {
                 "en": "❌ You cannot claim the Daily Chest because you already have the 💎 Ultra role.",
                 "ru": "❌ Вы не можете получить ежедневный сундук, потому что у вас уже есть роль 💎 Ultra."
             },
+
             "weekly_block": {
                 "en": "❌ You cannot claim the Weekly Mega Chest because you already have the 💎 Ultra role.",
                 "ru": "❌ Вы не можете получить еженедельный мега-сундук, потому что у вас уже есть роль 💎 Ultra."
             },
+
             "daily_unavailable": {
                 "en": "❌ Daily Chest is not available yet.\nNext: {timestamp}",
                 "ru": "❌ Ежедневный сундук пока недоступен.\nСледующий: {timestamp}"
             },
+
             "weekly_unavailable": {
                 "en": "❌ Weekly Mega Chest is not available yet.\nNext: {timestamp}",
                 "ru": "❌ Еженедельный мега-сундук пока недоступен.\nСледующий: {timestamp}"
             },
+
             "not_owner": {
                 "en": "❌ These chests don't belong to you.",
                 "ru": "❌ Эти сундуки принадлежат не вам."
             },
+
             "expired": {
                 "en": "⏰ This chest menu has expired.\n\nPlease use !chests to open a new chest menu.",
                 "ru": "⏰ Срок действия этого меню сундуков истёк.\n\nИспользуйте !chests, чтобы открыть новое меню."
+            },
+
+            "error": {
+                "en": "❌ Something went wrong while opening the chests.",
+                "ru": "❌ Произошла ошибка при открытии сундуков."
             }
         }
 
         value = texts.get(
             key,
-            {"en": key, "ru": key}
+            {
+                "en": key,
+                "ru": key
+            }
         ).get(
             lang,
             key
@@ -303,15 +370,20 @@ class Chests(commands.Cog):
     # =================================================
 
     def has_ultra_role(self, member):
+
         return any(
             role.id == ULTRA_ROLE_ID
             for role in member.roles
         )
 
     def get_highest_role_index(self, member):
+
         highest = -1
 
-        for index, reward in enumerate(ROLE_REWARDS):
+        for index, reward in enumerate(
+            ROLE_REWARDS
+        ):
+
             if any(
                 role.id == reward["role_id"]
                 for role in member.roles
@@ -321,10 +393,12 @@ class Chests(commands.Cog):
         return highest
 
     def roll_role(self):
+
         number = random.random() * 100
         current = 0
 
         for reward in ROLE_REWARDS:
+
             current += reward["chance"]
 
             if number < current:
@@ -332,16 +406,29 @@ class Chests(commands.Cog):
 
         return ROLE_REWARDS[-1]
 
-    async def give_role_if_higher(self, member, reward):
-        reward_index = ROLE_REWARDS.index(reward)
-        current_index = self.get_highest_role_index(member)
+    async def give_role_if_higher(
+        self,
+        member,
+        reward
+    ):
+
+        reward_index = ROLE_REWARDS.index(
+            reward
+        )
+
+        current_index = self.get_highest_role_index(
+            member
+        )
 
         if reward_index <= current_index:
             return False
 
         roles_to_remove = []
 
-        for index in range(current_index + 1):
+        for index in range(
+            current_index + 1
+        ):
+
             if index >= len(ROLE_REWARDS):
                 break
 
@@ -349,15 +436,20 @@ class Chests(commands.Cog):
                 ROLE_REWARDS[index]["role_id"]
             )
 
-            if role is not None and role in member.roles:
+            if (
+                role is not None
+                and role in member.roles
+            ):
                 roles_to_remove.append(role)
 
         if roles_to_remove:
+
             try:
                 await member.remove_roles(
                     *roles_to_remove,
                     reason="Chest reward upgrade"
                 )
+
             except discord.HTTPException:
                 pass
 
@@ -369,11 +461,14 @@ class Chests(commands.Cog):
             return False
 
         try:
+
             await member.add_roles(
                 new_role,
                 reason="Chest reward"
             )
+
             return True
+
         except discord.HTTPException:
             return False
 
@@ -383,14 +478,25 @@ class Chests(commands.Cog):
 
     class MainView(discord.ui.View):
 
-        def __init__(self, cog, owner_id):
+        def __init__(
+            self,
+            cog,
+            owner_id
+        ):
+
             super().__init__(timeout=None)
+
             self.cog = cog
             self.owner_id = owner_id
-            self.created_at = asyncio.get_running_loop().time()
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
 
         async def valid(self, interaction):
+
             if interaction.user.id != self.owner_id:
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -398,6 +504,7 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             if (
@@ -405,6 +512,7 @@ class Chests(commands.Cog):
                 - self.created_at
                 >= MENU_TIMEOUT
             ):
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -412,11 +520,13 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             return True
 
         def main_embed(self):
+
             user = self.cog.get_user_data(
                 self.owner_id
             )
@@ -424,11 +534,14 @@ class Chests(commands.Cog):
             now = int(time.time())
 
             if user["daily_next"] <= now:
+
                 daily_text = self.cog.text(
                     self.owner_id,
                     "daily_available"
                 )
+
             else:
+
                 daily_text = self.cog.text(
                     self.owner_id,
                     "daily_next",
@@ -436,11 +549,14 @@ class Chests(commands.Cog):
                 )
 
             if user["weekly_next"] <= now:
+
                 weekly_text = self.cog.text(
                     self.owner_id,
                     "weekly_available"
                 )
+
             else:
+
                 weekly_text = self.cog.text(
                     self.owner_id,
                     "weekly_next",
@@ -454,11 +570,17 @@ class Chests(commands.Cog):
             )
 
             description = (
+
                 f"{self.cog.text(self.owner_id, 'language')}\n\n"
+
                 f"{self.cog.text(self.owner_id, 'chest', value=user['chests'])}\n"
+
                 f"{self.cog.text(self.owner_id, 'mega', value=user['mega_chests'])}\n"
+
                 f"{self.cog.text(self.owner_id, 'ultra', value=user['ultra_chests'])}\n\n"
+
                 f"**{self.cog.text(self.owner_id, 'total', value=total)}**\n\n"
+
                 f"{daily_text}\n"
                 f"{weekly_text}"
             )
@@ -477,7 +599,12 @@ class Chests(commands.Cog):
             style=discord.ButtonStyle.primary,
             row=0
         )
-        async def chest(self, interaction, button):
+        async def chest(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -496,7 +623,12 @@ class Chests(commands.Cog):
             style=discord.ButtonStyle.primary,
             row=0
         )
-        async def mega(self, interaction, button):
+        async def mega(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -515,7 +647,12 @@ class Chests(commands.Cog):
             style=discord.ButtonStyle.primary,
             row=0
         )
-        async def ultra(self, interaction, button):
+        async def ultra(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -534,7 +671,12 @@ class Chests(commands.Cog):
             style=discord.ButtonStyle.success,
             row=1
         )
-        async def daily(self, interaction, button):
+        async def daily(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -548,7 +690,12 @@ class Chests(commands.Cog):
             style=discord.ButtonStyle.success,
             row=1
         )
-        async def weekly(self, interaction, button):
+        async def weekly(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -563,14 +710,25 @@ class Chests(commands.Cog):
 
     class ChestView(discord.ui.View):
 
-        def __init__(self, cog, owner_id):
+        def __init__(
+            self,
+            cog,
+            owner_id
+        ):
+
             super().__init__(timeout=None)
+
             self.cog = cog
             self.owner_id = owner_id
-            self.created_at = asyncio.get_running_loop().time()
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
 
         async def valid(self, interaction):
+
             if interaction.user.id != self.owner_id:
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -578,6 +736,7 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             if (
@@ -585,6 +744,7 @@ class Chests(commands.Cog):
                 - self.created_at
                 >= MENU_TIMEOUT
             ):
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -592,11 +752,13 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             return True
 
         def embed(self):
+
             user = self.cog.get_user_data(
                 self.owner_id
             )
@@ -617,7 +779,12 @@ class Chests(commands.Cog):
             label="🔓 Open",
             style=discord.ButtonStyle.success
         )
-        async def open_one(self, interaction, button):
+        async def open_one(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -631,7 +798,12 @@ class Chests(commands.Cog):
             label="📦 Open All",
             style=discord.ButtonStyle.success
         )
-        async def open_all(self, interaction, button):
+        async def open_all(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -645,7 +817,12 @@ class Chests(commands.Cog):
             label="🔙 Back",
             style=discord.ButtonStyle.secondary
         )
-        async def back(self, interaction, button):
+        async def back(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -665,14 +842,25 @@ class Chests(commands.Cog):
 
     class MegaView(discord.ui.View):
 
-        def __init__(self, cog, owner_id):
+        def __init__(
+            self,
+            cog,
+            owner_id
+        ):
+
             super().__init__(timeout=None)
+
             self.cog = cog
             self.owner_id = owner_id
-            self.created_at = asyncio.get_running_loop().time()
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
 
         async def valid(self, interaction):
+
             if interaction.user.id != self.owner_id:
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -680,6 +868,7 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             if (
@@ -687,6 +876,7 @@ class Chests(commands.Cog):
                 - self.created_at
                 >= MENU_TIMEOUT
             ):
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -694,11 +884,13 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             return True
 
         def embed(self):
+
             user = self.cog.get_user_data(
                 self.owner_id
             )
@@ -720,7 +912,12 @@ class Chests(commands.Cog):
             label="🔓 Open",
             style=discord.ButtonStyle.success
         )
-        async def open_one(self, interaction, button):
+        async def open_one(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -734,7 +931,12 @@ class Chests(commands.Cog):
             label="📦 Open All",
             style=discord.ButtonStyle.success
         )
-        async def open_all(self, interaction, button):
+        async def open_all(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -748,7 +950,12 @@ class Chests(commands.Cog):
             label="🔙 Back",
             style=discord.ButtonStyle.secondary
         )
-        async def back(self, interaction, button):
+        async def back(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -768,14 +975,25 @@ class Chests(commands.Cog):
 
     class UltraView(discord.ui.View):
 
-        def __init__(self, cog, owner_id):
+        def __init__(
+            self,
+            cog,
+            owner_id
+        ):
+
             super().__init__(timeout=None)
+
             self.cog = cog
             self.owner_id = owner_id
-            self.created_at = asyncio.get_running_loop().time()
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
 
         async def valid(self, interaction):
+
             if interaction.user.id != self.owner_id:
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -783,6 +1001,7 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             if (
@@ -790,6 +1009,7 @@ class Chests(commands.Cog):
                 - self.created_at
                 >= MENU_TIMEOUT
             ):
+
                 await interaction.response.send_message(
                     self.cog.text(
                         self.owner_id,
@@ -797,11 +1017,13 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
+
                 return False
 
             return True
 
         def embed(self):
+
             user = self.cog.get_user_data(
                 self.owner_id
             )
@@ -823,7 +1045,12 @@ class Chests(commands.Cog):
             label="🔓 Open",
             style=discord.ButtonStyle.success
         )
-        async def open_one(self, interaction, button):
+        async def open_one(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -837,7 +1064,12 @@ class Chests(commands.Cog):
             label="📦 Open All",
             style=discord.ButtonStyle.success
         )
-        async def open_all(self, interaction, button):
+        async def open_all(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -851,7 +1083,12 @@ class Chests(commands.Cog):
             label="🔙 Back",
             style=discord.ButtonStyle.secondary
         )
-        async def back(self, interaction, button):
+        async def back(
+            self,
+            interaction,
+            button
+        ):
+
             if not await self.valid(interaction):
                 return
 
@@ -875,133 +1112,190 @@ class Chests(commands.Cog):
         user_id,
         open_all
     ):
+
         await interaction.response.defer()
 
-        member = interaction.user
+        try:
 
-        if self.has_ultra_role(member):
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "ultra_block"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+            async with self.open_lock:
 
-        user = self.get_user_data(user_id)
+                member = interaction.user
 
-        if user["chests"] <= 0:
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "no_chests"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+                if self.has_ultra_role(member):
 
-        if open_all:
-            count = user["chests"]
-            user["chests"] = 0
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "ultra_block"
+                        ),
+                        embed=None,
+                        view=None
+                    )
 
-            await self.save_data()
+                    return
 
-            result = await self.open_normal_all(
-                member,
-                count
-            )
-
-            view = self.ChestView(
-                self,
-                user_id
-            )
-
-            await interaction.edit_original_response(
-                embed=result,
-                view=view
-            )
-            return
-
-        user["chests"] -= 1
-
-        reward = self.roll_role()
-
-        mega_bonus = random.random() < 0.05
-        ultra_bonus = random.random() < 0.01
-
-        if mega_bonus:
-            user["mega_chests"] += 1
-
-        if ultra_bonus:
-            user["ultra_chests"] += 1
-
-        await self.save_data()
-
-        role_given = await self.give_role_if_higher(
-            member,
-            reward
-        )
-
-        description = (
-            f"{self.text(user_id, 'reward')}\n"
-            f"{reward['emoji']} **{reward['name']}**\n"
-        )
-
-        if not role_given:
-            description += (
-                f"\n{self.text(user_id, 'current_higher')}\n"
-            )
-
-        if mega_bonus or ultra_bonus:
-            description += (
-                f"\n{self.text(user_id, 'bonus')}\n"
-            )
-
-            if mega_bonus:
-                description += (
-                    f"{self.text(user_id, 'mega_bonus')}\n"
+                user = self.get_user_data(
+                    user_id
                 )
 
-            if ultra_bonus:
-                description += (
-                    f"{self.text(user_id, 'ultra_bonus')}\n"
+                if user["chests"] <= 0:
+
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "no_chests"
+                        ),
+                        embed=None,
+                        view=None
+                    )
+
+                    return
+
+                if open_all:
+
+                    count = int(
+                        user["chests"]
+                    )
+
+                    user["chests"] = 0
+
+                    await self.save_data()
+
+                    result = await self.open_normal_all(
+                        member,
+                        count
+                    )
+
+                    view = self.ChestView(
+                        self,
+                        user_id
+                    )
+
+                    await interaction.edit_original_response(
+                        embed=result,
+                        view=view
+                    )
+
+                    return
+
+                user["chests"] -= 1
+
+                reward = self.roll_role()
+
+                mega_bonus = (
+                    random.random() < 0.05
                 )
 
-        description += (
-            f"\n{self.text(user_id, 'remaining', value=user['chests'])}"
-        )
+                ultra_bonus = (
+                    random.random() < 0.01
+                )
 
-        embed = discord.Embed(
-            title=self.text(
-                user_id,
-                "chest_opened"
-            ),
-            description=description,
-            color=discord.Color.green()
-        )
+                if mega_bonus:
+                    user["mega_chests"] += 1
 
-        view = self.ChestView(
-            self,
-            user_id
-        )
+                if ultra_bonus:
+                    user["ultra_chests"] += 1
 
-        await interaction.edit_original_response(
-            embed=embed,
-            view=view
-        )
+                await self.save_data()
+
+                role_given = await self.give_role_if_higher(
+                    member,
+                    reward
+                )
+
+                description = (
+                    f"{self.text(user_id, 'reward')}\n"
+                    f"{reward['emoji']} **{reward['name']}**\n"
+                )
+
+                if not role_given:
+
+                    description += (
+                        f"\n{self.text(user_id, 'current_higher')}\n"
+                    )
+
+                if mega_bonus or ultra_bonus:
+
+                    description += (
+                        f"\n{self.text(user_id, 'bonus')}\n"
+                    )
+
+                    if mega_bonus:
+
+                        description += (
+                            f"{self.text(user_id, 'mega_bonus')}\n"
+                        )
+
+                    if ultra_bonus:
+
+                        description += (
+                            f"{self.text(user_id, 'ultra_bonus')}\n"
+                        )
+
+                description += (
+                    f"\n{self.text(user_id, 'remaining', value=user['chests'])}"
+                )
+
+                embed = discord.Embed(
+                    title=self.text(
+                        user_id,
+                        "chest_opened"
+                    ),
+                    description=description,
+                    color=discord.Color.green()
+                )
+
+                view = self.ChestView(
+                    self,
+                    user_id
+                )
+
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=view
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error opening normal chest for "
+                f"{user_id}: {repr(e)}"
+            )
+
+            try:
+
+                await interaction.edit_original_response(
+                    content=self.text(
+                        user_id,
+                        "error"
+                    ),
+                    embed=None,
+                    view=None
+                )
+
+            except Exception as edit_error:
+
+                print(
+                    f"❌ Failed to send chest error: "
+                    f"{repr(edit_error)}"
+                )
 
     # =================================================
     # NORMAL CHEST ALL
     # =================================================
 
-    async def open_normal_all(self, member, count):
+    async def open_normal_all(
+        self,
+        member,
+        count
+    ):
 
         user_id = member.id
 
+        count = int(count)
+
         if count <= 0:
+
             return discord.Embed(
                 description=self.text(
                     user_id,
@@ -1010,19 +1304,25 @@ class Chests(commands.Cog):
                 color=discord.Color.red()
             )
 
+        # Normalize probabilities so NumPy always
+        # receives a mathematically exact distribution.
         probabilities = np.array(
             [
-                reward["chance"] / 100
+                reward["chance"]
                 for reward in ROLE_REWARDS
             ],
-            dtype=float
+            dtype=np.float64
         )
 
+        probabilities /= probabilities.sum()
+
+        # Generate all role rewards at once.
         role_counts = np.random.multinomial(
             count,
             probabilities
         )
 
+        # Mega and Ultra bonuses are independent.
         mega_count = int(
             np.random.binomial(
                 count,
@@ -1037,7 +1337,9 @@ class Chests(commands.Cog):
             )
         )
 
-        user = self.get_user_data(user_id)
+        user = self.get_user_data(
+            user_id
+        )
 
         user["mega_chests"] += mega_count
         user["ultra_chests"] += ultra_count
@@ -1046,32 +1348,42 @@ class Chests(commands.Cog):
 
         highest_index = -1
 
-        for index, amount in enumerate(role_counts):
-            if amount > 0:
+        for index, amount in enumerate(
+            role_counts
+        ):
+
+            if int(amount) > 0:
                 highest_index = index
 
         if highest_index >= 0:
+
             await self.give_role_if_higher(
                 member,
                 ROLE_REWARDS[highest_index]
             )
 
         lines = [
-            self.text(user_id, "opened"),
+            self.text(
+                user_id,
+                "opened"
+            ),
             f"🎁 Chest × {count}"
         ]
 
         if mega_count:
+
             lines.append(
                 f"💎 Mega Chest × {mega_count}"
             )
 
         if ultra_count:
+
             lines.append(
                 f"⚡ Ultra Chest × {ultra_count}"
             )
 
         lines.append("")
+
         lines.append(
             self.text(
                 user_id,
@@ -1079,7 +1391,11 @@ class Chests(commands.Cog):
             )
         )
 
-        for index, amount in enumerate(role_counts):
+        for index, amount in enumerate(
+            role_counts
+        ):
+
+            amount = int(amount)
 
             if amount <= 0:
                 continue
@@ -1088,7 +1404,7 @@ class Chests(commands.Cog):
 
             lines.append(
                 f"{reward['emoji']} "
-                f"{reward['name']} × {int(amount)}"
+                f"{reward['name']} × {amount}"
             )
 
         return discord.Embed(
@@ -1110,132 +1426,179 @@ class Chests(commands.Cog):
         user_id,
         open_all
     ):
+
         await interaction.response.defer()
 
-        member = interaction.user
+        try:
 
-        if self.has_ultra_role(member):
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "ultra_block"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+            async with self.open_lock:
 
-        user = self.get_user_data(user_id)
+                member = interaction.user
 
-        if user["mega_chests"] <= 0:
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "no_chests"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+                if self.has_ultra_role(member):
 
-        count = user["mega_chests"]
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "ultra_block"
+                        ),
+                        embed=None,
+                        view=None
+                    )
 
-        if open_all:
+                    return
 
-            user["mega_chests"] = 0
-
-            lucky = int(
-                np.random.binomial(
-                    count,
-                    0.05
+                user = self.get_user_data(
+                    user_id
                 )
-            )
 
-            normal_count = count - lucky
-            normal_rewards = 0
+                if user["mega_chests"] <= 0:
 
-            if normal_count:
-                normal_rewards = int(
-                    np.random.randint(
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "no_chests"
+                        ),
+                        embed=None,
+                        view=None
+                    )
+
+                    return
+
+                count = int(
+                    user["mega_chests"]
+                )
+
+                if open_all:
+
+                    user["mega_chests"] = 0
+
+                    lucky = int(
+                        np.random.binomial(
+                            count,
+                            0.05
+                        )
+                    )
+
+                    normal_count = (
+                        count - lucky
+                    )
+
+                    normal_rewards = 0
+
+                    if normal_count:
+
+                        normal_rewards = int(
+                            np.random.randint(
+                                1,
+                                11,
+                                size=normal_count
+                            ).sum()
+                        )
+
+                    total_normal = (
+                        normal_rewards
+                        + lucky * 20
+                    )
+
+                    user["chests"] += total_normal
+
+                    await self.save_data()
+
+                    description = (
+                        f"{self.text(user_id, 'opened')}\n"
+                        f"💎 Mega Chest × {count}\n\n"
+                        f"🎁 Chest × {total_normal}"
+                    )
+
+                    if lucky:
+
+                        description += (
+                            f"\n\n⭐ Lucky 5% rewards: "
+                            f"{lucky} × 20"
+                        )
+
+                    embed = discord.Embed(
+                        title=self.text(
+                            user_id,
+                            "opened_all"
+                        ),
+                        description=description,
+                        color=discord.Color.blue()
+                    )
+
+                    view = self.MegaView(
+                        self,
+                        user_id
+                    )
+
+                    await interaction.edit_original_response(
+                        embed=embed,
+                        view=view
+                    )
+
+                    return
+
+                user["mega_chests"] -= 1
+
+                if random.random() < 0.05:
+                    reward = 20
+                else:
+                    reward = random.randint(
                         1,
-                        11,
-                        size=normal_count
-                    ).sum()
+                        10
+                    )
+
+                user["chests"] += reward
+
+                await self.save_data()
+
+                embed = discord.Embed(
+                    title=self.text(
+                        user_id,
+                        "mega_opened"
+                    ),
+                    description=(
+                        f"🎁 **+{reward} Chest**\n\n"
+                        f"{self.text(user_id, 'mega_remaining', value=user['mega_chests'])}"
+                    ),
+                    color=discord.Color.blue()
                 )
 
-            total_normal = (
-                normal_rewards
-                + lucky * 20
-            )
-
-            user["chests"] += total_normal
-
-            await self.save_data()
-
-            description = (
-                f"{self.text(user_id, 'opened')}\n"
-                f"💎 Mega Chest × {count}\n\n"
-                f"🎁 Chest × {total_normal}"
-            )
-
-            if lucky:
-                description += (
-                    f"\n\n⭐ Lucky 5% rewards: "
-                    f"{lucky} × 20"
+                view = self.MegaView(
+                    self,
+                    user_id
                 )
 
-            embed = discord.Embed(
-                title=self.text(
-                    user_id,
-                    "opened_all"
-                ),
-                description=description,
-                color=discord.Color.blue()
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=view
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error opening mega chest "
+                f"for {user_id}: {repr(e)}"
             )
 
-            view = self.MegaView(
-                self,
-                user_id
-            )
+            try:
 
-            await interaction.edit_original_response(
-                embed=embed,
-                view=view
-            )
-            return
+                await interaction.edit_original_response(
+                    content=self.text(
+                        user_id,
+                        "error"
+                    ),
+                    embed=None,
+                    view=None
+                )
 
-        user["mega_chests"] -= 1
+            except Exception as edit_error:
 
-        if random.random() < 0.05:
-            reward = 20
-        else:
-            reward = random.randint(1, 10)
-
-        user["chests"] += reward
-
-        await self.save_data()
-
-        embed = discord.Embed(
-            title=self.text(
-                user_id,
-                "mega_opened"
-            ),
-            description=(
-                f"🎁 **+{reward} Chest**\n\n"
-                f"{self.text(user_id, 'mega_remaining', value=user['mega_chests'])}"
-            ),
-            color=discord.Color.blue()
-        )
-
-        view = self.MegaView(
-            self,
-            user_id
-        )
-
-        await interaction.edit_original_response(
-            embed=embed,
-            view=view
-        )
+                print(
+                    f"❌ Failed to send mega error: "
+                    f"{repr(edit_error)}"
+                )
 
     # =================================================
     # ULTRA CHEST
@@ -1247,132 +1610,179 @@ class Chests(commands.Cog):
         user_id,
         open_all
     ):
+
         await interaction.response.defer()
 
-        member = interaction.user
+        try:
 
-        if self.has_ultra_role(member):
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "ultra_block"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+            async with self.open_lock:
 
-        user = self.get_user_data(user_id)
+                member = interaction.user
 
-        if user["ultra_chests"] <= 0:
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "no_chests"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+                if self.has_ultra_role(member):
 
-        count = user["ultra_chests"]
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "ultra_block"
+                        ),
+                        embed=None,
+                        view=None
+                    )
 
-        if open_all:
+                    return
 
-            user["ultra_chests"] = 0
-
-            lucky = int(
-                np.random.binomial(
-                    count,
-                    0.05
+                user = self.get_user_data(
+                    user_id
                 )
-            )
 
-            normal_count = count - lucky
-            normal_rewards = 0
+                if user["ultra_chests"] <= 0:
 
-            if normal_count:
-                normal_rewards = int(
-                    np.random.randint(
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "no_chests"
+                        ),
+                        embed=None,
+                        view=None
+                    )
+
+                    return
+
+                count = int(
+                    user["ultra_chests"]
+                )
+
+                if open_all:
+
+                    user["ultra_chests"] = 0
+
+                    lucky = int(
+                        np.random.binomial(
+                            count,
+                            0.05
+                        )
+                    )
+
+                    normal_count = (
+                        count - lucky
+                    )
+
+                    normal_rewards = 0
+
+                    if normal_count:
+
+                        normal_rewards = int(
+                            np.random.randint(
+                                10,
+                                21,
+                                size=normal_count
+                            ).sum()
+                        )
+
+                    total_normal = (
+                        normal_rewards
+                        + lucky * 30
+                    )
+
+                    user["chests"] += total_normal
+
+                    await self.save_data()
+
+                    description = (
+                        f"{self.text(user_id, 'opened')}\n"
+                        f"⚡ Ultra Chest × {count}\n\n"
+                        f"🎁 Chest × {total_normal}"
+                    )
+
+                    if lucky:
+
+                        description += (
+                            f"\n\n⭐ Lucky 5% rewards: "
+                            f"{lucky} × 30"
+                        )
+
+                    embed = discord.Embed(
+                        title=self.text(
+                            user_id,
+                            "opened_all"
+                        ),
+                        description=description,
+                        color=discord.Color.gold()
+                    )
+
+                    view = self.UltraView(
+                        self,
+                        user_id
+                    )
+
+                    await interaction.edit_original_response(
+                        embed=embed,
+                        view=view
+                    )
+
+                    return
+
+                user["ultra_chests"] -= 1
+
+                if random.random() < 0.05:
+                    reward = 30
+                else:
+                    reward = random.randint(
                         10,
-                        21,
-                        size=normal_count
-                    ).sum()
+                        20
+                    )
+
+                user["chests"] += reward
+
+                await self.save_data()
+
+                embed = discord.Embed(
+                    title=self.text(
+                        user_id,
+                        "ultra_opened"
+                    ),
+                    description=(
+                        f"🎁 **+{reward} Chest**\n\n"
+                        f"{self.text(user_id, 'ultra_remaining', value=user['ultra_chests'])}"
+                    ),
+                    color=discord.Color.gold()
                 )
 
-            total_normal = (
-                normal_rewards
-                + lucky * 30
-            )
-
-            user["chests"] += total_normal
-
-            await self.save_data()
-
-            description = (
-                f"{self.text(user_id, 'opened')}\n"
-                f"⚡ Ultra Chest × {count}\n\n"
-                f"🎁 Chest × {total_normal}"
-            )
-
-            if lucky:
-                description += (
-                    f"\n\n⭐ Lucky 5% rewards: "
-                    f"{lucky} × 30"
+                view = self.UltraView(
+                    self,
+                    user_id
                 )
 
-            embed = discord.Embed(
-                title=self.text(
-                    user_id,
-                    "opened_all"
-                ),
-                description=description,
-                color=discord.Color.gold()
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=view
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error opening ultra chest "
+                f"for {user_id}: {repr(e)}"
             )
 
-            view = self.UltraView(
-                self,
-                user_id
-            )
+            try:
 
-            await interaction.edit_original_response(
-                embed=embed,
-                view=view
-            )
-            return
+                await interaction.edit_original_response(
+                    content=self.text(
+                        user_id,
+                        "error"
+                    ),
+                    embed=None,
+                    view=None
+                )
 
-        user["ultra_chests"] -= 1
+            except Exception as edit_error:
 
-        if random.random() < 0.05:
-            reward = 30
-        else:
-            reward = random.randint(10, 20)
-
-        user["chests"] += reward
-
-        await self.save_data()
-
-        embed = discord.Embed(
-            title=self.text(
-                user_id,
-                "ultra_opened"
-            ),
-            description=(
-                f"🎁 **+{reward} Chest**\n\n"
-                f"{self.text(user_id, 'ultra_remaining', value=user['ultra_chests'])}"
-            ),
-            color=discord.Color.gold()
-        )
-
-        view = self.UltraView(
-            self,
-            user_id
-        )
-
-        await interaction.edit_original_response(
-            embed=embed,
-            view=view
-        )
+                print(
+                    f"❌ Failed to send ultra error: "
+                    f"{repr(edit_error)}"
+                )
 
     # =================================================
     # DAILY
@@ -1383,104 +1793,154 @@ class Chests(commands.Cog):
         interaction,
         user_id
     ):
+
         await interaction.response.defer()
 
-        member = interaction.user
+        try:
 
-        if self.has_ultra_role(member):
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "daily_block"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+            async with self.open_lock:
 
-        user = self.get_user_data(user_id)
-        now = int(time.time())
+                member = interaction.user
 
-        if user["daily_next"] > now:
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "daily_unavailable",
-                    timestamp=f"<t:{user['daily_next']}:R>"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+                if self.has_ultra_role(member):
 
-        user["daily_next"] = now + DAILY_COOLDOWN
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "daily_block"
+                        ),
+                        embed=None,
+                        view=None
+                    )
 
-        reward = self.roll_role()
+                    return
 
-        mega_bonus = random.random() < 0.05
-        ultra_bonus = random.random() < 0.01
-
-        if mega_bonus:
-            user["mega_chests"] += 1
-
-        if ultra_bonus:
-            user["ultra_chests"] += 1
-
-        await self.save_data()
-
-        role_given = await self.give_role_if_higher(
-            member,
-            reward
-        )
-
-        description = (
-            f"{self.text(user_id, 'reward')}\n"
-            f"{reward['emoji']} **{reward['name']}**\n"
-        )
-
-        if not role_given:
-            description += (
-                f"\n{self.text(user_id, 'current_higher')}\n"
-            )
-
-        if mega_bonus or ultra_bonus:
-            description += (
-                f"\n{self.text(user_id, 'bonus')}\n"
-            )
-
-            if mega_bonus:
-                description += (
-                    f"{self.text(user_id, 'mega_bonus')}\n"
+                user = self.get_user_data(
+                    user_id
                 )
 
-            if ultra_bonus:
-                description += (
-                    f"{self.text(user_id, 'ultra_bonus')}\n"
+                now = int(
+                    time.time()
                 )
 
-        description += (
-            f"\n📅 Next Daily Chest: "
-            f"<t:{user['daily_next']}:R>"
-        )
+                if user["daily_next"] > now:
 
-        embed = discord.Embed(
-            title=self.text(
-                user_id,
-                "daily_claimed"
-            ),
-            description=description,
-            color=discord.Color.green()
-        )
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "daily_unavailable",
+                            timestamp=f"<t:{user['daily_next']}:R>"
+                        ),
+                        embed=None,
+                        view=None
+                    )
 
-        view = self.MainView(
-            self,
-            user_id
-        )
+                    return
 
-        await interaction.edit_original_response(
-            embed=embed,
-            view=view
-        )
+                user["daily_next"] = (
+                    now + DAILY_COOLDOWN
+                )
+
+                reward = self.roll_role()
+
+                mega_bonus = (
+                    random.random() < 0.05
+                )
+
+                ultra_bonus = (
+                    random.random() < 0.01
+                )
+
+                if mega_bonus:
+                    user["mega_chests"] += 1
+
+                if ultra_bonus:
+                    user["ultra_chests"] += 1
+
+                await self.save_data()
+
+                role_given = await self.give_role_if_higher(
+                    member,
+                    reward
+                )
+
+                description = (
+                    f"{self.text(user_id, 'reward')}\n"
+                    f"{reward['emoji']} **{reward['name']}**\n"
+                )
+
+                if not role_given:
+
+                    description += (
+                        f"\n{self.text(user_id, 'current_higher')}\n"
+                    )
+
+                if mega_bonus or ultra_bonus:
+
+                    description += (
+                        f"\n{self.text(user_id, 'bonus')}\n"
+                    )
+
+                    if mega_bonus:
+
+                        description += (
+                            f"{self.text(user_id, 'mega_bonus')}\n"
+                        )
+
+                    if ultra_bonus:
+
+                        description += (
+                            f"{self.text(user_id, 'ultra_bonus')}\n"
+                        )
+
+                description += (
+                    f"\n📅 Next Daily Chest: "
+                    f"<t:{user['daily_next']}:R>"
+                )
+
+                embed = discord.Embed(
+                    title=self.text(
+                        user_id,
+                        "daily_claimed"
+                    ),
+                    description=description,
+                    color=discord.Color.green()
+                )
+
+                view = self.MainView(
+                    self,
+                    user_id
+                )
+
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=view
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error claiming daily "
+                f"for {user_id}: {repr(e)}"
+            )
+
+            try:
+
+                await interaction.edit_original_response(
+                    content=self.text(
+                        user_id,
+                        "error"
+                    ),
+                    embed=None,
+                    view=None
+                )
+
+            except Exception as edit_error:
+
+                print(
+                    f"❌ Failed to send daily error: "
+                    f"{repr(edit_error)}"
+                )
 
     # =================================================
     # WEEKLY
@@ -1491,76 +1951,222 @@ class Chests(commands.Cog):
         interaction,
         user_id
     ):
+
         await interaction.response.defer()
 
-        member = interaction.user
+        try:
 
-        if self.has_ultra_role(member):
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "weekly_block"
-                ),
-                embed=None,
-                view=None
+            async with self.open_lock:
+
+                member = interaction.user
+
+                if self.has_ultra_role(member):
+
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "weekly_block"
+                        ),
+                        embed=None,
+                        view=None
+                    )
+
+                    return
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                now = int(
+                    time.time()
+                )
+
+                if user["weekly_next"] > now:
+
+                    await interaction.edit_original_response(
+                        content=self.text(
+                            user_id,
+                            "weekly_unavailable",
+                            timestamp=f"<t:{user['weekly_next']}:R>"
+                        ),
+                        embed=None,
+                        view=None
+                    )
+
+                    return
+
+                user["weekly_next"] = (
+                    now + WEEKLY_COOLDOWN
+                )
+
+                if random.random() < 0.05:
+                    reward = 20
+                else:
+                    reward = random.randint(
+                        1,
+                        10
+                    )
+
+                user["chests"] += reward
+
+                await self.save_data()
+
+                embed = discord.Embed(
+                    title=self.text(
+                        user_id,
+                        "weekly_claimed"
+                    ),
+                    description=(
+                        f"🎁 **+{reward} Chest**\n\n"
+                        f"📆 Next Weekly Mega Chest: "
+                        f"<t:{user['weekly_next']}:R>"
+                    ),
+                    color=discord.Color.blue()
+                )
+
+                view = self.MainView(
+                    self,
+                    user_id
+                )
+
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=view
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error claiming weekly "
+                f"for {user_id}: {repr(e)}"
             )
-            return
 
-        user = self.get_user_data(user_id)
-        now = int(time.time())
+            try:
 
-        if user["weekly_next"] > now:
-            await interaction.edit_original_response(
-                content=self.text(
-                    user_id,
-                    "weekly_unavailable",
-                    timestamp=f"<t:{user['weekly_next']}:R>"
-                ),
-                embed=None,
-                view=None
-            )
-            return
+                await interaction.edit_original_response(
+                    content=self.text(
+                        user_id,
+                        "error"
+                    ),
+                    embed=None,
+                    view=None
+                )
 
-        user["weekly_next"] = now + WEEKLY_COOLDOWN
+            except Exception as edit_error:
 
-        if random.random() < 0.05:
-            reward = 20
-        else:
-            reward = random.randint(1, 10)
+                print(
+                    f"❌ Failed to send weekly error: "
+                    f"{repr(edit_error)}"
+                )
 
-        user["chests"] += reward
+    # =================================================
+    # LANGUAGE VIEW
+    # =================================================
 
-        await self.save_data()
+    class LanguageView(discord.ui.View):
 
-        embed = discord.Embed(
-            title=self.text(
-                user_id,
-                "weekly_claimed"
-            ),
-            description=(
-                f"🎁 **+{reward} Chest**\n\n"
-                f"📆 Next Weekly Mega Chest: "
-                f"<t:{user['weekly_next']}:R>"
-            ),
-            color=discord.Color.blue()
-        )
-
-        view = self.MainView(
+        def __init__(
             self,
-            user_id
-        )
+            cog,
+            owner_id
+        ):
 
-        await interaction.edit_original_response(
-            embed=embed,
-            view=view
+            super().__init__(timeout=300)
+
+            self.cog = cog
+            self.owner_id = owner_id
+
+        @discord.ui.button(
+            label="🇬🇧 EN",
+            style=discord.ButtonStyle.primary
         )
+        async def english(
+            self,
+            interaction,
+            button
+        ):
+
+            if interaction.user.id != self.owner_id:
+
+                await interaction.response.send_message(
+                    self.cog.text(
+                        self.owner_id,
+                        "not_owner"
+                    ),
+                    ephemeral=True
+                )
+
+                return
+
+            user = self.cog.get_user_data(
+                self.owner_id
+            )
+
+            user["language"] = "en"
+
+            await self.cog.save_data()
+
+            view = self.cog.MainView(
+                self.cog,
+                self.owner_id
+            )
+
+            await interaction.response.edit_message(
+                content=f"🎁 Chests {interaction.user.mention}",
+                embed=view.main_embed(),
+                view=view
+            )
+
+        @discord.ui.button(
+            label="🇷🇺 RU",
+            style=discord.ButtonStyle.primary
+        )
+        async def russian(
+            self,
+            interaction,
+            button
+        ):
+
+            if interaction.user.id != self.owner_id:
+
+                await interaction.response.send_message(
+                    self.cog.text(
+                        self.owner_id,
+                        "not_owner"
+                    ),
+                    ephemeral=True
+                )
+
+                return
+
+            user = self.cog.get_user_data(
+                self.owner_id
+            )
+
+            user["language"] = "ru"
+
+            await self.cog.save_data()
+
+            view = self.cog.MainView(
+                self.cog,
+                self.owner_id
+            )
+
+            await interaction.response.edit_message(
+                content=f"🎁 Сундуки {interaction.user.mention}",
+                embed=view.main_embed(),
+                view=view
+            )
 
     # =================================================
     # COMMAND
     # =================================================
 
     @commands.command(name="chests")
-    async def chests_command(self, ctx):
+    async def chests_command(
+        self,
+        ctx
+    ):
 
         user = self.get_user_data(
             ctx.author.id
@@ -1604,11 +2210,14 @@ class Chests(commands.Cog):
             )
 
         try:
+
             await ctx.message.delete()
+
         except (
             discord.Forbidden,
             discord.HTTPException
         ):
+
             pass
 
 
