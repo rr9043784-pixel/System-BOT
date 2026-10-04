@@ -3,6 +3,7 @@ import json
 import random
 import asyncio
 import tempfile
+import time
 
 import discord
 import numpy as np
@@ -155,9 +156,6 @@ class Chests(commands.Cog):
                 f"❌ Failed to load {DATA_FILE}: {e}"
             )
 
-            # IMPORTANT:
-            # Never overwrite potentially useful data
-            # after a loading error.
             return {
                 "users": {}
             }
@@ -369,8 +367,8 @@ class Chests(commands.Cog):
             },
 
             "chests_title": {
-                "en": "🎁 {name}'s Chests",
-                "ru": "🎁 Сундуки {name}"
+                "en": "🎁 Chests",
+                "ru": "🎁 Сундуки"
             },
 
             "language": {
@@ -695,7 +693,6 @@ class Chests(commands.Cog):
             return False
 
 
-        # Remove lower rarity roles.
         roles_to_remove = []
 
         for index in range(
@@ -866,8 +863,12 @@ class Chests(commands.Cog):
             )
 
             await interaction.response.edit_message(
+                content=f"<@{self.owner_id}>",
                 embed=view.main_embed(),
-                view=view
+                view=view,
+                allowed_mentions=discord.AllowedMentions(
+                    users=True
+                )
             )
 
 
@@ -900,8 +901,12 @@ class Chests(commands.Cog):
             )
 
             await interaction.response.edit_message(
+                content=f"<@{self.owner_id}>",
                 embed=view.main_embed(),
-                view=view
+                view=view,
+                allowed_mentions=discord.AllowedMentions(
+                    users=True
+                )
             )
 
 
@@ -969,28 +974,6 @@ class Chests(commands.Cog):
 
             user = self.cog.get_user_data(
                 self.owner_id
-            )
-
-            member = None
-
-            for guild in self.cog.bot.guilds:
-
-                member = guild.get_member(
-                    self.owner_id
-                )
-
-                if member:
-                    break
-
-
-            name = (
-                member.mention
-                if member
-                else f"<@{self.owner_id}>"
-            )
-
-            now = int(
-                asyncio.get_running_loop().time()
             )
 
             import time
@@ -1062,8 +1045,7 @@ class Chests(commands.Cog):
             return discord.Embed(
                 title=self.cog.text(
                     self.owner_id,
-                    "chests_title",
-                    name=name
+                    "chests_title"
                 ),
                 description=description,
                 color=discord.Color.blurple()
@@ -1690,10 +1672,6 @@ class Chests(commands.Cog):
             return
 
 
-        # =================================================
-        # Open All
-        # =================================================
-
         if open_all:
 
             count = user["chests"]
@@ -1719,10 +1697,6 @@ class Chests(commands.Cog):
 
             return
 
-
-        # =================================================
-        # Open One
-        # =================================================
 
         user["chests"] -= 1
 
@@ -1833,10 +1807,6 @@ class Chests(commands.Cog):
             )
 
 
-        # =================================================
-        # Exact Multinomial Role Counts
-        # =================================================
-
         probabilities = np.array(
             [
                 reward["chance"] / 100
@@ -1850,10 +1820,6 @@ class Chests(commands.Cog):
             probabilities
         )
 
-
-        # =================================================
-        # Bonus Counts
-        # =================================================
 
         mega_count = int(
             np.random.binomial(
@@ -1880,10 +1846,6 @@ class Chests(commands.Cog):
         await self.save_data()
 
 
-        # =================================================
-        # Highest Role Rolled
-        # =================================================
-
         highest_index = -1
 
         for index, amount in enumerate(
@@ -1902,10 +1864,6 @@ class Chests(commands.Cog):
                 ROLE_REWARDS[highest_index]
             )
 
-
-        # =================================================
-        # Result
-        # =================================================
 
         lines = [
             self.text(
@@ -1952,20 +1910,6 @@ class Chests(commands.Cog):
             lines.append(
                 f"{reward['emoji']} "
                 f"{reward['name']} × {int(amount)}"
-            )
-
-
-        if mega_count:
-
-            lines.append(
-                f"💎 Mega Chest × {mega_count}"
-            )
-
-
-        if ultra_count:
-
-            lines.append(
-                f"⚡ Ultra Chest × {ultra_count}"
             )
 
 
@@ -2031,10 +1975,6 @@ class Chests(commands.Cog):
 
         count = user["mega_chests"]
 
-
-        # =================================================
-        # Open All
-        # =================================================
 
         if open_all:
 
@@ -2107,10 +2047,6 @@ class Chests(commands.Cog):
 
             return
 
-
-        # =================================================
-        # Open One
-        # =================================================
 
         user["mega_chests"] -= 1
 
@@ -2205,10 +2141,6 @@ class Chests(commands.Cog):
         count = user["ultra_chests"]
 
 
-        # =================================================
-        # Open All
-        # =================================================
-
         if open_all:
 
             user["ultra_chests"] = 0
@@ -2280,10 +2212,6 @@ class Chests(commands.Cog):
 
             return
 
-
-        # =================================================
-        # Open One
-        # =================================================
 
         user["ultra_chests"] -= 1
 
@@ -2360,8 +2288,6 @@ class Chests(commands.Cog):
             user_id
         )
 
-        import time
-
         now = int(
             time.time()
         )
@@ -2389,7 +2315,6 @@ class Chests(commands.Cog):
         await self.save_data()
 
 
-        # Daily uses normal Chest mechanics.
         reward = self.roll_role()
 
         mega_bonus = (
@@ -2509,8 +2434,6 @@ class Chests(commands.Cog):
             user_id
         )
 
-        import time
-
         now = int(
             time.time()
         )
@@ -2615,8 +2538,12 @@ class Chests(commands.Cog):
             )
 
             await ctx.send(
+                content=f"<@{ctx.author.id}>",
                 embed=embed,
-                view=view
+                view=view,
+                allowed_mentions=discord.AllowedMentions(
+                    users=True
+                )
             )
 
         else:
@@ -2627,8 +2554,12 @@ class Chests(commands.Cog):
             )
 
             await ctx.send(
+                content=f"<@{ctx.author.id}>",
                 embed=view.main_embed(),
-                view=view
+                view=view,
+                allowed_mentions=discord.AllowedMentions(
+                    users=True
+                )
             )
 
 
@@ -2660,4 +2591,4 @@ async def setup(bot):
 
     print(
         "✅ Chests cog loaded!"
-) 
+        )
