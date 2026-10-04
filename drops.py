@@ -310,14 +310,6 @@ class ChestDropView(discord.ui.View):
     def chest_key(self):
 
         return {
-            "normal": "chests",
-            "mega": "mega_chests",
-            "ultra": "ultra_chests"
-        }[self.chest_type]
-
-    def chest_add_key(self):
-
-        return {
             "normal": "chest",
             "mega": "mega",
             "ultra": "ultra"
@@ -360,7 +352,6 @@ class ChestDropView(discord.ui.View):
             description += "\n\n**Claimed by:**"
 
             for name in self.claimed_names[:10]:
-
                 description += f"\n• {name}"
 
         return discord.Embed(
@@ -451,7 +442,7 @@ class ChestDropView(discord.ui.View):
             success = await chests.add_chests(
                 user_id,
                 self.amount,
-                self.chest_add_key()
+                self.chest_key()
             )
 
             if not success:
@@ -617,9 +608,7 @@ class Drops(commands.Cog):
         if chest_type not in aliases:
             return
 
-        chest_type = aliases[
-            chest_type
-        ]
+        chest_type = aliases[chest_type]
 
         try:
 
@@ -641,19 +630,58 @@ class Drops(commands.Cog):
 
         if target is not None:
 
-            if isinstance(
-                target,
-                discord.Member
-            ):
+            if target.startswith("<@&") and target.endswith(">"):
 
-                target_user = target
+                try:
 
-            elif isinstance(
-                target,
-                discord.Role
-            ):
+                    role_id = int(
+                        target[3:-1]
+                    )
 
-                target_role = target
+                    target_role = ctx.guild.get_role(
+                        role_id
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    return
+
+                if target_role is None:
+                    return
+
+            elif target.startswith("<@") and target.endswith(">"):
+
+                try:
+
+                    user_id = int(
+                        target.replace(
+                            "<@!",
+                            ""
+                        ).replace(
+                            "<@",
+                            ""
+                        ).replace(
+                            ">",
+                            ""
+                        )
+                    )
+
+                    target_user = ctx.guild.get_member(
+                        user_id
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    return
+
+                if target_user is None:
+                    return
 
             else:
 
