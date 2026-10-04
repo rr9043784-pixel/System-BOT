@@ -175,7 +175,6 @@ class Chests(commands.Cog):
         lang = self.language(user_id)
 
         texts = {
-
             "chests_title": {
                 "en": "🎁 Chests",
                 "ru": "🎁 Сундуки"
@@ -449,7 +448,6 @@ class Chests(commands.Cog):
                     *roles_to_remove,
                     reason="Chest reward upgrade"
                 )
-
             except discord.HTTPException:
                 pass
 
@@ -461,12 +459,10 @@ class Chests(commands.Cog):
             return False
 
         try:
-
             await member.add_roles(
                 new_role,
                 reason="Chest reward"
             )
-
             return True
 
         except discord.HTTPException:
@@ -570,17 +566,11 @@ class Chests(commands.Cog):
             )
 
             description = (
-
                 f"{self.cog.text(self.owner_id, 'language')}\n\n"
-
                 f"{self.cog.text(self.owner_id, 'chest', value=user['chests'])}\n"
-
                 f"{self.cog.text(self.owner_id, 'mega', value=user['mega_chests'])}\n"
-
                 f"{self.cog.text(self.owner_id, 'ultra', value=user['ultra_chests'])}\n\n"
-
                 f"**{self.cog.text(self.owner_id, 'total', value=total)}**\n\n"
-
                 f"{daily_text}\n"
                 f"{weekly_text}"
             )
@@ -608,12 +598,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.ChestView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.embed(),
                 view=view
             )
@@ -632,12 +624,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.MegaView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.embed(),
                 view=view
             )
@@ -656,12 +650,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.UltraView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.embed(),
                 view=view
             )
@@ -826,12 +822,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.MainView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.main_embed(),
                 view=view
             )
@@ -959,12 +957,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.MainView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.main_embed(),
                 view=view
             )
@@ -1092,12 +1092,14 @@ class Chests(commands.Cog):
             if not await self.valid(interaction):
                 return
 
+            await interaction.response.defer()
+
             view = self.cog.MainView(
                 self.cog,
                 self.owner_id
             )
 
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 embed=view.main_embed(),
                 view=view
             )
@@ -1131,7 +1133,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user = self.get_user_data(
@@ -1148,7 +1149,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 if open_all:
@@ -1221,13 +1221,11 @@ class Chests(commands.Cog):
                     )
 
                     if mega_bonus:
-
                         description += (
                             f"{self.text(user_id, 'mega_bonus')}\n"
                         )
 
                     if ultra_bonus:
-
                         description += (
                             f"{self.text(user_id, 'ultra_bonus')}\n"
                         )
@@ -1258,12 +1256,11 @@ class Chests(commands.Cog):
         except Exception as e:
 
             print(
-                f"❌ Error opening normal chest for "
-                f"{user_id}: {repr(e)}"
+                f"❌ Error opening normal chest "
+                f"for {user_id}: {repr(e)}"
             )
 
             try:
-
                 await interaction.edit_original_response(
                     content=self.text(
                         user_id,
@@ -1272,9 +1269,7 @@ class Chests(commands.Cog):
                     embed=None,
                     view=None
                 )
-
             except Exception as edit_error:
-
                 print(
                     f"❌ Failed to send chest error: "
                     f"{repr(edit_error)}"
@@ -1304,8 +1299,6 @@ class Chests(commands.Cog):
                 color=discord.Color.red()
             )
 
-        # Normalize probabilities so NumPy always
-        # receives a mathematically exact distribution.
         probabilities = np.array(
             [
                 reward["chance"]
@@ -1316,13 +1309,11 @@ class Chests(commands.Cog):
 
         probabilities /= probabilities.sum()
 
-        # Generate all role rewards at once.
         role_counts = np.random.multinomial(
             count,
             probabilities
         )
 
-        # Mega and Ultra bonuses are independent.
         mega_count = int(
             np.random.binomial(
                 count,
@@ -1371,13 +1362,11 @@ class Chests(commands.Cog):
         ]
 
         if mega_count:
-
             lines.append(
                 f"💎 Mega Chest × {mega_count}"
             )
 
         if ultra_count:
-
             lines.append(
                 f"⚡ Ultra Chest × {ultra_count}"
             )
@@ -1445,7 +1434,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user = self.get_user_data(
@@ -1462,7 +1450,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 count = int(
@@ -1480,9 +1467,7 @@ class Chests(commands.Cog):
                         )
                     )
 
-                    normal_count = (
-                        count - lucky
-                    )
+                    normal_count = count - lucky
 
                     normal_rewards = 0
 
@@ -1583,7 +1568,6 @@ class Chests(commands.Cog):
             )
 
             try:
-
                 await interaction.edit_original_response(
                     content=self.text(
                         user_id,
@@ -1592,9 +1576,7 @@ class Chests(commands.Cog):
                     embed=None,
                     view=None
                 )
-
             except Exception as edit_error:
-
                 print(
                     f"❌ Failed to send mega error: "
                     f"{repr(edit_error)}"
@@ -1629,7 +1611,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user = self.get_user_data(
@@ -1646,7 +1627,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 count = int(
@@ -1664,9 +1644,7 @@ class Chests(commands.Cog):
                         )
                     )
 
-                    normal_count = (
-                        count - lucky
-                    )
+                    normal_count = count - lucky
 
                     normal_rewards = 0
 
@@ -1767,7 +1745,6 @@ class Chests(commands.Cog):
             )
 
             try:
-
                 await interaction.edit_original_response(
                     content=self.text(
                         user_id,
@@ -1776,9 +1753,7 @@ class Chests(commands.Cog):
                     embed=None,
                     view=None
                 )
-
             except Exception as edit_error:
-
                 print(
                     f"❌ Failed to send ultra error: "
                     f"{repr(edit_error)}"
@@ -1812,7 +1787,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user = self.get_user_data(
@@ -1834,7 +1808,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user["daily_next"] = (
@@ -1882,13 +1855,11 @@ class Chests(commands.Cog):
                     )
 
                     if mega_bonus:
-
                         description += (
                             f"{self.text(user_id, 'mega_bonus')}\n"
                         )
 
                     if ultra_bonus:
-
                         description += (
                             f"{self.text(user_id, 'ultra_bonus')}\n"
                         )
@@ -1925,7 +1896,6 @@ class Chests(commands.Cog):
             )
 
             try:
-
                 await interaction.edit_original_response(
                     content=self.text(
                         user_id,
@@ -1934,9 +1904,7 @@ class Chests(commands.Cog):
                     embed=None,
                     view=None
                 )
-
             except Exception as edit_error:
-
                 print(
                     f"❌ Failed to send daily error: "
                     f"{repr(edit_error)}"
@@ -1970,7 +1938,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user = self.get_user_data(
@@ -1992,7 +1959,6 @@ class Chests(commands.Cog):
                         embed=None,
                         view=None
                     )
-
                     return
 
                 user["weekly_next"] = (
@@ -2042,7 +2008,6 @@ class Chests(commands.Cog):
             )
 
             try:
-
                 await interaction.edit_original_response(
                     content=self.text(
                         user_id,
@@ -2051,9 +2016,7 @@ class Chests(commands.Cog):
                     embed=None,
                     view=None
                 )
-
             except Exception as edit_error:
-
                 print(
                     f"❌ Failed to send weekly error: "
                     f"{repr(edit_error)}"
@@ -2095,7 +2058,6 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
-
                 return
 
             user = self.cog.get_user_data(
@@ -2136,7 +2098,6 @@ class Chests(commands.Cog):
                     ),
                     ephemeral=True
                 )
-
                 return
 
             user = self.cog.get_user_data(
