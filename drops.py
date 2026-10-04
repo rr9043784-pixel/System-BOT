@@ -496,7 +496,6 @@ class ChestDropView(discord.ui.View):
 class Drops(commands.Cog):
 
     def __init__(self, bot):
-
         self.bot = bot
 
 
@@ -560,11 +559,9 @@ class Drops(commands.Cog):
         )
 
         try:
-
             await ctx.message.delete()
 
         except Exception:
-
             pass
 
 
@@ -578,8 +575,7 @@ class Drops(commands.Cog):
         ctx,
         chest_type=None,
         amount=None,
-        quantity=None,
-        target=None
+        quantity=None
     ):
 
         if ctx.author.id != OWNER_ID:
@@ -628,64 +624,25 @@ class Drops(commands.Cog):
         target_user = None
         target_role = None
 
-        if target is not None:
+        # =========================
+        # USER MENTION
+        # =========================
 
-            if target.startswith("<@&") and target.endswith(">"):
+        if ctx.message.mentions:
 
-                try:
+            target_user = ctx.message.mentions[0]
 
-                    role_id = int(
-                        target[3:-1]
-                    )
+        # =========================
+        # ROLE MENTION
+        # =========================
 
-                    target_role = ctx.guild.get_role(
-                        role_id
-                    )
+        elif ctx.message.role_mentions:
 
-                except (
-                    TypeError,
-                    ValueError
-                ):
+            target_role = ctx.message.role_mentions[0]
 
-                    return
-
-                if target_role is None:
-                    return
-
-            elif target.startswith("<@") and target.endswith(">"):
-
-                try:
-
-                    user_id = int(
-                        target.replace(
-                            "<@!",
-                            ""
-                        ).replace(
-                            "<@",
-                            ""
-                        ).replace(
-                            ">",
-                            ""
-                        )
-                    )
-
-                    target_user = ctx.guild.get_member(
-                        user_id
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    return
-
-                if target_user is None:
-                    return
-
-            else:
-
-                return
+        # =========================
+        # CREATE DROP
+        # =========================
 
         view = ChestDropView(
             bot=self.bot,
@@ -829,4 +786,4 @@ async def setup(bot):
 
     print(
         "✅ Drops cog loaded!"
-    )
+            )
