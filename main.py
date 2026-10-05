@@ -24,7 +24,7 @@ OWNER_ID = 1176149190192152626
 
 STATS_DATA_FILE = "stats_data.json"
 
-STATS_CHANNEL_ID = 1539734753736134856
+STATS_CHANNEL_ID = 1542994435472760953
 
 
 # =================================================
@@ -79,12 +79,15 @@ def load_stats_data():
             data = json.load(f)
 
             if not data.get("channel_id"):
-
                 data["channel_id"] = STATS_CHANNEL_ID
 
             return data
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            f"❌ Failed to load stats_data.json: {e}"
+        )
 
         return {
             "message_id": None,
@@ -133,7 +136,7 @@ class TournamentBot(commands.Bot):
     async def setup_hook(self):
 
         # =================================================
-        # Load message.py
+        # message.py
         # =================================================
 
         try:
@@ -154,7 +157,7 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
-        # Load ticket.py
+        # ticket.py
         # =================================================
 
         try:
@@ -175,7 +178,7 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
-        # Load chests.py
+        # chests.py
         # =================================================
 
         try:
@@ -196,7 +199,7 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
-        # Load drops.py
+        # drops.py
         # =================================================
 
         try:
@@ -242,6 +245,33 @@ bot = TournamentBot(
 
 
 # =================================================
+# Presence
+# =================================================
+
+async def set_bot_presence():
+
+    try:
+
+        await bot.change_presence(
+            status=discord.Status.idle,
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name="Over server security 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
+            )
+        )
+
+        print(
+            "🟡 Bot status set to IDLE."
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Failed to set bot status: {e}"
+        )
+
+
+# =================================================
 # Bot Ready
 # =================================================
 
@@ -252,21 +282,7 @@ async def on_ready():
         f"🤖 Logged in as {bot.user}"
     )
 
-    # =================================================
-    # Status
-    # =================================================
-
-    await bot.change_presence(
-        status=discord.Status.idle,
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name="Over server security 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
-        )
-    )
-
-    # =================================================
-    # Start Stats
-    # =================================================
+    await set_bot_presence()
 
     if not update_stats_message.is_running():
 
@@ -291,7 +307,7 @@ def owner_only():
 
 
 # =================================================
-# STATS
+# STATS TEXT
 # =================================================
 
 def build_stats_text(guild: discord.Guild):
@@ -491,19 +507,70 @@ def build_stats_text(guild: discord.Guild):
     )
 
 
+# =================================================
+# Get Stats Channel
+# =================================================
+
+async def get_stats_channel(guild: discord.Guild):
+
+    channel = guild.get_channel(
+        STATS_CHANNEL_ID
+    )
+
+    if channel:
+        return channel
+
+    try:
+
+        channel = await bot.fetch_channel(
+            STATS_CHANNEL_ID
+        )
+
+        return channel
+
+    except Exception as e:
+
+        print(
+            f"❌ Could not find stats channel {STATS_CHANNEL_ID}: {e}"
+        )
+
+        return None
+
+
+# =================================================
+# Update Stats
+# =================================================
+
 async def update_stats_for_guild(
     guild: discord.Guild
 ):
 
     global stats_data
 
-    if not guild:
+    if guild is None:
         return
 
 
     text = build_stats_text(
         guild
     )
+
+
+    # =================================================
+    # Get Stats Channel
+    # =================================================
+
+    channel = await get_stats_channel(
+        guild
+    )
+
+    if channel is None:
+
+        print(
+            "❌ Stats channel was not found."
+        )
+
+        return
 
 
     # =================================================
@@ -514,62 +581,59 @@ async def update_stats_for_guild(
         "message_id"
     )
 
-    channel_id = stats_data.get(
-        "channel_id"
-    )
-
-    guild_id = stats_data.get(
+    stored_guild_id = stats_data.get(
         "guild_id"
     )
 
 
     if (
         message_id
-        and channel_id
-        and guild_id == guild.id
+        and stored_guild_id == guild.id
     ):
 
-        channel = guild.get_channel(
-            channel_id
-        )
+        try:
 
-        if channel:
+            message = await channel.fetch_message(
+                message_id
+            )
 
-            try:
+            await message.edit(
+                content=text
+            )
 
-                message = await channel.fetch_message(
-                    message_id
-                )
+            print(
+                "🔄 Stats message updated."
+            )
 
-                await message.edit(
-                    content=text
-                )
+            return
 
-                return
+        except discord.NotFound:
 
-            except discord.NotFound:
+            print(
+                "⚠️ Old stats message was not found. Creating a new one."
+            )
 
-                stats_data["message_id"] = None
+            stats_data["message_id"] = None
 
-            except discord.HTTPException:
+        except discord.Forbidden:
 
-                return
+            print(
+                "❌ No permission to edit stats message."
+            )
+
+            return
+
+        except discord.HTTPException as e:
+
+            print(
+                f"❌ Failed to edit stats message: {e}"
+            )
+
+            return
 
 
     # =================================================
-    # Stats Channel
-    # =================================================
-
-    channel = guild.get_channel(
-        STATS_CHANNEL_ID
-    )
-
-    if channel is None:
-        return
-
-
-    # =================================================
-    # Create New Message
+    # Create New Stats Message
     # =================================================
 
     try:
@@ -580,7 +644,7 @@ async def update_stats_for_guild(
 
         stats_data = {
             "message_id": message.id,
-            "channel_id": channel.id,
+            "channel_id": STATS_CHANNEL_ID,
             "guild_id": guild.id
         }
 
@@ -588,12 +652,21 @@ async def update_stats_for_guild(
             stats_data
         )
 
-    except (
-        discord.Forbidden,
-        discord.HTTPException
-    ):
+        print(
+            f"✅ Stats message created: {message.id}"
+        )
 
-        pass
+    except discord.Forbidden:
+
+        print(
+            "❌ Bot has no permission to send messages in the stats channel."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            f"❌ Failed to create stats message: {e}"
+        )
 
 
 # =================================================
@@ -616,6 +689,8 @@ async def on_message(message):
         if message.author.id != OWNER_ID:
             return
 
+
+        # Delete command
         try:
 
             await message.delete()
@@ -632,6 +707,16 @@ async def on_message(message):
             return
 
 
+        # Always save current server
+        stats_data["guild_id"] = message.guild.id
+        stats_data["channel_id"] = STATS_CHANNEL_ID
+
+        save_stats_data(
+            stats_data
+        )
+
+
+        # Create / update stats
         await update_stats_for_guild(
             message.guild
         )
@@ -656,6 +741,10 @@ async def on_message(message):
     minutes=1
 )
 async def update_stats_message():
+
+    # Keep status yellow
+    await set_bot_presence()
+
 
     guild_id = stats_data.get(
         "guild_id"
