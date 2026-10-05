@@ -24,6 +24,8 @@ OWNER_ID = 1176149190192152626
 
 STATS_DATA_FILE = "stats_data.json"
 
+STATS_CHANNEL_ID = 1539734753736134856
+
 
 # =================================================
 # Flask
@@ -63,7 +65,7 @@ def load_stats_data():
 
         return {
             "message_id": None,
-            "channel_id": None,
+            "channel_id": STATS_CHANNEL_ID,
             "guild_id": None
         }
 
@@ -75,13 +77,19 @@ def load_stats_data():
             encoding="utf-8"
         ) as f:
 
-            return json.load(f)
+            data = json.load(f)
+
+            if not data.get("channel_id"):
+
+                data["channel_id"] = STATS_CHANNEL_ID
+
+            return data
 
     except Exception:
 
         return {
             "message_id": None,
-            "channel_id": None,
+            "channel_id": STATS_CHANNEL_ID,
             "guild_id": None
         }
 
@@ -118,6 +126,7 @@ stats_data = load_stats_data()
 intents = discord.Intents.default()
 
 intents.message_content = True
+intents.members = True
 
 
 class TournamentBot(commands.Bot):
@@ -244,6 +253,22 @@ async def on_ready():
         f"🤖 Logged in as {bot.user}"
     )
 
+    # =================================================
+    # Status
+    # =================================================
+
+    await bot.change_presence(
+        status=discord.Status.idle,
+        activity=discord.Activity(
+            type=discord.ActivityType.watching,
+            name="over server security 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
+        )
+    )
+
+    # =================================================
+    # Start Stats
+    # =================================================
+
     if not update_stats_message.is_running():
 
         update_stats_message.start()
@@ -337,7 +362,10 @@ def build_stats_text(guild: discord.Guild):
 
             mobile += 1
 
-        elif "desktop" in client_status or "web" in client_status:
+        elif (
+            "desktop" in client_status
+            or "web" in client_status
+        ):
 
             pc += 1
 
@@ -471,7 +499,6 @@ async def update_stats_for_guild(
     global stats_data
 
     if not guild:
-
         return
 
 
@@ -481,7 +508,7 @@ async def update_stats_for_guild(
 
 
     # =================================================
-    # Existing message
+    # Existing Message
     # =================================================
 
     message_id = stats_data.get(
@@ -521,51 +548,32 @@ async def update_stats_for_guild(
 
                 return
 
-            except (
-                discord.NotFound,
-                discord.HTTPException
-            ):
+            except discord.NotFound:
 
-                pass
+                stats_data["message_id"] = None
+
+            except discord.HTTPException:
+
+                return
 
 
     # =================================================
-    # Create new stats message
+    # Stats Channel
     # =================================================
 
-    channel = None
-
-    if channel_id:
-
-        channel = guild.get_channel(
-            channel_id
-        )
-
-
-    if channel is None:
-
-        channel = guild.system_channel
-
-
-    if channel is None:
-
-        text_channels = [
-            channel
-            for channel in guild.text_channels
-            if channel.permissions_for(
-                guild.me
-            ).send_messages
-        ]
-
-        if text_channels:
-
-            channel = text_channels[0]
+    channel = guild.get_channel(
+        STATS_CHANNEL_ID
+    )
 
 
     if channel is None:
 
         return
 
+
+    # =================================================
+    # Create New Message
+    # =================================================
 
     try:
 
@@ -591,26 +599,16 @@ async def update_stats_for_guild(
         pass
 
 
+# =================================================
+# !stats
+# =================================================
+
 @bot.command(
     name="stats"
 )
-async def stats_command(
-    ctx,
-    option=None
-):
+async def stats_command(ctx):
 
     if ctx.author.id != OWNER_ID:
-
-        return
-
-
-    if option is None:
-
-        return
-
-
-    if option.lower() != "bot":
-
         return
 
 
@@ -627,7 +625,6 @@ async def stats_command(
 
 
     if ctx.guild is None:
-
         return
 
 
@@ -635,6 +632,10 @@ async def stats_command(
         ctx.guild
     )
 
+
+# =================================================
+# Stats Auto Update Every 1 Minute
+# =================================================
 
 @tasks.loop(
     minutes=1
@@ -646,7 +647,6 @@ async def update_stats_message():
     )
 
     if not guild_id:
-
         return
 
 
@@ -655,7 +655,6 @@ async def update_stats_message():
     )
 
     if not guild:
-
         return
 
 
