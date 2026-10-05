@@ -78,8 +78,8 @@ def load_stats_data():
 
             data = json.load(f)
 
-            if not data.get("channel_id"):
-                data["channel_id"] = STATS_CHANNEL_ID
+            # Always use the current stats channel
+            data["channel_id"] = STATS_CHANNEL_ID
 
             return data
 
@@ -261,13 +261,13 @@ async def set_bot_presence():
         )
 
         print(
-            "🟡 Bot status set to IDLE."
+            "🟡 Presence: IDLE | Watching Over server security"
         )
 
     except Exception as e:
 
         print(
-            f"❌ Failed to set bot status: {e}"
+            f"❌ Failed to set bot presence: {e}"
         )
 
 
@@ -511,14 +511,7 @@ def build_stats_text(guild: discord.Guild):
 # Get Stats Channel
 # =================================================
 
-async def get_stats_channel(guild: discord.Guild):
-
-    channel = guild.get_channel(
-        STATS_CHANNEL_ID
-    )
-
-    if channel:
-        return channel
+async def get_stats_channel():
 
     try:
 
@@ -526,15 +519,44 @@ async def get_stats_channel(guild: discord.Guild):
             STATS_CHANNEL_ID
         )
 
+        if not isinstance(
+            channel,
+            discord.TextChannel
+        ):
+
+            print(
+                f"❌ Stats channel {STATS_CHANNEL_ID} is not a text channel."
+            )
+
+            return None
+
         return channel
+
+    except discord.NotFound:
+
+        print(
+            f"❌ Stats channel {STATS_CHANNEL_ID} does not exist."
+        )
+
+    except discord.Forbidden:
+
+        print(
+            f"❌ Bot cannot access stats channel {STATS_CHANNEL_ID}."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            f"❌ Failed to fetch stats channel: {e}"
+        )
 
     except Exception as e:
 
         print(
-            f"❌ Could not find stats channel {STATS_CHANNEL_ID}: {e}"
+            f"❌ Stats channel error: {e}"
         )
 
-        return None
+    return None
 
 
 # =================================================
@@ -560,14 +582,12 @@ async def update_stats_for_guild(
     # Get Stats Channel
     # =================================================
 
-    channel = await get_stats_channel(
-        guild
-    )
+    channel = await get_stats_channel()
 
     if channel is None:
 
         print(
-            "❌ Stats channel was not found."
+            "❌ Statistics message cannot be created because the channel was not found."
         )
 
         return
@@ -581,9 +601,22 @@ async def update_stats_for_guild(
         "message_id"
     )
 
+    stored_channel_id = stats_data.get(
+        "channel_id"
+    )
+
     stored_guild_id = stats_data.get(
         "guild_id"
     )
+
+
+    # If channel changed, forget old message
+    if stored_channel_id != STATS_CHANNEL_ID:
+
+        message_id = None
+
+        stats_data["message_id"] = None
+        stats_data["channel_id"] = STATS_CHANNEL_ID
 
 
     if (
@@ -610,7 +643,7 @@ async def update_stats_for_guild(
         except discord.NotFound:
 
             print(
-                "⚠️ Old stats message was not found. Creating a new one."
+                "⚠️ Old stats message not found. Creating a new one."
             )
 
             stats_data["message_id"] = None
@@ -618,7 +651,7 @@ async def update_stats_for_guild(
         except discord.Forbidden:
 
             print(
-                "❌ No permission to edit stats message."
+                "❌ Bot has no permission to edit the stats message."
             )
 
             return
@@ -668,6 +701,12 @@ async def update_stats_for_guild(
             f"❌ Failed to create stats message: {e}"
         )
 
+    except Exception as e:
+
+        print(
+            f"❌ Unexpected stats error: {e}"
+        )
+
 
 # =================================================
 # !my stats bot
@@ -690,6 +729,10 @@ async def on_message(message):
             return
 
 
+        if message.guild is None:
+            return
+
+
         # Delete command
         try:
 
@@ -703,20 +746,24 @@ async def on_message(message):
             pass
 
 
-        if message.guild is None:
-            return
-
-
-        # Always save current server
+        # Save current guild
         stats_data["guild_id"] = message.guild.id
         stats_data["channel_id"] = STATS_CHANNEL_ID
+
+        # Reset old message because channel ID changed
+        stats_data["message_id"] = None
 
         save_stats_data(
             stats_data
         )
 
 
-        # Create / update stats
+        print(
+            f"📊 Creating stats in channel {STATS_CHANNEL_ID}..."
+        )
+
+
+        # Create stats
         await update_stats_for_guild(
             message.guild
         )
@@ -734,6 +781,24 @@ async def on_message(message):
 
 
 # =================================================
+# Presence Auto Refresh
+# =================================================
+
+@tasks.loop(
+    seconds=10
+)
+async def update_presence():
+
+    await set_bot_presence()
+
+
+@update_presence.before_loop
+async def before_presence_loop():
+
+    await bot.wait_until_ready()
+
+
+# =================================================
 # Stats Auto Update Every 1 Minute
 # =================================================
 
@@ -741,10 +806,6 @@ async def on_message(message):
     minutes=1
 )
 async def update_stats_message():
-
-    # Keep status yellow
-    await set_bot_presence()
-
 
     guild_id = stats_data.get(
         "guild_id"
@@ -972,6 +1033,13 @@ Thread(
     target=run_flask,
     daemon=True
 ).start()
+
+
+# =================================================
+# Start Presence Loop
+# =================================================
+
+update_presence.start()
 
 
 # =================================================
