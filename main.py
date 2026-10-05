@@ -78,7 +78,6 @@ def load_stats_data():
 
             data = json.load(f)
 
-            # Always use the current stats channel
             data["channel_id"] = STATS_CHANNEL_ID
 
             return data
@@ -135,10 +134,7 @@ class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
-        # =================================================
         # message.py
-        # =================================================
-
         try:
 
             await self.load_extension(
@@ -156,10 +152,7 @@ class TournamentBot(commands.Bot):
             )
 
 
-        # =================================================
         # ticket.py
-        # =================================================
-
         try:
 
             await self.load_extension(
@@ -177,10 +170,7 @@ class TournamentBot(commands.Bot):
             )
 
 
-        # =================================================
         # chests.py
-        # =================================================
-
         try:
 
             await self.load_extension(
@@ -198,10 +188,7 @@ class TournamentBot(commands.Bot):
             )
 
 
-        # =================================================
         # drops.py
-        # =================================================
-
         try:
 
             await self.load_extension(
@@ -219,10 +206,7 @@ class TournamentBot(commands.Bot):
             )
 
 
-        # =================================================
-        # Sync Slash Commands
-        # =================================================
-
+        # Sync slash commands
         try:
 
             await self.tree.sync()
@@ -256,7 +240,7 @@ async def set_bot_presence():
             status=discord.Status.idle,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="Over server security 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
+                name="👻 Over server security 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧 👻"
             )
         )
 
@@ -282,10 +266,8 @@ async def on_ready():
         f"🤖 Logged in as {bot.user}"
     )
 
-    # Set yellow Idle status
     await set_bot_presence()
 
-    # Start stats update loop
     if not update_stats_message.is_running():
 
         update_stats_message.start()
@@ -316,7 +298,9 @@ def owner_only():
 # STATS TEXT
 # =================================================
 
-def build_stats_text(guild: discord.Guild):
+def build_stats_text(
+    guild: discord.Guild
+):
 
     members = guild.members
 
@@ -441,21 +425,26 @@ def build_stats_text(guild: discord.Guild):
 
     boost_level = guild.premium_tier
 
-    if isinstance(
-        boost_level,
-        discord.PremiumTier
-    ):
+    # FIX:
+    # Не используем discord.PremiumTier,
+    # потому что его нет в установленной версии discord.py.
 
-        boost_level_text = boost_level.name.replace(
-            "tier_",
-            "Tier "
+    boost_level_text = str(
+        boost_level
+    )
+
+    boost_level_text = (
+        boost_level_text
+        .replace(
+            "PremiumTier.",
+            ""
         )
-
-    else:
-
-        boost_level_text = str(
-            boost_level
+        .replace(
+            "_",
+            " "
         )
+        .title()
+    )
 
 
     # =================================================
@@ -609,10 +598,6 @@ async def update_stats_for_guild(
         return
 
 
-    # =================================================
-    # Existing Message
-    # =================================================
-
     message_id = stats_data.get(
         "message_id"
     )
@@ -626,7 +611,10 @@ async def update_stats_for_guild(
     )
 
 
-    # If channel changed, reset old message
+    # =================================================
+    # Channel changed
+    # =================================================
+
     if stored_channel_id != STATS_CHANNEL_ID:
 
         message_id = None
@@ -739,10 +727,6 @@ async def on_message(message):
         return
 
 
-    # =================================================
-    # !my stats bot
-    # =================================================
-
     if message.content.strip().lower() == "!my stats bot":
 
         if message.author.id != OWNER_ID:
@@ -769,7 +753,7 @@ async def on_message(message):
         stats_data["guild_id"] = message.guild.id
         stats_data["channel_id"] = STATS_CHANNEL_ID
 
-        # Force new stats message
+        # Force creation of a new stats message
         stats_data["message_id"] = None
 
         save_stats_data(
@@ -789,10 +773,7 @@ async def on_message(message):
         return
 
 
-    # =================================================
-    # Other Prefix Commands
-    # =================================================
-
+    # Other prefix commands
     await bot.process_commands(
         message
     )
@@ -807,7 +788,7 @@ async def on_message(message):
 )
 async def update_stats_message():
 
-    # Keep Idle status
+    # Re-apply presence
     await set_bot_presence()
 
 
