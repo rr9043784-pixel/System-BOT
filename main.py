@@ -261,7 +261,7 @@ async def set_bot_presence():
         )
 
         print(
-            "🟡 Presence: IDLE | Watching Over server security"
+            "🟡 Presence set: Idle | Watching Over server security"
         )
 
     except Exception as e:
@@ -282,11 +282,17 @@ async def on_ready():
         f"🤖 Logged in as {bot.user}"
     )
 
+    # Set yellow Idle status
     await set_bot_presence()
 
+    # Start stats update loop
     if not update_stats_message.is_running():
 
         update_stats_message.start()
+
+    print(
+        "✅ Bot is ready!"
+    )
 
 
 # =================================================
@@ -515,6 +521,20 @@ async def get_stats_channel():
 
     try:
 
+        channel = bot.get_channel(
+            STATS_CHANNEL_ID
+        )
+
+        if channel is not None:
+
+            if isinstance(
+                channel,
+                discord.TextChannel
+            ):
+
+                return channel
+
+
         channel = await bot.fetch_channel(
             STATS_CHANNEL_ID
         )
@@ -578,10 +598,6 @@ async def update_stats_for_guild(
     )
 
 
-    # =================================================
-    # Get Stats Channel
-    # =================================================
-
     channel = await get_stats_channel()
 
     if channel is None:
@@ -601,16 +617,16 @@ async def update_stats_for_guild(
         "message_id"
     )
 
-    stored_channel_id = stats_data.get(
-        "channel_id"
-    )
-
     stored_guild_id = stats_data.get(
         "guild_id"
     )
 
+    stored_channel_id = stats_data.get(
+        "channel_id"
+    )
 
-    # If channel changed, forget old message
+
+    # If channel changed, reset old message
     if stored_channel_id != STATS_CHANNEL_ID:
 
         message_id = None
@@ -618,6 +634,10 @@ async def update_stats_for_guild(
         stats_data["message_id"] = None
         stats_data["channel_id"] = STATS_CHANNEL_ID
 
+
+    # =================================================
+    # Edit Existing Message
+    # =================================================
 
     if (
         message_id
@@ -728,7 +748,6 @@ async def on_message(message):
         if message.author.id != OWNER_ID:
             return
 
-
         if message.guild is None:
             return
 
@@ -746,11 +765,11 @@ async def on_message(message):
             pass
 
 
-        # Save current guild
+        # Save current server
         stats_data["guild_id"] = message.guild.id
         stats_data["channel_id"] = STATS_CHANNEL_ID
 
-        # Reset old message because channel ID changed
+        # Force new stats message
         stats_data["message_id"] = None
 
         save_stats_data(
@@ -763,7 +782,6 @@ async def on_message(message):
         )
 
 
-        # Create stats
         await update_stats_for_guild(
             message.guild
         )
@@ -781,24 +799,6 @@ async def on_message(message):
 
 
 # =================================================
-# Presence Auto Refresh
-# =================================================
-
-@tasks.loop(
-    seconds=10
-)
-async def update_presence():
-
-    await set_bot_presence()
-
-
-@update_presence.before_loop
-async def before_presence_loop():
-
-    await bot.wait_until_ready()
-
-
-# =================================================
 # Stats Auto Update Every 1 Minute
 # =================================================
 
@@ -806,6 +806,10 @@ async def before_presence_loop():
     minutes=1
 )
 async def update_stats_message():
+
+    # Keep Idle status
+    await set_bot_presence()
+
 
     guild_id = stats_data.get(
         "guild_id"
@@ -1033,13 +1037,6 @@ Thread(
     target=run_flask,
     daemon=True
 ).start()
-
-
-# =================================================
-# Start Presence Loop
-# =================================================
-
-update_presence.start()
 
 
 # =================================================
