@@ -502,7 +502,7 @@ def build_stats_text(
         f"👤 Humans: {humans:,}\n"
         f"🤖 Bots: {bots_count:,}\n"
         "\n"
-        "🟢 **Status**\n"
+        "⬇️ **Status**\n"
 f"{ONLINE_PC_STATUS} Online: {online:,}\n"
 f"{IDLE_STATUS} Idle: {idle:,}\n"
 f"{DND_STATUS} Do Not Disturb: {dnd:,}\n"
