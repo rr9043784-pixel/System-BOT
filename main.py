@@ -1,5 +1,4 @@
 import os
-import asyncio
 import json
 
 import discord
@@ -28,6 +27,17 @@ STATS_CHANNEL_ID = 1542994435472760953
 
 
 # =================================================
+# Status Emojis
+# =================================================
+
+ONLINE_PC_STATUS = "<:Online_pc_status:1557533156322582649>"
+IDLE_STATUS = "<:Idle_status:1557533355711660082>"
+DND_STATUS = "<:Doesnotbother_Status:1557533152639983646>"
+STREAMING_STATUS = "<:Streaming_Status:1557533349105631284>"
+OFFLINE_STATUS = "<:Offline_status:1557533351546458163>"
+
+
+# =================================================
 # Flask
 # =================================================
 
@@ -36,6 +46,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
+
     return "Tournament Bot is online!"
 
 
@@ -128,13 +139,17 @@ intents = discord.Intents.default()
 
 intents.message_content = True
 intents.members = True
+intents.presences = True
 
 
 class TournamentBot(commands.Bot):
 
     async def setup_hook(self):
 
+        # =================================================
         # message.py
+        # =================================================
+
         try:
 
             await self.load_extension(
@@ -152,7 +167,10 @@ class TournamentBot(commands.Bot):
             )
 
 
+        # =================================================
         # ticket.py
+        # =================================================
+
         try:
 
             await self.load_extension(
@@ -170,7 +188,10 @@ class TournamentBot(commands.Bot):
             )
 
 
+        # =================================================
         # chests.py
+        # =================================================
+
         try:
 
             await self.load_extension(
@@ -188,7 +209,10 @@ class TournamentBot(commands.Bot):
             )
 
 
+        # =================================================
         # drops.py
+        # =================================================
+
         try:
 
             await self.load_extension(
@@ -206,7 +230,10 @@ class TournamentBot(commands.Bot):
             )
 
 
-        # Sync slash commands
+        # =================================================
+        # Sync Slash Commands
+        # =================================================
+
         try:
 
             await self.tree.sync()
@@ -318,61 +345,66 @@ def build_stats_text(
         if member.bot
     )
 
+
+    # =================================================
+    # Status
+    # =================================================
+
     online = sum(
         1
         for member in members
-        if member.status == discord.Status.online
+        if (
+            not member.bot
+            and member.status == discord.Status.online
+        )
     )
 
     idle = sum(
         1
         for member in members
-        if member.status == discord.Status.idle
+        if (
+            not member.bot
+            and member.status == discord.Status.idle
+        )
     )
 
     dnd = sum(
         1
         for member in members
-        if member.status == discord.Status.dnd
+        if (
+            not member.bot
+            and member.status == discord.Status.dnd
+        )
     )
 
     offline = sum(
         1
         for member in members
-        if member.status == discord.Status.offline
+        if (
+            not member.bot
+            and member.status == discord.Status.offline
+        )
     )
 
 
     # =================================================
-    # Devices
+    # Streaming
     # =================================================
 
-    pc = 0
-    mobile = 0
-
-    for member in members:
-
-        if member.bot:
-            continue
-
-        if member.status == discord.Status.offline:
-            continue
-
-        client_status = member.client_status
-
-        if not client_status:
-            continue
-
-        if "mobile" in client_status:
-
-            mobile += 1
-
-        elif (
-            "desktop" in client_status
-            or "web" in client_status
-        ):
-
-            pc += 1
+    streaming = sum(
+        1
+        for member in members
+        if (
+            not member.bot
+            and any(
+                isinstance(
+                    activity,
+                    discord.Streaming
+                )
+                for activity in member.activities
+            )
+        )
+    )
 
 
     # =================================================
@@ -425,10 +457,6 @@ def build_stats_text(
 
     boost_level = guild.premium_tier
 
-    # FIX:
-    # Не используем discord.PremiumTier,
-    # потому что его нет в установленной версии discord.py.
-
     boost_level_text = str(
         boost_level
     )
@@ -475,14 +503,11 @@ def build_stats_text(
         f"🤖 Bots: {bots_count:,}\n"
         "\n"
         "🟢 **Status**\n"
-        f"Online: {online:,}\n"
-        f"Idle: {idle:,}\n"
-        f"Do Not Disturb: {dnd:,}\n"
-        f"Offline: {offline:,}\n"
-        "\n"
-        "📱 **Devices**\n"
-        f"PC: {pc:,}\n"
-        f"Mobile: {mobile:,}\n"
+        f"Online {ONLINE_PC_STATUS}: {online:,}\n"
+        f"Idle {IDLE_STATUS}: {idle:,}\n"
+        f"Do Not Disturb {DND_STATUS}: {dnd:,}\n"
+        f"Streaming {STREAMING_STATUS}: {streaming:,}\n"
+        f"Offline {OFFLINE_STATUS}: {offline:,}\n"
         "\n"
         "📁 **Channels**\n"
         f"Text: {text_channels:,}\n"
@@ -736,7 +761,6 @@ async def on_message(message):
             return
 
 
-        # Delete command
         try:
 
             await message.delete()
@@ -749,11 +773,8 @@ async def on_message(message):
             pass
 
 
-        # Save current server
         stats_data["guild_id"] = message.guild.id
         stats_data["channel_id"] = STATS_CHANNEL_ID
-
-        # Force creation of a new stats message
         stats_data["message_id"] = None
 
         save_stats_data(
@@ -773,7 +794,6 @@ async def on_message(message):
         return
 
 
-    # Other prefix commands
     await bot.process_commands(
         message
     )
@@ -788,7 +808,6 @@ async def on_message(message):
 )
 async def update_stats_message():
 
-    # Re-apply presence
     await set_bot_presence()
 
 
@@ -817,6 +836,264 @@ async def update_stats_message():
 async def before_stats_loop():
 
     await bot.wait_until_ready()
+
+
+# =================================================
+# OPEN DMS
+# =================================================
+
+class OpenDMsView(discord.ui.View):
+
+    def __init__(
+        self,
+        user_id: int
+    ):
+
+        super().__init__(
+            timeout=300
+        )
+
+        self.user_id = user_id
+        self.check_button = None
+
+
+        # =================================================
+        # Settings
+        # =================================================
+
+        settings_button = discord.ui.Button(
+            label="Through Settings",
+            emoji="⚙️",
+            style=discord.ButtonStyle.link,
+            url="https://discord.com/settings/privacy"
+        )
+
+        self.add_item(
+            settings_button
+        )
+
+
+        # =================================================
+        # Bot Profile
+        # =================================================
+
+        profile_button = discord.ui.Button(
+            label="Through Bot Profile",
+            emoji="🤖",
+            style=discord.ButtonStyle.secondary
+        )
+
+        profile_button.callback = self.profile_callback
+
+        self.add_item(
+            profile_button
+        )
+
+
+        # =================================================
+        # Check DMs
+        # =================================================
+
+        self.check_button = discord.ui.Button(
+            label="Check DMs",
+            emoji="🔍",
+            style=discord.ButtonStyle.success
+        )
+
+        self.check_button.callback = self.check_dms_callback
+
+        self.add_item(
+            self.check_button
+        )
+
+
+    async def interaction_check(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if interaction.user.id != self.user_id:
+
+            await interaction.response.send_message(
+                "❌ This panel belongs to another user.",
+                ephemeral=True
+            )
+
+            return False
+
+        return True
+
+
+    async def profile_callback(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        await interaction.response.send_message(
+            "🤖 Open my profile and use **Add App** to add the bot to your apps.",
+            ephemeral=True
+        )
+
+
+    async def check_dms_callback(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if self.check_button.disabled:
+
+            await interaction.response.send_message(
+                "✅ Your DMs are already open!",
+                ephemeral=True
+            )
+
+            return
+
+
+        try:
+
+            test_message = await interaction.user.send(
+                "✅ DM check successful."
+            )
+
+            try:
+
+                await test_message.delete()
+
+            except (
+                discord.Forbidden,
+                discord.HTTPException
+            ):
+
+                pass
+
+
+            self.check_button.disabled = True
+
+            await interaction.response.edit_message(
+                view=self
+            )
+
+            await interaction.followup.send(
+                "✅ Your DMs are now open!",
+                ephemeral=True
+            )
+
+        except discord.Forbidden:
+
+            await interaction.response.send_message(
+                "❌ Your DMs are still closed.",
+                ephemeral=True
+            )
+
+        except discord.HTTPException:
+
+            await interaction.response.send_message(
+                "❌ I couldn't check your DMs right now.",
+                ephemeral=True
+            )
+
+
+# =================================================
+# /open
+# =================================================
+
+open_group = app_commands.Group(
+    name="open",
+    description="Open and check settings"
+)
+
+
+@open_group.command(
+    name="dms",
+    description="Check and open your DMs with the bot"
+)
+async def open_dms(
+    interaction: discord.Interaction
+):
+
+    try:
+
+        # =================================================
+        # Check DMs first
+        # =================================================
+
+        test_message = await interaction.user.send(
+            "✅ DM check successful."
+        )
+
+        try:
+
+            await test_message.delete()
+
+        except (
+            discord.Forbidden,
+            discord.HTTPException
+        ):
+
+            pass
+
+
+        await interaction.response.send_message(
+            "✅ Your DMs are already open!",
+            ephemeral=True
+        )
+
+        return
+
+
+    except discord.Forbidden:
+
+        pass
+
+
+    except discord.HTTPException:
+
+        await interaction.response.send_message(
+            "❌ I couldn't check your DMs right now.",
+            ephemeral=True
+        )
+
+        return
+
+
+    # =================================================
+    # DMs are closed
+    # =================================================
+
+    embed = discord.Embed(
+        title="📩 Open DMs",
+        description=(
+            "Your DMs are currently closed.\n\n"
+            "**Choose one of the methods below:**\n\n"
+            "⚙️ **Through Settings**\n"
+            "Open your Discord Privacy settings and allow "
+            "direct messages from server members.\n\n"
+            "🤖 **Through Bot Profile**\n"
+            "Open my profile and use **Add App**.\n\n"
+            "🔍 **Check DMs**\n"
+            "After changing the settings, press the button "
+            "to check again."
+        ),
+        color=discord.Color.blurple()
+    )
+
+
+    view = OpenDMsView(
+        interaction.user.id
+    )
+
+
+    await interaction.response.send_message(
+        embed=embed,
+        view=view,
+        ephemeral=True
+    )
+
+
+bot.tree.add_command(
+    open_group
+)
 
 
 # =================================================
