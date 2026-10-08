@@ -5,7 +5,8 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
-import urllib.error
+
+from datetime import timedelta
 
 import discord
 from discord.ext import commands, tasks
@@ -28,28 +29,32 @@ WIKTIONARY_CATEGORY = (
     "Категория:Матерные выражения/ru"
 )
 
-# Обновлять список из Викисловаря раз в 24 часа
+# Обновление списка слов — каждые 24 часа
 WORD_UPDATE_INTERVAL = 86400
 
-# Через сколько секунд удалить сообщение с предупреждением
-WARNING_DELETE_AFTER = 8
 
-# Антиспам
+# =================================================
+# Anti Spam
+# =================================================
+
 SPAM_MESSAGES = 5
 SPAM_INTERVAL = 6
 
-# Максимальное количество одинаковых сообщений
 DUPLICATE_MESSAGES = 3
 DUPLICATE_INTERVAL = 10
 
 
 # =================================================
-# Files
+# JSON
 # =================================================
 
-def load_json(filename, default):
+def load_json(
+    filename,
+    default
+):
 
     if not os.path.exists(filename):
+
         return default
 
     try:
@@ -58,9 +63,9 @@ def load_json(filename, default):
             filename,
             "r",
             encoding="utf-8"
-        ) as f:
+        ) as file:
 
-            return json.load(f)
+            return json.load(file)
 
     except Exception as e:
 
@@ -71,28 +76,43 @@ def load_json(filename, default):
         return default
 
 
-def save_json(filename, data):
+def save_json(
+    filename,
+    data
+):
 
-    temp = filename + ".tmp"
+    temp_file = filename + ".tmp"
 
-    with open(
-        temp,
-        "w",
-        encoding="utf-8"
-    ) as f:
+    try:
 
-        json.dump(
-            data,
-            f,
-            ensure_ascii=False,
-            indent=4
+        with open(
+            temp_file,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                data,
+                file,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        os.replace(
+            temp_file,
+            filename
         )
 
-    os.replace(
-        temp,
-        filename
-    )
+    except Exception as e:
 
+        print(
+            f"❌ Failed to save {filename}: {e}"
+        )
+
+
+# =================================================
+# Data
+# =================================================
 
 bad_words = load_json(
     BAD_WORDS_FILE,
@@ -109,7 +129,7 @@ warnings_data = load_json(
 
 
 # =================================================
-# Unicode normalization
+# Character normalization
 # =================================================
 
 CONFUSABLES = str.maketrans({
@@ -128,6 +148,7 @@ CONFUSABLES = str.maketrans({
     "x": "х",
     "y": "у",
 
+    # Uppercase
     "A": "а",
     "B": "в",
     "C": "с",
@@ -153,26 +174,26 @@ CONFUSABLES = str.maketrans({
 })
 
 
-def normalize_text(text):
+def normalize_text(
+    text
+):
 
     if not text:
+
         return ""
 
-    # Unicode normalization
     text = unicodedata.normalize(
         "NFKC",
         text
     )
 
-    # Lowercase
     text = text.lower()
 
-    # Replace common Latin lookalikes
     text = text.translate(
         CONFUSABLES
     )
 
-    # Remove combining marks
+    # Убираем диакритические знаки
     text = "".join(
         char
         for char in unicodedata.normalize(
@@ -182,8 +203,11 @@ def normalize_text(text):
         if unicodedata.category(char) != "Mn"
     )
 
-    # Keep letters and numbers,
-    # remove punctuation / spaces.
+    # Убираем пробелы и символы.
+    # Например:
+    # с.п.а.м -> спам
+    # с п а м -> спам
+    # с-п-а-м -> спам
     text = "".join(
         char
         for char in text
@@ -223,7 +247,6 @@ def download_wiktionary_words():
 
             params["cmcontinue"] = continuation
 
-
         url = (
             WIKTIONARY_API
             + "?"
@@ -256,7 +279,7 @@ def download_wiktionary_words():
         except Exception as e:
 
             print(
-                f"❌ Failed to download Wiktionary words: {e}"
+                f"❌ Wiktionary request failed: {e}"
             )
 
             break
@@ -277,13 +300,16 @@ def download_wiktionary_words():
             )
 
             if not title:
+
                 continue
 
-            # Don't add category itself
+
             if title.startswith(
                 "Категория:"
             ):
+
                 continue
+
 
             normalized = normalize_text(
                 title
@@ -296,24 +322,28 @@ def download_wiktionary_words():
                 )
 
 
-        continue_data = data.get(
+        continuation_data = data.get(
             "continue"
         )
 
-        if not continue_data:
+        if not continuation_data:
+
             break
 
-        continuation = continue_data.get(
+
+        continuation = continuation_data.get(
             "cmcontinue"
         )
 
         if not continuation:
+
             break
 
 
     result = sorted(
         words
     )
+
 
     if result:
 
@@ -328,14 +358,14 @@ def download_wiktionary_words():
         )
 
         print(
-            f"✅ Wiktionary list updated: {len(result)} entries."
+            f"✅ Wiktionary list updated: {len(result)} words."
         )
 
         return result
 
 
     print(
-        "⚠️ Wiktionary returned no words. Keeping old list."
+        "⚠️ Wiktionary returned no words. Using cached list."
     )
 
     return bad_words.get(
@@ -345,31 +375,26 @@ def download_wiktionary_words():
 
 
 # =================================================
-# Update words on startup
+# Word update
 # =================================================
 
-def words_need_update():
+def update_words():
+
+    global bad_words
 
     updated = bad_words.get(
         "updated",
         0
     )
 
-    return (
+    if (
         time.time() - updated
-        >= WORD_UPDATE_INTERVAL
-    )
-
-
-def update_words():
-
-    global bad_words
-
-    if not words_need_update():
+        < WORD_UPDATE_INTERVAL
+    ):
 
         print(
-            f"📚 Using cached AutoMod word list: "
-            f"{len(bad_words.get('words', []))} entries."
+            f"📚 AutoMod word cache: "
+            f"{len(bad_words.get('words', []))} words."
         )
 
         return
@@ -386,16 +411,19 @@ def update_words():
 
 
 # =================================================
-# Forbidden words
+# Bad word detection
 # =================================================
 
-def contains_bad_word(text):
+def contains_bad_word(
+    text
+):
 
     normalized = normalize_text(
         text
     )
 
     if not normalized:
+
         return False
 
 
@@ -405,16 +433,22 @@ def contains_bad_word(text):
     ):
 
         if not word:
+
             continue
 
-        # Exact normalized match
+
+        # Полное совпадение
         if normalized == word:
+
             return True
 
-        # Detect word/phrase even when
-        # spaces or punctuation were inserted.
-        if len(word) >= 4 and word in normalized:
-            return True
+
+        # Обнаружение внутри текста
+        if len(word) >= 4:
+
+            if word in normalized:
+
+                return True
 
 
     return False
@@ -427,34 +461,38 @@ def contains_bad_word(text):
 LINK_PATTERNS = [
 
     re.compile(
-        r"(https?://\S+)",
+        r"https?://\S+",
         re.IGNORECASE
     ),
 
     re.compile(
-        r"(www\.\S+)",
+        r"www\.\S+",
         re.IGNORECASE
     ),
 
     re.compile(
-        r"(discord\.gg/\S+)",
+        r"discord\.gg/\S+",
         re.IGNORECASE
     ),
 
     re.compile(
-        r"(discord(?:app)?\.com/invite/\S+)",
+        r"discord(?:app)?\.com/invite/\S+",
         re.IGNORECASE
     ),
 
     re.compile(
-        r"\b[a-z0-9-]+\.(com|net|org|io|gg|me|ru|xyz|dev|app|site|online)\b",
+        r"\b[a-z0-9-]+\."
+        r"(?:com|net|org|io|gg|me|ru|xyz|dev|app|site|online)"
+        r"\b",
         re.IGNORECASE
     )
 
 ]
 
 
-def contains_link(text):
+def contains_link(
+    text
+):
 
     for pattern in LINK_PATTERNS:
 
@@ -466,13 +504,15 @@ def contains_link(text):
 
 
 # =================================================
-# Spam
+# Spam tracking
 # =================================================
 
 message_history = {}
 
 
-def is_spam(message):
+def is_spam(
+    message
+):
 
     guild_id = message.guild.id
     user_id = message.author.id
@@ -496,7 +536,8 @@ def is_spam(message):
         )
     )
 
-    # Keep recent messages
+
+    # Удаляем старые сообщения
     history[:] = [
         item
         for item in history
@@ -504,28 +545,29 @@ def is_spam(message):
     ]
 
 
+    # Слишком много сообщений
     if len(history) >= SPAM_MESSAGES:
 
         return True
 
 
-    # Duplicate message detection
+    # Одинаковые сообщения
     if len(history) >= DUPLICATE_MESSAGES:
 
         recent = [
-            item[1]
+            item[1].strip().lower()
             for item in history[
                 -DUPLICATE_MESSAGES:
             ]
         ]
 
         if (
-            all(
-                text.strip().lower()
-                == recent[0].strip().lower()
+            len(recent) == DUPLICATE_MESSAGES
+            and recent[0]
+            and all(
+                text == recent[0]
                 for text in recent
             )
-            and len(recent[0].strip()) > 0
         ):
 
             return True
@@ -535,7 +577,7 @@ def is_spam(message):
 
 
 # =================================================
-# Warnings
+# Warning system
 # =================================================
 
 def get_warning_count(
@@ -578,12 +620,77 @@ def set_warning_count(
 
 
 # =================================================
-# Punishments
+# DM notification
+# =================================================
+
+async def send_dm(
+    member,
+    guild,
+    violation,
+    punishment,
+    count
+):
+
+    try:
+
+        embed = discord.Embed(
+            title="🛡️ AutoMod Action",
+            color=discord.Color.orange()
+        )
+
+        embed.add_field(
+            name="Server",
+            value=guild.name,
+            inline=False
+        )
+
+        embed.add_field(
+            name="Violation",
+            value=violation,
+            inline=False
+        )
+
+        embed.add_field(
+            name="Punishment",
+            value=punishment,
+            inline=False
+        )
+
+        embed.add_field(
+            name="Violation count",
+            value=f"{count}/5",
+            inline=False
+        )
+
+        embed.set_footer(
+            text="Please follow the server rules."
+        )
+
+        await member.send(
+            embed=embed
+        )
+
+        return True
+
+    except (
+        discord.Forbidden,
+        discord.HTTPException
+    ):
+
+        print(
+            f"⚠️ Could not DM {member}."
+        )
+
+        return False
+
+
+# =================================================
+# Punishment
 # =================================================
 
 async def punish_member(
     member,
-    violation_reason
+    violation
 ):
 
     guild = member.guild
@@ -612,106 +719,95 @@ async def punish_member(
 
     if count == 1:
 
-        try:
+        punishment = "⚠️ Warning"
 
-            await member.send(
-                "⚠️ **Warning**\n\n"
-                f"Your message was removed in **{guild.name}** "
-                f"because it violated the server rules.\n\n"
-                f"Reason: **{violation_reason}**\n\n"
-                "This is your first violation."
-            )
+        await send_dm(
+            member,
+            guild,
+            violation,
+            punishment,
+            count
+        )
 
-        except (
-            discord.Forbidden,
-            discord.HTTPException
-        ):
-
-            pass
-
-        return "⚠️ Warning"
+        return punishment
 
 
     # =================================================
-    # 2 — Mute 1 Hour
+    # 2 — Mute 1 hour
     # =================================================
 
     if count == 2:
 
-        duration = discord.utils.utcnow() + discord.timedelta(
-            hours=1
-        )
+        punishment = "🔇 Mute for 1 hour"
 
         try:
 
             await member.edit(
-                timed_out_until=duration,
-                reason=violation_reason
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to timeout {member}: {e}"
-            )
-
-        try:
-
-            await member.send(
-                "🔇 **Muted for 1 hour**\n\n"
-                f"Your message was removed in **{guild.name}**.\n\n"
-                f"Reason: **{violation_reason}**"
+                timed_out_until=(
+                    discord.utils.utcnow()
+                    + timedelta(hours=1)
+                ),
+                reason=violation
             )
 
         except (
             discord.Forbidden,
             discord.HTTPException
-        ):
+        ) as e:
 
-            pass
+            print(
+                f"❌ Failed to mute {member}: {e}"
+            )
 
-        return "🔇 Mute 1 hour"
+
+        await send_dm(
+            member,
+            guild,
+            violation,
+            punishment,
+            count
+        )
+
+        return punishment
 
 
     # =================================================
-    # 3 — Mute 1 Day
+    # 3 — Mute 1 day
     # =================================================
 
     if count == 3:
 
-        duration = discord.utils.utcnow() + discord.timedelta(
-            days=1
-        )
+        punishment = "🔇 Mute for 1 day"
 
         try:
 
             await member.edit(
-                timed_out_until=duration,
-                reason=violation_reason
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to timeout {member}: {e}"
-            )
-
-        try:
-
-            await member.send(
-                "🔇 **Muted for 1 day**\n\n"
-                f"Your message was removed in **{guild.name}**.\n\n"
-                f"Reason: **{violation_reason}**"
+                timed_out_until=(
+                    discord.utils.utcnow()
+                    + timedelta(days=1)
+                ),
+                reason=violation
             )
 
         except (
             discord.Forbidden,
             discord.HTTPException
-        ):
+        ) as e:
 
-            pass
+            print(
+                f"❌ Failed to mute {member}: {e}"
+            )
 
-        return "🔇 Mute 1 day"
+
+        await send_dm(
+            member,
+            guild,
+            violation,
+            punishment,
+            count
+        )
+
+        return punishment
 
 
     # =================================================
@@ -720,93 +816,106 @@ async def punish_member(
 
     if count == 4:
 
+        punishment = "👢 Kick"
+
+        await send_dm(
+            member,
+            guild,
+            violation,
+            punishment,
+            count
+        )
+
         try:
 
-            await member.send(
-                "👢 **Kicked**\n\n"
-                f"You were kicked from **{guild.name}** "
-                "because of repeated rule violations."
+            await member.kick(
+                reason=violation
             )
 
         except (
             discord.Forbidden,
             discord.HTTPException
-        ):
-
-            pass
-
-
-        try:
-
-            await member.kick(
-                reason=violation_reason
-            )
-
-        except Exception as e:
+        ) as e:
 
             print(
                 f"❌ Failed to kick {member}: {e}"
             )
 
-        return "👢 Kick"
+
+        return punishment
 
 
     # =================================================
-    # 5+ — Permanent Ban
+    # 5 — Permanent Ban
     # =================================================
 
-    if count >= 5:
+    punishment = "🔨 Permanent ban"
 
-        try:
+    await send_dm(
+        member,
+        guild,
+        violation,
+        punishment,
+        count
+    )
 
-            await member.send(
-                "🔨 **Permanently banned**\n\n"
-                f"You were permanently banned from "
-                f"**{guild.name}** because of repeated "
-                "rule violations."
-            )
+    try:
 
-        except (
-            discord.Forbidden,
-            discord.HTTPException
-        ):
+        await guild.ban(
+            member,
+            reason=violation,
+            delete_message_days=0
+        )
 
-            pass
+    except (
+        discord.Forbidden,
+        discord.HTTPException
+    ) as e:
 
-
-        try:
-
-            await guild.ban(
-                member,
-                reason=violation_reason,
-                delete_message_days=0
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to ban {member}: {e}"
-            )
-
-        return "🔨 Permanent ban"
+        print(
+            f"❌ Failed to ban {member}: {e}"
+        )
 
 
-    return None
+    return punishment
 
 
 # =================================================
 # AutoMod Cog
 # =================================================
 
-class AutoMod(commands.Cog):
+class AutoMod(
+    commands.Cog
+):
 
-    def __init__(self, bot):
+    def __init__(
+        self,
+        bot
+    ):
 
         self.bot = bot
 
         self.update_words_loop.start()
 
-        # Download immediately on startup
+
+    def cog_unload(
+        self
+    ):
+
+        self.update_words_loop.cancel()
+
+
+    # =================================================
+    # Word update loop
+    # =================================================
+
+    @tasks.loop(
+        seconds=WORD_UPDATE_INTERVAL
+    )
+    async def update_words_loop(
+        self
+    ):
+
         try:
 
             update_words()
@@ -818,33 +927,10 @@ class AutoMod(commands.Cog):
             )
 
 
-    def cog_unload(self):
-
-        self.update_words_loop.cancel()
-
-
-    # =================================================
-    # Daily Word Update
-    # =================================================
-
-    @tasks.loop(
-        seconds=WORD_UPDATE_INTERVAL
-    )
-    async def update_words_loop(self):
-
-        try:
-
-            update_words()
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to update AutoMod words: {e}"
-            )
-
-
     @update_words_loop.before_loop
-    async def before_words_loop(self):
+    async def before_words_loop(
+        self
+    ):
 
         await self.bot.wait_until_ready()
 
@@ -859,31 +945,40 @@ class AutoMod(commands.Cog):
         message
     ):
 
-        # Ignore bots
+        # Игнорируем ботов
         if message.author.bot:
+
             return
 
-        # Ignore DMs
+
+        # Только серверы
         if message.guild is None:
+
             return
 
-        # Ignore administrators
+
+        # Администраторов не наказываем
         if message.author.guild_permissions.administrator:
+
             return
+
 
         content = message.content.strip()
 
         if not content:
+
             return
 
 
         # =================================================
-        # Check link
+        # LINK
         # =================================================
 
         if contains_link(content):
 
-            reason = "Links are not allowed."
+            violation = (
+                "Sending links is not allowed."
+            )
 
             try:
 
@@ -900,25 +995,27 @@ class AutoMod(commands.Cog):
 
             punishment = await punish_member(
                 message.author,
-                reason
+                violation
             )
 
             print(
-                f"🛡️ AutoMod | {message.author} | "
-                f"Link | {punishment}"
+                f"🛡️ AutoMod | "
+                f"{message.author} | "
+                f"Link | "
+                f"{punishment}"
             )
 
             return
 
 
         # =================================================
-        # Check forbidden words
+        # BAD WORD
         # =================================================
 
         if contains_bad_word(content):
 
-            reason = (
-                "Forbidden language is not allowed."
+            violation = (
+                "Forbidden language."
             )
 
             try:
@@ -936,24 +1033,28 @@ class AutoMod(commands.Cog):
 
             punishment = await punish_member(
                 message.author,
-                reason
+                violation
             )
 
             print(
-                f"🛡️ AutoMod | {message.author} | "
-                f"Forbidden language | {punishment}"
+                f"🛡️ AutoMod | "
+                f"{message.author} | "
+                f"Forbidden language | "
+                f"{punishment}"
             )
 
             return
 
 
         # =================================================
-        # Check spam
+        # SPAM
         # =================================================
 
         if is_spam(message):
 
-            reason = "Spam is not allowed."
+            violation = (
+                "Spam."
+            )
 
             try:
 
@@ -970,12 +1071,14 @@ class AutoMod(commands.Cog):
 
             punishment = await punish_member(
                 message.author,
-                reason
+                violation
             )
 
             print(
-                f"🛡️ AutoMod | {message.author} | "
-                f"Spam | {punishment}"
+                f"🛡️ AutoMod | "
+                f"{message.author} | "
+                f"Spam | "
+                f"{punishment}"
             )
 
             return
@@ -985,7 +1088,21 @@ class AutoMod(commands.Cog):
 # Setup
 # =================================================
 
-async def setup(bot):
+async def setup(
+    bot
+):
+
+    # Загружаем список сразу при старте
+    try:
+
+        update_words()
+
+    except Exception as e:
+
+        print(
+            f"❌ Failed to update Wiktionary list: {e}"
+        )
+
 
     await bot.add_cog(
         AutoMod(bot)
@@ -993,4 +1110,4 @@ async def setup(bot):
 
     print(
         "✅ automod.py loaded!"
-)
+    )
