@@ -5,49 +5,33 @@ import time
 import discord
 from discord.ext import commands, tasks
 
-
-# =========================================================
-# SETTINGS
-# =========================================================
-
 OWNER_ID = 1176149190192152626
 
-# Verification panel
 VERIFICATION_CHANNEL_ID = 1546998884830683176
-
-# Applications
 APPLICATIONS_CHANNEL_ID = 1547237068315566180
-
-# Channel where user must make their selection
 SELECTION_CHANNEL_ID = 1541336807508017252
-
-# Role given after acceptance
 VERIFIED_ROLE_ID = 1546987754968326154
 
-# Persistent data
 DATA_FILE = "verification_data.json"
-
-# 15 days
 BLACKLIST_DURATION = 15 * 24 * 60 * 60
 
 
-# =========================================================
+# =========================
 # DATA
-# =========================================================
+# =========================
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return {
+        data = {
             "applications": {},
             "blacklist": {}
         }
+        save_data(data)
+        return data
 
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        if not isinstance(data, dict):
-            data = {}
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
         data.setdefault("applications", {})
         data.setdefault("blacklist", {})
@@ -61,82 +45,66 @@ def load_data():
         }
 
 
-DATA = load_data()
+def save_data(data=None):
+    if data is None:
+        data = load_data()
 
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
-def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as file:
-        json.dump(
-            DATA,
-            file,
-            indent=4,
-            ensure_ascii=False
-        )
-
-
-# =========================================================
-# HELPERS
-# =========================================================
 
 def get_user_application(user_id):
-    return DATA["applications"].get(str(user_id))
+    data = load_data()
+
+    for application in data["applications"].values():
+        if str(application["user_id"]) == str(user_id):
+            return application
+
+    return None
 
 
 def find_application_by_message(message_id):
-    message_id = int(message_id)
+    data = load_data()
 
-    for user_id, application in DATA["applications"].items():
+    for application in data["applications"].values():
+        if str(application.get("message_id")) == str(message_id):
+            return application
 
-        if application.get("message_id") == message_id:
-            return user_id, application
-
-    return None, None
+    return None
 
 
 def is_blacklisted(user_id):
+    data = load_data()
 
-    user_id = str(user_id)
-
-    entry = DATA["blacklist"].get(user_id)
+    entry = data["blacklist"].get(str(user_id))
 
     if not entry:
         return False
 
-    expires_at = entry.get(
-        "expires_at",
-        0
-    )
-
-    if time.time() >= expires_at:
+    if time.time() >= entry["expires_at"]:
+        del data["blacklist"][str(user_id)]
+        save_data(data)
         return False
 
     return True
 
 
 def get_blacklist_expiration(user_id):
+    data = load_data()
 
-    entry = DATA["blacklist"].get(
-        str(user_id)
-    )
+    entry = data["blacklist"].get(str(user_id))
 
     if not entry:
         return None
 
-    return entry.get("expires_at")
+    return entry["expires_at"]
 
 
-# =========================================================
+# =========================
 # VERIFICATION MODAL
-# =========================================================
+# =========================
 
-class VerificationModal(
-    discord.ui.Modal,
-    title="Server Verification"
-):
-
-    # -----------------------------------------------------
-    # QUESTION 1
-    # -----------------------------------------------------
+class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
     reason = discord.ui.TextInput(
         label="Why do you want to join this server?",
@@ -147,10 +115,6 @@ class VerificationModal(
         max_length=1000
     )
 
-    # -----------------------------------------------------
-    # QUESTION 2
-    # -----------------------------------------------------
-
     why_accept = discord.ui.TextInput(
         label="Why should we accept you?",
         placeholder="Tell us why we should accept your application...",
@@ -159,10 +123,6 @@ class VerificationModal(
         min_length=5,
         max_length=1000
     )
-
-    # -----------------------------------------------------
-    # QUESTION 3
-    # -----------------------------------------------------
 
     how_found = discord.ui.TextInput(
         label="How did you find our server?",
@@ -173,162 +133,111 @@ class VerificationModal(
         max_length=500
     )
 
-    async def on_submit(
-        self,
-        interaction: discord.Interaction
-    ):
+    why_verification = discord.ui.TextInput(
+        label="Why do you want to pass verification?",
+        placeholder="Tell us why you want to complete verification...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        min_length=5,
+        max_length=1000
+    )
 
-        user_id = str(
-            interaction.user.id
-        )
+    async def on_submit(self, interaction: discord.Interaction):
 
-        # =================================================
+        user_id = interaction.user.id
+
+        # =========================
         # BLACKLIST CHECK
-        # =================================================
+        # =========================
 
-        if is_blacklisted(
-            interaction.user.id
-        ):
+        if is_blacklisted(user_id):
+            expires_at = get_blacklist_expiration(user_id)
 
-            expires_at = get_blacklist_expiration(
-                interaction.user.id
+            await interaction.response.send_message(
+                "❌ You are currently blacklisted from verification.\n\n"
+                f"⏳ You can apply again <t:{int(expires_at)}:R>.\n"
+                f"📅 <t:{int(expires_at)}:F>",
+                ephemeral=True
             )
-
-            if expires_at:
-
-                timestamp = int(
-                    expires_at
-                )
-
-                await interaction.response.send_message(
-                    "❌ You cannot submit a new verification "
-                    "application yet.\n"
-                    f"Your waiting period ends "
-                    f"<t:{timestamp}:R> "
-                    f"(<t:{timestamp}:F>).",
-                    ephemeral=True
-                )
-
-            else:
-
-                await interaction.response.send_message(
-                    "❌ You cannot submit a new verification application yet.",
-                    ephemeral=True
-                )
-
             return
 
-        # =================================================
+        # =========================
         # EXISTING APPLICATION
-        # =================================================
+        # =========================
 
-        existing = get_user_application(
-            interaction.user.id
-        )
+        existing = get_user_application(user_id)
 
         if existing:
-
-            status = existing.get(
-                "status"
-            )
+            status = existing.get("status")
 
             if status == "pending":
-
                 await interaction.response.send_message(
-                    "⏳ You already have a verification "
-                    "application waiting for review.\n"
-                    "Please wait for a decision.",
+                    "⏳ You have already submitted a verification application.\n"
+                    "Please wait for it to be reviewed.",
                     ephemeral=True
                 )
-
                 return
 
             if status == "accepted":
-
                 await interaction.response.send_message(
-                    "✅ Your verification application "
-                    "has already been accepted.",
+                    "✅ Your verification application has already been accepted.",
                     ephemeral=True
                 )
-
                 return
 
-        # =================================================
+        # =========================
         # APPLICATION CHANNEL
-        # =================================================
+        # =========================
 
-        channel = interaction.client.get_channel(
-            APPLICATIONS_CHANNEL_ID
-        )
+        channel = interaction.client.get_channel(APPLICATIONS_CHANNEL_ID)
 
         if channel is None:
-
             await interaction.response.send_message(
-                "❌ The verification system is currently unavailable.",
+                "❌ Verification application channel was not found.",
                 ephemeral=True
             )
-
             return
 
-        # =================================================
-        # APPLICATION EMBED
-        # =================================================
+        # =========================
+        # EMBED
+        # =========================
 
         embed = discord.Embed(
             title="🛡️ New Verification Application",
-            color=discord.Color.blurple(),
-            timestamp=discord.utils.utcnow()
+            color=discord.Color.blurple()
         )
 
         embed.add_field(
             name="👤 User",
-            value=(
-                f"{interaction.user.mention}\n"
-                f"`{interaction.user}`\n"
-                f"ID: `{interaction.user.id}`"
-            ),
+            value=f"{interaction.user.mention}\n"
+                  f"**Name:** {interaction.user}\n"
+                  f"**ID:** `{interaction.user.id}`",
             inline=False
         )
-
-        # -------------------------------------------------
-        # QUESTION 1
-        # -------------------------------------------------
 
         embed.add_field(
             name="📝 Why do you want to join this server?",
-            value=str(
-                self.reason.value
-            ),
+            value=str(self.reason),
             inline=False
         )
-
-        # -------------------------------------------------
-        # QUESTION 2
-        # -------------------------------------------------
 
         embed.add_field(
             name="💭 Why should we accept you?",
-            value=str(
-                self.why_accept.value
-            ),
+            value=str(self.why_accept),
             inline=False
         )
-
-        # -------------------------------------------------
-        # QUESTION 3
-        # -------------------------------------------------
 
         embed.add_field(
             name="🌐 How did you find our server?",
-            value=str(
-                self.how_found.value
-            ),
+            value=str(self.how_found),
             inline=False
         )
 
-        # -------------------------------------------------
-        # STATUS
-        # -------------------------------------------------
+        embed.add_field(
+            name="🔐 Why do you want to pass verification?",
+            value=str(self.why_verification),
+            inline=False
+        )
 
         embed.add_field(
             name="📊 Status",
@@ -336,77 +245,50 @@ class VerificationModal(
             inline=False
         )
 
-        embed.set_thumbnail(
-            url=interaction.user.display_avatar.url
-        )
-
-        embed.set_footer(
-            text="Verification System"
-        )
-
-        # =================================================
-        # SEND APPLICATION
-        # =================================================
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
         message = await channel.send(
             embed=embed,
             view=ApplicationView()
         )
 
-        # =================================================
+        # =========================
         # SAVE APPLICATION
-        # =================================================
+        # =========================
 
-        DATA["applications"][user_id] = {
+        data = load_data()
 
+        data["applications"][str(user_id)] = {
+            "user_id": user_id,
             "message_id": message.id,
+            "channel_id": channel.id,
 
-            "channel_id": APPLICATIONS_CHANNEL_ID,
-
-            "reason": str(
-                self.reason.value
-            ),
-
-            "why_accept": str(
-                self.why_accept.value
-            ),
-
-            "how_found": str(
-                self.how_found.value
-            ),
+            "reason": str(self.reason),
+            "why_accept": str(self.why_accept),
+            "how_found": str(self.how_found),
+            "why_verification": str(self.why_verification),
 
             "status": "pending",
-
             "created_at": time.time()
         }
 
-        save_data()
-
-        # =================================================
-        # RESPONSE
-        # =================================================
+        save_data(data)
 
         await interaction.response.send_message(
-            "✅ Your verification application has been "
-            "sent for review.\n"
+            "✅ Your verification application has been sent for review.\n"
             "Please wait a little.",
             ephemeral=True
         )
 
 
-# =========================================================
+# =========================
 # VERIFICATION PANEL
-# =========================================================
+# =========================
 
-class VerificationPanelView(
-    discord.ui.View
-):
+class VerificationPanelView(discord.ui.View):
 
     def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
+        super().__init__(timeout=None)
 
     @discord.ui.button(
         label="Start Verification",
@@ -420,101 +302,60 @@ class VerificationPanelView(
         button: discord.ui.Button
     ):
 
-        # =================================================
+        user_id = interaction.user.id
+
+        # =========================
         # BLACKLIST
-        # =================================================
+        # =========================
 
-        if is_blacklisted(
-            interaction.user.id
-        ):
+        if is_blacklisted(user_id):
+            expires_at = get_blacklist_expiration(user_id)
 
-            expires_at = get_blacklist_expiration(
-                interaction.user.id
+            await interaction.response.send_message(
+                "❌ You are currently blacklisted from verification.\n\n"
+                f"⏳ You can apply again <t:{int(expires_at)}:R>.\n"
+                f"📅 <t:{int(expires_at)}:F>",
+                ephemeral=True
             )
-
-            if expires_at:
-
-                timestamp = int(
-                    expires_at
-                )
-
-                await interaction.response.send_message(
-                    "❌ You cannot start verification yet.\n"
-                    f"Your waiting period ends "
-                    f"<t:{timestamp}:R> "
-                    f"(<t:{timestamp}:F>).",
-                    ephemeral=True
-                )
-
-            else:
-
-                await interaction.response.send_message(
-                    "❌ You cannot start verification yet.",
-                    ephemeral=True
-                )
-
             return
 
-        # =================================================
+        # =========================
         # EXISTING APPLICATION
-        # =================================================
+        # =========================
 
-        existing = get_user_application(
-            interaction.user.id
-        )
+        existing = get_user_application(user_id)
 
         if existing:
-
-            status = existing.get(
-                "status"
-            )
+            status = existing.get("status")
 
             if status == "pending":
-
                 await interaction.response.send_message(
-                    "⏳ You already have a verification "
-                    "application waiting for review.\n"
-                    "Please wait for a decision.",
+                    "⏳ You have already submitted a verification application.\n"
+                    "Please wait for it to be reviewed.",
                     ephemeral=True
                 )
-
                 return
 
             if status == "accepted":
-
                 await interaction.response.send_message(
-                    "✅ You are already verified.",
+                    "✅ Your verification application has already been accepted.",
                     ephemeral=True
                 )
-
                 return
-
-        # =================================================
-        # OPEN MODAL
-        # =================================================
 
         await interaction.response.send_modal(
             VerificationModal()
         )
 
 
-# =========================================================
+# =========================
 # APPLICATION VIEW
-# =========================================================
+# =========================
 
-class ApplicationView(
-    discord.ui.View
-):
+class ApplicationView(discord.ui.View):
 
     def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
-
-    # =====================================================
-    # ACCEPT
-    # =====================================================
+        super().__init__(timeout=None)
 
     @discord.ui.button(
         label="Accept",
@@ -522,253 +363,129 @@ class ApplicationView(
         style=discord.ButtonStyle.success,
         custom_id="verification:accept"
     )
-    async def accept_application(
+    async def accept(
         self,
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
 
-        # -------------------------------------------------
-        # PERMISSION
-        # -------------------------------------------------
-
         if interaction.user.id != OWNER_ID:
-
             await interaction.response.send_message(
-                "❌ You do not have permission to "
-                "process verification applications.",
+                "❌ You do not have permission to process verification applications.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # FIND APPLICATION
-        # -------------------------------------------------
-
-        user_id, application = find_application_by_message(
+        application = find_application_by_message(
             interaction.message.id
         )
 
         if not application:
-
             await interaction.response.send_message(
-                "❌ This verification application "
-                "could not be found.",
+                "❌ Application data was not found.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # ALREADY PROCESSED
-        # -------------------------------------------------
-
-        if application.get(
-            "status"
-        ) != "pending":
-
+        if application.get("status") != "pending":
             await interaction.response.send_message(
-                "⚠️ This application has already been processed.",
+                "❌ This application has already been processed.",
                 ephemeral=True
             )
-
             return
 
-        try:
-
-            user_id_int = int(
-                user_id
-            )
-
-        except (TypeError, ValueError):
-
-            await interaction.response.send_message(
-                "❌ Invalid user ID.",
-                ephemeral=True
-            )
-
-            return
+        user_id = int(application["user_id"])
 
         guild = interaction.guild
 
         if guild is None:
-
             await interaction.response.send_message(
-                "❌ This action can only be used inside a server.",
+                "❌ Guild was not found.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # FIND MEMBER
-        # -------------------------------------------------
-
-        member = guild.get_member(
-            user_id_int
-        )
+        member = guild.get_member(user_id)
 
         if member is None:
-
             try:
-
-                member = await guild.fetch_member(
-                    user_id_int
+                member = await guild.fetch_member(user_id)
+            except discord.NotFound:
+                await interaction.response.send_message(
+                    "❌ User is no longer in the server.",
+                    ephemeral=True
                 )
+                return
 
-            except Exception:
-
-                member = None
-
-        # -------------------------------------------------
-        # ROLE
-        # -------------------------------------------------
-
-        role = guild.get_role(
-            VERIFIED_ROLE_ID
-        )
+        role = guild.get_role(VERIFIED_ROLE_ID)
 
         if role is None:
-
             await interaction.response.send_message(
-                "❌ The verification role could not be found.",
+                "❌ Verified role was not found.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # GIVE ROLE
-        # -------------------------------------------------
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ I don't have permission to give the verified role.",
+                ephemeral=True
+            )
+            return
 
-        if member is not None:
-
-            try:
-
-                await member.add_roles(
-                    role,
-                    reason="Verification accepted"
-                )
-
-            except discord.Forbidden:
-
-                await interaction.response.send_message(
-                    "❌ I don't have permission to "
-                    "give the verification role.",
-                    ephemeral=True
-                )
-
-                return
-
-            except Exception:
-
-                await interaction.response.send_message(
-                    "❌ Failed to give the verification role.",
-                    ephemeral=True
-                )
-
-                return
-
-        # -------------------------------------------------
+        # =========================
         # UPDATE DATA
-        # -------------------------------------------------
+        # =========================
 
-        application["status"] = "accepted"
+        data = load_data()
 
-        application["processed_at"] = time.time()
+        user_application = data["applications"].get(str(user_id))
 
-        application["processed_by"] = (
-            interaction.user.id
-        )
+        if user_application:
+            user_application["status"] = "accepted"
+            user_application["processed_at"] = time.time()
+            user_application["processed_by"] = interaction.user.id
 
-        save_data()
+        save_data(data)
 
-        # -------------------------------------------------
+        # =========================
         # UPDATE EMBED
-        # -------------------------------------------------
+        # =========================
 
-        embed = (
-            interaction.message.embeds[0]
-            if interaction.message.embeds
-            else discord.Embed()
-        )
-
-        fields = []
+        embed = interaction.message.embeds[0]
 
         for field in embed.fields:
-
-            if field.name != "📊 Status":
-
-                fields.append(field)
-
-        embed.clear_fields()
-
-        for field in fields:
-
-            embed.add_field(
-                name=field.name,
-                value=field.value,
-                inline=field.inline
-            )
-
-        embed.add_field(
-            name="📊 Status",
-            value=(
-                f"✅ Accepted by "
-                f"{interaction.user.mention}"
-            ),
-            inline=False
-        )
+            if field.name == "📊 Status":
+                field.value = "✅ Accepted"
 
         embed.color = discord.Color.green()
 
-        # -------------------------------------------------
-        # DISABLE BUTTONS
-        # -------------------------------------------------
-
-        for child in self.children:
-
-            child.disabled = True
+        for item in self.children:
+            item.disabled = True
 
         await interaction.message.edit(
             embed=embed,
             view=self
         )
 
-        # -------------------------------------------------
+        # =========================
         # DM
-        # -------------------------------------------------
+        # =========================
 
         try:
-
-            user = await interaction.client.fetch_user(
-                user_id_int
+            await member.send(
+                "✅ **Your verification application has been accepted!**\n\n"
+                "Welcome to the server! 🎉"
             )
-
-            await user.send(
-                "✅ **Your verification application "
-                "has been accepted!**\n\n"
-                "Welcome to the server! You now have "
-                "access to the server chat."
-            )
-
-        except Exception:
+        except discord.Forbidden:
             pass
 
-        # -------------------------------------------------
-        # RESPONSE
-        # -------------------------------------------------
-
         await interaction.response.send_message(
-            f"✅ Verification application for "
-            f"<@{user_id_int}> has been accepted.",
+            f"✅ Verification accepted for {member.mention}.",
             ephemeral=True
         )
-
-    # =====================================================
-    # REJECT
-    # =====================================================
 
     @discord.ui.button(
         label="Reject",
@@ -776,403 +493,218 @@ class ApplicationView(
         style=discord.ButtonStyle.danger,
         custom_id="verification:reject"
     )
-    async def reject_application(
+    async def reject(
         self,
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
 
-        # -------------------------------------------------
-        # PERMISSION
-        # -------------------------------------------------
-
         if interaction.user.id != OWNER_ID:
-
             await interaction.response.send_message(
-                "❌ You do not have permission to "
-                "process verification applications.",
+                "❌ You do not have permission to process verification applications.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # FIND APPLICATION
-        # -------------------------------------------------
-
-        user_id, application = find_application_by_message(
+        application = find_application_by_message(
             interaction.message.id
         )
 
         if not application:
-
             await interaction.response.send_message(
-                "❌ This verification application "
-                "could not be found.",
+                "❌ Application data was not found.",
                 ephemeral=True
             )
-
             return
 
-        # -------------------------------------------------
-        # ALREADY PROCESSED
-        # -------------------------------------------------
-
-        if application.get(
-            "status"
-        ) != "pending":
-
+        if application.get("status") != "pending":
             await interaction.response.send_message(
-                "⚠️ This application has already been processed.",
+                "❌ This application has already been processed.",
                 ephemeral=True
             )
-
             return
 
-        try:
+        user_id = int(application["user_id"])
 
-            user_id_int = int(
-                user_id
-            )
+        expires_at = time.time() + BLACKLIST_DURATION
 
-        except (TypeError, ValueError):
+        # =========================
+        # SAVE BLACKLIST
+        # =========================
 
-            await interaction.response.send_message(
-                "❌ Invalid user ID.",
-                ephemeral=True
-            )
+        data = load_data()
 
-            return
-
-        # -------------------------------------------------
-        # 15 DAY BLACKLIST
-        # -------------------------------------------------
-
-        expires_at = (
-            time.time()
-            + BLACKLIST_DURATION
-        )
-
-        DATA["blacklist"][user_id] = {
-
+        data["blacklist"][str(user_id)] = {
             "expires_at": expires_at,
-
-            "reason": (
-                "Verification application rejected"
-            )
+            "reason": "Verification application rejected"
         }
 
-        # -------------------------------------------------
-        # UPDATE APPLICATION
-        # -------------------------------------------------
+        user_application = data["applications"].get(str(user_id))
 
-        application["status"] = "rejected"
+        if user_application:
+            user_application["status"] = "rejected"
+            user_application["processed_at"] = time.time()
+            user_application["processed_by"] = interaction.user.id
+            user_application["blacklist_expires_at"] = expires_at
 
-        application["processed_at"] = time.time()
+        save_data(data)
 
-        application["processed_by"] = (
-            interaction.user.id
-        )
-
-        application["blacklist_expires_at"] = (
-            expires_at
-        )
-
-        save_data()
-
-        timestamp = int(
-            expires_at
-        )
-
-        # -------------------------------------------------
+        # =========================
         # UPDATE EMBED
-        # -------------------------------------------------
+        # =========================
 
-        embed = (
-            interaction.message.embeds[0]
-            if interaction.message.embeds
-            else discord.Embed()
-        )
-
-        fields = []
+        embed = interaction.message.embeds[0]
 
         for field in embed.fields:
-
-            if field.name != "📊 Status":
-
-                fields.append(field)
-
-        embed.clear_fields()
-
-        for field in fields:
-
-            embed.add_field(
-                name=field.name,
-                value=field.value,
-                inline=field.inline
-            )
-
-        embed.add_field(
-            name="📊 Status",
-            value=(
-                f"❌ Rejected by "
-                f"{interaction.user.mention}\n"
-                f"Can apply again "
-                f"<t:{timestamp}:R> "
-                f"(<t:{timestamp}:F>)"
-            ),
-            inline=False
-        )
+            if field.name == "📊 Status":
+                field.value = (
+                    "❌ Rejected\n"
+                    f"⏳ <t:{int(expires_at)}:R>\n"
+                    f"📅 <t:{int(expires_at)}:F>"
+                )
 
         embed.color = discord.Color.red()
 
-        # -------------------------------------------------
-        # DISABLE BUTTONS
-        # -------------------------------------------------
-
-        for child in self.children:
-
-            child.disabled = True
+        for item in self.children:
+            item.disabled = True
 
         await interaction.message.edit(
             embed=embed,
             view=self
         )
 
-        # -------------------------------------------------
+        # =========================
         # DM
-        # -------------------------------------------------
+        # =========================
 
-        try:
+        user = interaction.client.get_user(user_id)
 
-            user = await interaction.client.fetch_user(
-                user_id_int
-            )
+        if user is None:
+            try:
+                user = await interaction.client.fetch_user(user_id)
+            except discord.NotFound:
+                user = None
 
-            await user.send(
-                "❌ **Your verification application "
-                "was not accepted.**\n\n"
-                "You can submit a new application after "
-                "the 15-day waiting period.\n\n"
-                f"Your waiting period ends "
-                f"<t:{timestamp}:R> "
-                f"(<t:{timestamp}:F>)."
-            )
-
-        except Exception:
-            pass
-
-        # -------------------------------------------------
-        # RESPONSE
-        # -------------------------------------------------
+        if user:
+            try:
+                await user.send(
+                    "❌ **Your verification application has been rejected.**\n\n"
+                    f"⏳ You can submit a new application <t:{int(expires_at)}:R>.\n"
+                    f"📅 <t:{int(expires_at)}:F>"
+                )
+            except discord.Forbidden:
+                pass
 
         await interaction.response.send_message(
-            f"❌ Verification application for "
-            f"<@{user_id_int}> has been rejected.\n"
-            f"They can apply again "
-            f"<t:{timestamp}:R>.",
+            "❌ Verification application rejected.\n"
+            f"User is blacklisted until <t:{int(expires_at)}:F>.",
             ephemeral=True
         )
 
 
-# =========================================================
+# =========================
 # COG
-# =========================================================
+# =========================
 
-class Verification(
-    commands.Cog
-):
+class Verification(commands.Cog):
 
-    def __init__(
-        self,
-        bot
-    ):
-
+    def __init__(self, bot):
         self.bot = bot
-
         self.check_blacklists.start()
 
     def cog_unload(self):
-
         self.check_blacklists.cancel()
 
-    # =====================================================
+    # =========================
     # BLACKLIST CHECK
-    # =====================================================
+    # =========================
 
     @tasks.loop(minutes=1)
     async def check_blacklists(self):
 
+        data = load_data()
+        changed = False
+
         now = time.time()
 
-        expired_users = []
+        for user_id, entry in list(data["blacklist"].items()):
 
-        for user_id, entry in list(
-            DATA["blacklist"].items()
-        ):
+            if now < entry["expires_at"]:
+                continue
 
-            expires_at = entry.get(
-                "expires_at",
-                0
-            )
+            del data["blacklist"][user_id]
+            changed = True
 
-            if now >= expires_at:
+            user = self.bot.get_user(int(user_id))
 
-                expired_users.append(
-                    user_id
-                )
+            if user is None:
+                try:
+                    user = await self.bot.fetch_user(int(user_id))
+                except discord.NotFound:
+                    user = None
 
-        if not expired_users:
-            return
+            if user:
 
-        for user_id in expired_users:
+                try:
+                    await user.send(
+                        "✅ **Your 15-day verification waiting period has ended.**\n"
+                        f"You can submit a new application in <#{VERIFICATION_CHANNEL_ID}>."
+                    )
+                except discord.Forbidden:
+                    pass
 
-            DATA["blacklist"].pop(
-                user_id,
-                None
-            )
-
-            try:
-
-                user = await self.bot.fetch_user(
-                    int(user_id)
-                )
-
-                await user.send(
-                    "✅ **Your 15-day verification "
-                    "waiting period has ended.**\n"
-                    f"You can submit a new application "
-                    f"in <#{VERIFICATION_CHANNEL_ID}>."
-                )
-
-            except Exception:
-                pass
-
-        save_data()
+        if changed:
+            save_data(data)
 
     @check_blacklists.before_loop
-    async def before_blacklist_check(self):
-
+    async def before_blacklists(self):
         await self.bot.wait_until_ready()
 
-    # =====================================================
-    # !VERIFICATION PANEL
-    # =====================================================
+    # =========================
+    # PANEL COMMAND
+    # =========================
 
-    @commands.command(
-        name="verification"
-    )
+    @commands.command(name="verification")
     async def verification_command(
         self,
         ctx,
-        action: str = None
+        action=None
     ):
 
-        # -------------------------------------------------
-        # DELETE COMMAND
-        # -------------------------------------------------
+        if ctx.author.id != OWNER_ID:
+            return
 
         try:
-
             await ctx.message.delete()
-
-        except Exception:
+        except discord.Forbidden:
             pass
 
-        # -------------------------------------------------
-        # OWNER ONLY
-        # -------------------------------------------------
-
-        if ctx.author.id != OWNER_ID:
-
-            try:
-
-                await ctx.send(
-                    "❌ You do not have permission "
-                    "to use this command.",
-                    delete_after=5
-                )
-
-            except Exception:
-                pass
-
+        if action != "panel":
             return
-
-        # -------------------------------------------------
-        # ACTION
-        # -------------------------------------------------
-
-        if (
-            action is None
-            or action.lower() != "panel"
-        ):
-
-            try:
-
-                await ctx.send(
-                    "❌ Usage: `!verification panel`",
-                    delete_after=5
-                )
-
-            except Exception:
-                pass
-
-            return
-
-        # =================================================
-        # PANEL CHANNEL
-        # =================================================
 
         channel = self.bot.get_channel(
             VERIFICATION_CHANNEL_ID
         )
 
         if channel is None:
-
-            try:
-
-                await ctx.send(
-                    "❌ Verification panel channel "
-                    "could not be found.",
-                    delete_after=5
-                )
-
-            except Exception:
-                pass
-
             return
-
-        # =================================================
-        # PANEL EMBED
-        # =================================================
 
         embed = discord.Embed(
             title="🛡️ Server Verification",
             description=(
-                "To get access to the server chat, "
-                "verification is required.\n\n"
-
-                f"**IMPORTANT:** You must go to "
-                f"<#{SELECTION_CHANNEL_ID}> "
-                "and choose what you need.\n\n"
-
-                "Without selecting the required option, "
-                "you will not be admitted to chatting.\n\n"
-
-                "After you have made your selection, "
-                "press **🔐 Start Verification** below "
-                "and complete the verification application."
+                "Verification is required to access the server.\n\n"
+                f"**IMPORTANT:** First go to <#{SELECTION_CHANNEL_ID}> "
+                "and choose what you need.\n"
+                "Without selecting it, you will not be admitted to the chat.\n\n"
+                "After selecting what you need, press **Start Verification** "
+                "below and complete the application."
             ),
             color=discord.Color.blurple()
         )
 
         embed.set_footer(
-            text="Server Verification"
+            text="Please answer all questions honestly."
         )
-
-        # =================================================
-        # SEND PANEL
-        # =================================================
 
         await channel.send(
             embed=embed,
@@ -1180,26 +712,19 @@ class Verification(
         )
 
 
-# =========================================================
+# =========================
 # SETUP
-# =========================================================
+# =========================
 
 async def setup(bot):
+    await bot.add_cog(Verification(bot))
 
-    await bot.add_cog(
-        Verification(bot)
-    )
-
-    # Persistent verification panel
     bot.add_view(
         VerificationPanelView()
     )
 
-    # Persistent application buttons
     bot.add_view(
         ApplicationView()
     )
 
-    print(
-        "✅ verification.py loaded!"
-        )
+    print("✅ verification.py loaded!")
