@@ -697,40 +697,6 @@ class Message(commands.Cog):
         self.bot = bot
 
     # =====================================================
-    # DELETE OWNER PREFIX MESSAGES
-    # =====================================================
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-
-        if message.author.bot:
-            return
-
-        # Delete every message from the owner that starts with !
-        if (
-            message.author.id == OWNER_ID
-            and message.content.startswith("!")
-        ):
-
-            try:
-                await message.delete()
-
-            except (
-                discord.NotFound,
-                discord.Forbidden
-            ):
-                pass
-
-        # IMPORTANT:
-        # Do NOT call bot.process_commands(message) here.
-        #
-        # commands.Bot already has its own on_message()
-        # which processes prefix commands.
-        #
-        # Calling process_commands() here would make commands
-        # execute twice.
-
-    # =====================================================
     # !features panel
     # =====================================================
 
@@ -741,7 +707,6 @@ class Message(commands.Cog):
         action=None
     ):
 
-        # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
@@ -766,7 +731,6 @@ class Message(commands.Cog):
         action=None
     ):
 
-        # Only owner can create the panel
         if ctx.author.id != OWNER_ID:
             return
 
@@ -791,7 +755,6 @@ async def setup(bot):
         Message(bot)
     )
 
-    # Register persistent views after bot restart
     bot.add_view(
         FeaturesView()
     )
@@ -801,4 +764,3 @@ async def setup(bot):
     )
 
     print("✅ FeaturesView and PingView registered!")
-
