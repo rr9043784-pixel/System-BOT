@@ -282,6 +282,156 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
 
 # =========================
+# REJECT MODAL
+# =========================
+
+class RejectModal(discord.ui.Modal, title="Reject Verification"):
+
+    rejection_reason = discord.ui.TextInput(
+        label="Reason for rejection",
+        placeholder="Enter the reason why this application is rejected...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        min_length=3,
+        max_length=1000
+    )
+
+    def __init__(self, message_id):
+        super().__init__()
+        self.message_id = message_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        application = find_application_by_message(
+            self.message_id
+        )
+
+        if not application:
+            await interaction.response.send_message(
+                "❌ Application data was not found.",
+                ephemeral=True
+            )
+            return
+
+        if application.get("status") != "pending":
+            await interaction.response.send_message(
+                "❌ This application has already been processed.",
+                ephemeral=True
+            )
+            return
+
+        user_id = int(application["user_id"])
+        rejection_reason = str(self.rejection_reason)
+
+        expires_at = time.time() + BLACKLIST_DURATION
+
+        # =========================
+        # SAVE BLACKLIST
+        # =========================
+
+        data = load_data()
+
+        data["blacklist"][str(user_id)] = {
+            "expires_at": expires_at,
+            "reason": rejection_reason
+        }
+
+        user_application = data["applications"].get(str(user_id))
+
+        if user_application:
+            user_application["status"] = "rejected"
+            user_application["processed_at"] = time.time()
+            user_application["processed_by"] = interaction.user.id
+            user_application["blacklist_expires_at"] = expires_at
+            user_application["rejection_reason"] = rejection_reason
+
+        save_data(data)
+
+        # =========================
+        # UPDATE EMBED
+        # =========================
+
+        channel = interaction.client.get_channel(
+            APPLICATIONS_CHANNEL_ID
+        )
+
+        if channel is None:
+            await interaction.response.send_message(
+                "❌ Verification application channel was not found.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            message = await channel.fetch_message(
+                self.message_id
+            )
+        except discord.NotFound:
+            await interaction.response.send_message(
+                "❌ Application message was not found.",
+                ephemeral=True
+            )
+            return
+
+        embed = message.embeds[0]
+
+        for field in embed.fields:
+            if field.name == "📊 Status":
+                field.value = (
+                    "❌ Rejected\n"
+                    f"⏳ <t:{int(expires_at)}:R>\n"
+                    f"📅 <t:{int(expires_at)}:F>"
+                )
+
+        embed.add_field(
+            name="❌ Rejection Reason",
+            value=rejection_reason,
+            inline=False
+        )
+
+        embed.color = discord.Color.red()
+
+        view = ApplicationView()
+
+        for item in view.children:
+            item.disabled = True
+
+        await message.edit(
+            embed=embed,
+            view=view
+        )
+
+        # =========================
+        # DM
+        # =========================
+
+        user = interaction.client.get_user(user_id)
+
+        if user is None:
+            try:
+                user = await interaction.client.fetch_user(user_id)
+            except discord.NotFound:
+                user = None
+
+        if user:
+            try:
+                await user.send(
+                    "❌ **Your verification application has been rejected.**\n\n"
+                    f"**Reason:** {rejection_reason}\n\n"
+                    f"⏳ You can submit a new application <t:{int(expires_at)}:R>.\n"
+                    f"📅 <t:{int(expires_at)}:F>"
+                )
+            except discord.Forbidden:
+                pass
+
+        await interaction.response.send_message(
+            "❌ Verification application rejected.\n"
+            f"User is blacklisted until <t:{int(expires_at)}:F>.",
+            ephemeral=True
+        )
+
+
+# =========================
 # VERIFICATION PANEL
 # =========================
 
@@ -524,81 +674,9 @@ class ApplicationView(discord.ui.View):
             )
             return
 
-        user_id = int(application["user_id"])
-
-        expires_at = time.time() + BLACKLIST_DURATION
-
-        # =========================
-        # SAVE BLACKLIST
-        # =========================
-
-        data = load_data()
-
-        data["blacklist"][str(user_id)] = {
-            "expires_at": expires_at,
-            "reason": "Verification application rejected"
-        }
-
-        user_application = data["applications"].get(str(user_id))
-
-        if user_application:
-            user_application["status"] = "rejected"
-            user_application["processed_at"] = time.time()
-            user_application["processed_by"] = interaction.user.id
-            user_application["blacklist_expires_at"] = expires_at
-
-        save_data(data)
-
-        # =========================
-        # UPDATE EMBED
-        # =========================
-
-        embed = interaction.message.embeds[0]
-
-        for field in embed.fields:
-            if field.name == "📊 Status":
-                field.value = (
-                    "❌ Rejected\n"
-                    f"⏳ <t:{int(expires_at)}:R>\n"
-                    f"📅 <t:{int(expires_at)}:F>"
-                )
-
-        embed.color = discord.Color.red()
-
-        for item in self.children:
-            item.disabled = True
-
-        await interaction.message.edit(
-            embed=embed,
-            view=self
-        )
-
-        # =========================
-        # DM
-        # =========================
-
-        user = interaction.client.get_user(user_id)
-
-        if user is None:
-            try:
-                user = await interaction.client.fetch_user(user_id)
-            except discord.NotFound:
-                user = None
-
-        if user:
-            try:
-                await user.send(
-                    "❌ **Your verification application has been rejected.**\n\n"
-                    f"⏳ You can submit a new application <t:{int(expires_at)}:R>.\n"
-                    f"📅 <t:{int(expires_at)}:F>"
-                )
-            except discord.Forbidden:
-                pass
-
-        await interaction.response.send_message(
-            "❌ Verification application rejected.\n"
-            f"User is blacklisted until <t:{int(expires_at)}:F>.",
-            ephemeral=True
+        # Открываем форму причины отклонения
+        await interaction.response.send_modal(
+            RejectModal(interaction.message.id)
         )
 
 
