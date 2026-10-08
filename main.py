@@ -252,6 +252,27 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
+        # automod.py
+        # =================================================
+
+        try:
+
+            await self.load_extension(
+                "automod"
+            )
+
+            print(
+                "✅ automod.py loaded!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load automod.py: {e}"
+            )
+
+
+        # =================================================
         # Sync Slash Commands
         # =================================================
 
@@ -784,7 +805,7 @@ async def update_stats_for_guild(
 
 
 # =================================================
-# !my stats bot
+# Prefix Commands
 # =================================================
 
 @bot.event
@@ -793,6 +814,10 @@ async def on_message(message):
     if message.author.bot:
         return
 
+
+    # =================================================
+    # !my stats bot
+    # =================================================
 
     if message.content.strip().lower() == "!my stats bot":
 
@@ -835,6 +860,32 @@ async def on_message(message):
 
         return
 
+
+    # =================================================
+    # Delete owner's prefix commands
+    # =================================================
+
+    if (
+        message.author.id == OWNER_ID
+        and message.content.startswith("!")
+    ):
+
+        try:
+
+            await message.delete()
+
+        except (
+            discord.NotFound,
+            discord.Forbidden,
+            discord.HTTPException
+        ):
+
+            pass
+
+
+    # =================================================
+    # Process ALL prefix commands
+    # =================================================
 
     await bot.process_commands(
         message
@@ -899,10 +950,6 @@ class OpenDMsView(discord.ui.View):
         self.check_button = None
 
 
-        # =================================================
-        # Settings
-        # =================================================
-
         settings_button = discord.ui.Button(
             label="Through Settings",
             emoji="⚙️",
@@ -914,10 +961,6 @@ class OpenDMsView(discord.ui.View):
             settings_button
         )
 
-
-        # =================================================
-        # Bot Profile
-        # =================================================
 
         profile_button = discord.ui.Button(
             label="Through Bot Profile",
@@ -931,10 +974,6 @@ class OpenDMsView(discord.ui.View):
             profile_button
         )
 
-
-        # =================================================
-        # Check DMs
-        # =================================================
 
         self.check_button = discord.ui.Button(
             label="Check DMs",
@@ -1056,10 +1095,6 @@ async def open_dms(
 
     try:
 
-        # =================================================
-        # Check DMs first
-        # =================================================
-
         test_message = await interaction.user.send(
             "✅ DM check successful."
         )
@@ -1098,10 +1133,6 @@ async def open_dms(
 
         return
 
-
-    # =================================================
-    # DMs are closed
-    # =================================================
 
     embed = discord.Embed(
         title="📩 Open DMs",
