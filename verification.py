@@ -1,6 +1,7 @@
 import os
 import json
 import time
+
 import discord
 from discord.ext import commands, tasks
 
@@ -11,14 +12,22 @@ from discord.ext import commands, tasks
 
 OWNER_ID = 1176149190192152626
 
-VERIFICATION_CHANNEL_ID = 1541336807508017252
-APPLICATIONS_CHANNEL_ID = 1547237068315566180
-REAPPLY_CHANNEL_ID = 1546998884830683176
+# Channel where the verification panel is sent
+VERIFICATION_CHANNEL_ID = 1546998884830683176
 
+# Channel where verification applications are sent
+APPLICATIONS_CHANNEL_ID = 1547237068315566180
+
+# Channel users must use/select before verification
+SELECTION_CHANNEL_ID = 1541336807508017252
+
+# Role given after successful verification
 VERIFIED_ROLE_ID = 1546987754968326154
 
+# Data file
 DATA_FILE = "verification_data.json"
 
+# 15 days
 BLACKLIST_DURATION = 15 * 24 * 60 * 60
 
 
@@ -103,30 +112,8 @@ def get_blacklist_expiration(user_id):
     return entry.get("expires_at")
 
 
-def remove_expired_blacklists():
-    changed = False
-    now = time.time()
-
-    for user_id in list(DATA["blacklist"].keys()):
-        entry = DATA["blacklist"].get(user_id)
-
-        if not entry:
-            DATA["blacklist"].pop(user_id, None)
-            changed = True
-            continue
-
-        expires_at = entry.get("expires_at", 0)
-
-        if now >= expires_at:
-            DATA["blacklist"].pop(user_id, None)
-            changed = True
-
-    if changed:
-        save_data()
-
-
 # =========================================================
-# START VERIFICATION MODAL
+# VERIFICATION MODAL
 # =========================================================
 
 class VerificationModal(discord.ui.Modal, title="Server Verification"):
@@ -144,15 +131,18 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
         user_id = str(interaction.user.id)
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # BLACKLIST CHECK
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if is_blacklisted(interaction.user.id):
 
-            expires_at = get_blacklist_expiration(interaction.user.id)
+            expires_at = get_blacklist_expiration(
+                interaction.user.id
+            )
 
             if expires_at:
+
                 timestamp = int(expires_at)
 
                 await interaction.response.send_message(
@@ -161,7 +151,9 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
                     f"(<t:{timestamp}:F>).",
                     ephemeral=True
                 )
+
             else:
+
                 await interaction.response.send_message(
                     "❌ You cannot submit a new verification application yet.",
                     ephemeral=True
@@ -169,11 +161,13 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
             return
 
-        # -----------------------------------------
-        # CHECK EXISTING APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
+        # EXISTING APPLICATION
+        # -------------------------------------------------
 
-        existing = get_user_application(interaction.user.id)
+        existing = get_user_application(
+            interaction.user.id
+        )
 
         if existing:
 
@@ -199,11 +193,13 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
                 return
 
-        # -----------------------------------------
-        # FIND APPLICATION CHANNEL
-        # -----------------------------------------
+        # -------------------------------------------------
+        # APPLICATION CHANNEL
+        # -------------------------------------------------
 
-        channel = interaction.client.get_channel(APPLICATIONS_CHANNEL_ID)
+        channel = interaction.client.get_channel(
+            APPLICATIONS_CHANNEL_ID
+        )
 
         if channel is None:
 
@@ -214,57 +210,61 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
             return
 
-        # -----------------------------------------
-        # CREATE APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
+        # APPLICATION EMBED
+        # -------------------------------------------------
 
-        application_embed = discord.Embed(
+        embed = discord.Embed(
             title="🛡️ New Verification Application",
             color=discord.Color.blurple(),
             timestamp=discord.utils.utcnow()
         )
 
-        application_embed.add_field(
+        embed.add_field(
             name="👤 User",
-            value=f"{interaction.user.mention}\n"
-                  f"`{interaction.user}`\n"
-                  f"ID: `{interaction.user.id}`",
+            value=(
+                f"{interaction.user.mention}\n"
+                f"`{interaction.user}`\n"
+                f"ID: `{interaction.user.id}`"
+            ),
             inline=False
         )
 
-        application_embed.add_field(
+        embed.add_field(
             name="📝 Why do you want to join?",
             value=str(self.reason.value),
             inline=False
         )
 
-        application_embed.add_field(
+        embed.add_field(
             name="📊 Status",
             value="⏳ Pending",
             inline=False
         )
 
-        application_embed.set_thumbnail(
+        embed.set_thumbnail(
             url=interaction.user.display_avatar.url
         )
 
-        application_embed.set_footer(
+        embed.set_footer(
             text="Verification System"
         )
 
-        application_view = ApplicationView()
+        # -------------------------------------------------
+        # SEND APPLICATION
+        # -------------------------------------------------
 
-        application_message = await channel.send(
-            embed=application_embed,
-            view=application_view
+        message = await channel.send(
+            embed=embed,
+            view=ApplicationView()
         )
 
-        # -----------------------------------------
-        # SAVE DATA
-        # -----------------------------------------
+        # -------------------------------------------------
+        # SAVE APPLICATION
+        # -------------------------------------------------
 
         DATA["applications"][user_id] = {
-            "message_id": application_message.id,
+            "message_id": message.id,
             "channel_id": APPLICATIONS_CHANNEL_ID,
             "reason": str(self.reason.value),
             "status": "pending",
@@ -273,9 +273,9 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
         save_data()
 
-        # -----------------------------------------
-        # RESPONSE
-        # -----------------------------------------
+        # -------------------------------------------------
+        # USER RESPONSE
+        # -------------------------------------------------
 
         await interaction.response.send_message(
             "✅ Your verification application has been sent for review.\n"
@@ -285,7 +285,7 @@ class VerificationModal(discord.ui.Modal, title="Server Verification"):
 
 
 # =========================================================
-# VERIFICATION PANEL VIEW
+# VERIFICATION PANEL
 # =========================================================
 
 class VerificationPanelView(discord.ui.View):
@@ -305,15 +305,18 @@ class VerificationPanelView(discord.ui.View):
         button: discord.ui.Button
     ):
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # BLACKLIST
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if is_blacklisted(interaction.user.id):
 
-            expires_at = get_blacklist_expiration(interaction.user.id)
+            expires_at = get_blacklist_expiration(
+                interaction.user.id
+            )
 
             if expires_at:
+
                 timestamp = int(expires_at)
 
                 await interaction.response.send_message(
@@ -322,7 +325,9 @@ class VerificationPanelView(discord.ui.View):
                     f"(<t:{timestamp}:F>).",
                     ephemeral=True
                 )
+
             else:
+
                 await interaction.response.send_message(
                     "❌ You cannot start verification yet.",
                     ephemeral=True
@@ -330,11 +335,13 @@ class VerificationPanelView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # EXISTING APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
 
-        existing = get_user_application(interaction.user.id)
+        existing = get_user_application(
+            interaction.user.id
+        )
 
         if existing:
 
@@ -360,9 +367,9 @@ class VerificationPanelView(discord.ui.View):
 
                 return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # OPEN MODAL
-        # -----------------------------------------
+        # -------------------------------------------------
 
         await interaction.response.send_modal(
             VerificationModal()
@@ -370,7 +377,7 @@ class VerificationPanelView(discord.ui.View):
 
 
 # =========================================================
-# APPLICATION VIEW
+# APPLICATION BUTTONS
 # =========================================================
 
 class ApplicationView(discord.ui.View):
@@ -394,9 +401,9 @@ class ApplicationView(discord.ui.View):
         button: discord.ui.Button
     ):
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # PERMISSION
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if interaction.user.id != OWNER_ID:
 
@@ -407,9 +414,9 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # FIND APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
 
         user_id, application = find_application_by_message(
             interaction.message.id
@@ -424,9 +431,9 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # ALREADY PROCESSED
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if application.get("status") != "pending":
 
@@ -436,10 +443,6 @@ class ApplicationView(discord.ui.View):
             )
 
             return
-
-        # -----------------------------------------
-        # GET USER
-        # -----------------------------------------
 
         try:
             user_id_int = int(user_id)
@@ -463,6 +466,10 @@ class ApplicationView(discord.ui.View):
 
             return
 
+        # -------------------------------------------------
+        # FIND MEMBER
+        # -------------------------------------------------
+
         member = guild.get_member(user_id_int)
 
         if member is None:
@@ -472,11 +479,13 @@ class ApplicationView(discord.ui.View):
             except Exception:
                 member = None
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # ROLE
-        # -----------------------------------------
+        # -------------------------------------------------
 
-        role = guild.get_role(VERIFIED_ROLE_ID)
+        role = guild.get_role(
+            VERIFIED_ROLE_ID
+        )
 
         if role is None:
 
@@ -487,17 +496,19 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
-        # ADD ROLE
-        # -----------------------------------------
+        # -------------------------------------------------
+        # GIVE ROLE
+        # -------------------------------------------------
 
         if member is not None:
 
             try:
+
                 await member.add_roles(
                     role,
                     reason="Verification accepted"
                 )
+
             except discord.Forbidden:
 
                 await interaction.response.send_message(
@@ -516,9 +527,9 @@ class ApplicationView(discord.ui.View):
 
                 return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # UPDATE DATA
-        # -----------------------------------------
+        # -------------------------------------------------
 
         application["status"] = "accepted"
         application["processed_at"] = time.time()
@@ -526,22 +537,28 @@ class ApplicationView(discord.ui.View):
 
         save_data()
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # UPDATE EMBED
-        # -----------------------------------------
+        # -------------------------------------------------
 
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
+        embed = (
+            interaction.message.embeds[0]
+            if interaction.message.embeds
+            else discord.Embed()
+        )
 
-        # Remove old status field
-        new_fields = []
+        fields = []
 
         for field in embed.fields:
+
             if field.name != "📊 Status":
-                new_fields.append(field)
+
+                fields.append(field)
 
         embed.clear_fields()
 
-        for field in new_fields:
+        for field in fields:
+
             embed.add_field(
                 name=field.name,
                 value=field.value,
@@ -556,9 +573,9 @@ class ApplicationView(discord.ui.View):
 
         embed.color = discord.Color.green()
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # DISABLE BUTTONS
-        # -----------------------------------------
+        # -------------------------------------------------
 
         for child in self.children:
             child.disabled = True
@@ -568,14 +585,26 @@ class ApplicationView(discord.ui.View):
             view=self
         )
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # DM USER
-        # -----------------------------------------
+        # -------------------------------------------------
 
         try:
 
             if member is not None:
+
                 await member.send(
+                    "✅ **Your verification application has been accepted!**\n\n"
+                    "Welcome to the server! You now have access to the server chat."
+                )
+
+            else:
+
+                user = await interaction.client.fetch_user(
+                    user_id_int
+                )
+
+                await user.send(
                     "✅ **Your verification application has been accepted!**\n\n"
                     "Welcome to the server! You now have access to the server chat."
                 )
@@ -583,9 +612,9 @@ class ApplicationView(discord.ui.View):
         except Exception:
             pass
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # STAFF RESPONSE
-        # -----------------------------------------
+        # -------------------------------------------------
 
         await interaction.response.send_message(
             f"✅ Verification application for <@{user_id_int}> has been accepted.",
@@ -608,9 +637,9 @@ class ApplicationView(discord.ui.View):
         button: discord.ui.Button
     ):
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # PERMISSION
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if interaction.user.id != OWNER_ID:
 
@@ -621,9 +650,9 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # FIND APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
 
         user_id, application = find_application_by_message(
             interaction.message.id
@@ -638,9 +667,9 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # ALREADY PROCESSED
-        # -----------------------------------------
+        # -------------------------------------------------
 
         if application.get("status") != "pending":
 
@@ -662,9 +691,9 @@ class ApplicationView(discord.ui.View):
 
             return
 
-        # -----------------------------------------
-        # BLACKLIST
-        # -----------------------------------------
+        # -------------------------------------------------
+        # 15-DAY BLACKLIST
+        # -------------------------------------------------
 
         expires_at = time.time() + BLACKLIST_DURATION
 
@@ -673,9 +702,9 @@ class ApplicationView(discord.ui.View):
             "reason": "Verification application rejected"
         }
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # UPDATE APPLICATION
-        # -----------------------------------------
+        # -------------------------------------------------
 
         application["status"] = "rejected"
         application["processed_at"] = time.time()
@@ -684,28 +713,35 @@ class ApplicationView(discord.ui.View):
 
         save_data()
 
-        # -----------------------------------------
+        timestamp = int(expires_at)
+
+        # -------------------------------------------------
         # UPDATE EMBED
-        # -----------------------------------------
+        # -------------------------------------------------
 
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
+        embed = (
+            interaction.message.embeds[0]
+            if interaction.message.embeds
+            else discord.Embed()
+        )
 
-        new_fields = []
+        fields = []
 
         for field in embed.fields:
+
             if field.name != "📊 Status":
-                new_fields.append(field)
+
+                fields.append(field)
 
         embed.clear_fields()
 
-        for field in new_fields:
+        for field in fields:
+
             embed.add_field(
                 name=field.name,
                 value=field.value,
                 inline=field.inline
             )
-
-        timestamp = int(expires_at)
 
         embed.add_field(
             name="📊 Status",
@@ -719,9 +755,9 @@ class ApplicationView(discord.ui.View):
 
         embed.color = discord.Color.red()
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # DISABLE BUTTONS
-        # -----------------------------------------
+        # -------------------------------------------------
 
         for child in self.children:
             child.disabled = True
@@ -731,57 +767,29 @@ class ApplicationView(discord.ui.View):
             view=self
         )
 
-        # -----------------------------------------
-        # GET MEMBER
-        # -----------------------------------------
-
-        member = None
-
-        if interaction.guild:
-
-            member = interaction.guild.get_member(user_id_int)
-
-            if member is None:
-
-                try:
-                    member = await interaction.guild.fetch_member(user_id_int)
-                except Exception:
-                    member = None
-
-        # -----------------------------------------
+        # -------------------------------------------------
         # DM USER
-        # -----------------------------------------
+        # -------------------------------------------------
 
         try:
 
-            if member is not None:
+            user = await interaction.client.fetch_user(
+                user_id_int
+            )
 
-                await member.send(
-                    "❌ **Your verification application was not accepted.**\n\n"
-                    "You can submit a new application after the 15-day waiting period.\n\n"
-                    f"Your waiting period ends <t:{timestamp}:R> "
-                    f"(<t:{timestamp}:F>)."
-                )
-
-            else:
-
-                user = await interaction.client.fetch_user(
-                    user_id_int
-                )
-
-                await user.send(
-                    "❌ **Your verification application was not accepted.**\n\n"
-                    "You can submit a new application after the 15-day waiting period.\n\n"
-                    f"Your waiting period ends <t:{timestamp}:R> "
-                    f"(<t:{timestamp}:F>)."
-                )
+            await user.send(
+                "❌ **Your verification application was not accepted.**\n\n"
+                "You can submit a new application after the 15-day waiting period.\n\n"
+                f"Your waiting period ends <t:{timestamp}:R> "
+                f"(<t:{timestamp}:F>)."
+            )
 
         except Exception:
             pass
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # STAFF RESPONSE
-        # -----------------------------------------
+        # -------------------------------------------------
 
         await interaction.response.send_message(
             f"❌ Verification application for <@{user_id_int}> has been rejected.\n"
@@ -791,7 +799,7 @@ class ApplicationView(discord.ui.View):
 
 
 # =========================================================
-# VERIFICATION COG
+# COG
 # =========================================================
 
 class Verification(commands.Cog):
@@ -799,7 +807,6 @@ class Verification(commands.Cog):
     def __init__(self, bot):
 
         self.bot = bot
-
         self.check_blacklists.start()
 
     def cog_unload(self):
@@ -807,19 +814,23 @@ class Verification(commands.Cog):
         self.check_blacklists.cancel()
 
     # =====================================================
-    # BACKGROUND BLACKLIST CHECK
+    # BLACKLIST CHECK
     # =====================================================
 
     @tasks.loop(minutes=1)
     async def check_blacklists(self):
 
         now = time.time()
-
         expired_users = []
 
-        for user_id, entry in list(DATA["blacklist"].items()):
+        for user_id, entry in list(
+            DATA["blacklist"].items()
+        ):
 
-            expires_at = entry.get("expires_at", 0)
+            expires_at = entry.get(
+                "expires_at",
+                0
+            )
 
             if now >= expires_at:
                 expired_users.append(user_id)
@@ -829,16 +840,20 @@ class Verification(commands.Cog):
 
         for user_id in expired_users:
 
-            DATA["blacklist"].pop(user_id, None)
+            DATA["blacklist"].pop(
+                user_id,
+                None
+            )
 
             try:
+
                 user = await self.bot.fetch_user(
                     int(user_id)
                 )
 
                 await user.send(
                     "✅ **Your 15-day verification waiting period has ended.**\n"
-                    f"You can submit a new application in <#{REAPPLY_CHANNEL_ID}>."
+                    f"You can submit a new application in <#{VERIFICATION_CHANNEL_ID}>."
                 )
 
             except Exception:
@@ -852,7 +867,7 @@ class Verification(commands.Cog):
         await self.bot.wait_until_ready()
 
     # =====================================================
-    # VERIFICATION PANEL COMMAND
+    # !VERIFICATION PANEL
     # =====================================================
 
     @commands.command(name="verification")
@@ -862,50 +877,45 @@ class Verification(commands.Cog):
         action: str = None
     ):
 
-        # -----------------------------------------
-        # DELETE COMMAND MESSAGE
-        # -----------------------------------------
-
+        # Delete command
         try:
             await ctx.message.delete()
         except Exception:
             pass
 
-        # -----------------------------------------
-        # OWNER ONLY
-        # -----------------------------------------
-
+        # Owner only
         if ctx.author.id != OWNER_ID:
 
             try:
+
                 await ctx.send(
                     "❌ You do not have permission to use this command.",
                     delete_after=5
                 )
+
             except Exception:
                 pass
 
             return
 
-        # -----------------------------------------
-        # CHECK ACTION
-        # -----------------------------------------
-
+        # Check command
         if action is None or action.lower() != "panel":
 
             try:
+
                 await ctx.send(
                     "❌ Usage: `!verification panel`",
                     delete_after=5
                 )
+
             except Exception:
                 pass
 
             return
 
-        # -----------------------------------------
-        # GET CHANNEL
-        # -----------------------------------------
+        # -------------------------------------------------
+        # PANEL CHANNEL
+        # -------------------------------------------------
 
         channel = self.bot.get_channel(
             VERIFICATION_CHANNEL_ID
@@ -914,30 +924,37 @@ class Verification(commands.Cog):
         if channel is None:
 
             try:
+
                 await ctx.send(
-                    "❌ Verification channel could not be found.",
+                    "❌ Verification panel channel could not be found.",
                     delete_after=5
                 )
+
             except Exception:
                 pass
 
             return
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # PANEL EMBED
-        # -----------------------------------------
+        # -------------------------------------------------
 
         embed = discord.Embed(
             title="🛡️ Server Verification",
             description=(
-                "To get access to the server chat, verification is required.\n\n"
+                "To get access to the server chat, "
+                "verification is required.\n\n"
+
                 f"**IMPORTANT:** You must go to "
-                f"<#{VERIFICATION_CHANNEL_ID}> "
+                f"<#{SELECTION_CHANNEL_ID}> "
                 "and choose what you need.\n\n"
+
                 "Without selecting the required option, "
                 "you will not be admitted to chatting.\n\n"
-                "When you are ready, press **🔐 Start Verification** "
-                "below and complete the verification application."
+
+                "After you have made your selection, "
+                "press **🔐 Start Verification** below "
+                "and complete the verification application."
             ),
             color=discord.Color.blurple()
         )
@@ -946,9 +963,9 @@ class Verification(commands.Cog):
             text="Server Verification"
         )
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # SEND PANEL
-        # -----------------------------------------
+        # -------------------------------------------------
 
         await channel.send(
             embed=embed,
@@ -966,12 +983,14 @@ async def setup(bot):
         Verification(bot)
     )
 
+    # Persistent panel buttons
     bot.add_view(
         VerificationPanelView()
     )
 
+    # Persistent application buttons
     bot.add_view(
         ApplicationView()
     )
 
-    print("✅ verification.py loaded!") 
+    print("✅ verification.py loaded!")
