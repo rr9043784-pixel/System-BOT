@@ -71,7 +71,9 @@ def run_flask():
 
 def load_stats_data():
 
-    if not os.path.exists(STATS_DATA_FILE):
+    if not os.path.exists(
+        STATS_DATA_FILE
+    ):
 
         return {
             "message_id": None,
@@ -364,7 +366,7 @@ def owner_only():
 
 
 # =================================================
-# STATS TEXT
+# Stats Text
 # =================================================
 
 def build_stats_text(
@@ -373,7 +375,9 @@ def build_stats_text(
 
     members = guild.members
 
-    total_members = len(members)
+    total_members = len(
+        members
+    )
 
     humans = sum(
         1
@@ -553,7 +557,7 @@ def build_stats_text(
 
 
     # =================================================
-    # Final Stats
+    # Final
     # =================================================
 
     return (
@@ -667,6 +671,7 @@ async def update_stats_for_guild(
     global stats_data
 
     if guild is None:
+
         return
 
 
@@ -680,7 +685,7 @@ async def update_stats_for_guild(
     if channel is None:
 
         print(
-            "❌ Statistics message cannot be created because the channel was not found."
+            "❌ Statistics channel not found."
         )
 
         return
@@ -712,7 +717,7 @@ async def update_stats_for_guild(
 
 
     # =================================================
-    # Edit Existing Message
+    # Edit existing message
     # =================================================
 
     if (
@@ -747,7 +752,7 @@ async def update_stats_for_guild(
         except discord.Forbidden:
 
             print(
-                "❌ Bot has no permission to edit the stats message."
+                "❌ Bot has no permission to edit stats."
             )
 
             return
@@ -755,14 +760,14 @@ async def update_stats_for_guild(
         except discord.HTTPException as e:
 
             print(
-                f"❌ Failed to edit stats message: {e}"
+                f"❌ Failed to edit stats: {e}"
             )
 
             return
 
 
     # =================================================
-    # Create New Stats Message
+    # Create new message
     # =================================================
 
     try:
@@ -788,7 +793,7 @@ async def update_stats_for_guild(
     except discord.Forbidden:
 
         print(
-            "❌ Bot has no permission to send messages in the stats channel."
+            "❌ Bot has no permission to send stats."
         )
 
     except discord.HTTPException as e:
@@ -809,9 +814,13 @@ async def update_stats_for_guild(
 # =================================================
 
 @bot.event
-async def on_message(message):
+async def on_message(
+    message
+):
 
+    # Игнорируем сообщения ботов
     if message.author.bot:
+
         return
 
 
@@ -819,12 +828,17 @@ async def on_message(message):
     # !my stats bot
     # =================================================
 
-    if message.content.strip().lower() == "!my stats bot":
+    if (
+        message.content.strip().lower()
+        == "!my stats bot"
+    ):
 
         if message.author.id != OWNER_ID:
+
             return
 
         if message.guild is None:
+
             return
 
 
@@ -833,6 +847,7 @@ async def on_message(message):
             await message.delete()
 
         except (
+            discord.NotFound,
             discord.Forbidden,
             discord.HTTPException
         ):
@@ -840,8 +855,14 @@ async def on_message(message):
             pass
 
 
-        stats_data["guild_id"] = message.guild.id
-        stats_data["channel_id"] = STATS_CHANNEL_ID
+        stats_data["guild_id"] = (
+            message.guild.id
+        )
+
+        stats_data["channel_id"] = (
+            STATS_CHANNEL_ID
+        )
+
         stats_data["message_id"] = None
 
         save_stats_data(
@@ -862,30 +883,14 @@ async def on_message(message):
 
 
     # =================================================
-    # Delete owner's prefix commands
+    # IMPORTANT
+    # =================================================
+    # Не удаляем все ! команды здесь.
+    #
+    # Каждая команда сама решает,
+    # нужно ли удалять своё сообщение.
     # =================================================
 
-    if (
-        message.author.id == OWNER_ID
-        and message.content.startswith("!")
-    ):
-
-        try:
-
-            await message.delete()
-
-        except (
-            discord.NotFound,
-            discord.Forbidden,
-            discord.HTTPException
-        ):
-
-            pass
-
-
-    # =================================================
-    # Process ALL prefix commands
-    # =================================================
 
     await bot.process_commands(
         message
@@ -893,7 +898,7 @@ async def on_message(message):
 
 
 # =================================================
-# Stats Auto Update Every 1 Minute
+# Stats Auto Update
 # =================================================
 
 @tasks.loop(
@@ -909,6 +914,7 @@ async def update_stats_message():
     )
 
     if not guild_id:
+
         return
 
 
@@ -917,6 +923,7 @@ async def update_stats_message():
     )
 
     if not guild:
+
         return
 
 
@@ -935,7 +942,9 @@ async def before_stats_loop():
 # OPEN DMS
 # =================================================
 
-class OpenDMsView(discord.ui.View):
+class OpenDMsView(
+    discord.ui.View
+):
 
     def __init__(
         self,
@@ -947,6 +956,7 @@ class OpenDMsView(discord.ui.View):
         )
 
         self.user_id = user_id
+
         self.check_button = None
 
 
@@ -968,7 +978,9 @@ class OpenDMsView(discord.ui.View):
             style=discord.ButtonStyle.secondary
         )
 
-        profile_button.callback = self.profile_callback
+        profile_button.callback = (
+            self.profile_callback
+        )
 
         self.add_item(
             profile_button
@@ -981,7 +993,9 @@ class OpenDMsView(discord.ui.View):
             style=discord.ButtonStyle.success
         )
 
-        self.check_button.callback = self.check_dms_callback
+        self.check_button.callback = (
+            self.check_dms_callback
+        )
 
         self.add_item(
             self.check_button
@@ -1295,7 +1309,11 @@ clear_group = app_commands.Group(
 async def clear_message(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
-    number_of_messages: app_commands.Range[int, 1, 100]
+    number_of_messages: app_commands.Range[
+        int,
+        1,
+        100
+    ]
 ):
 
     try:
@@ -1374,4 +1392,6 @@ Thread(
 # Start Bot
 # =================================================
 
-bot.run(TOKEN)
+bot.run(
+    TOKEN
+        )
