@@ -1423,7 +1423,7 @@ class Chests(commands.Cog):
 
         def create_select(self):
 
-            select = discord.ui.StringSelect(
+            select = discord.ui.Select(
                 placeholder="Select language",
                 min_values=1,
                 max_values=1,
