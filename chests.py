@@ -3144,7 +3144,59 @@ class Chests(commands.Cog):
                 "normal": "chest",
                 "сундук": "chest",
                 "обычный": "chest",
-
                 "mega": "mega",
                 "мега": "mega",
-                "мега-сундук
+                "мега-сундук": "mega",
+                "ultra": "ultra",
+                "ультра": "ultra",
+                "ультра-сундук": "ultra",
+            }
+            chest_type = aliases.get(chest_type)
+            if chest_type is None:
+                await interaction.response.send_message(
+                    "❌ Chest must be chest, mega, or ultra.",
+                    ephemeral=True
+                )
+                return
+
+            added = await self.cog.add_chests(user_id, amount, chest_type)
+            if not added:
+                await interaction.response.send_message(
+                    "❌ Could not add chests. Check the quantity and chest type.",
+                    ephemeral=True
+                )
+                return
+
+            await interaction.response.send_message(
+                f"✅ Added **{amount}** `{chest_type}` chest(s) to <@{user_id}>.",
+                ephemeral=True
+            )
+
+    class AdminChestsView(discord.ui.View):
+        def __init__(self, cog):
+            super().__init__(timeout=None)
+            self.cog = cog
+
+        @discord.ui.button(
+            label="Add Chests",
+            style=discord.ButtonStyle.green,
+            emoji="🎁",
+            custom_id="admin_chests_add"
+        )
+        async def add_chests_button(self, interaction, button):
+            if interaction.user.id != OWNER_ID:
+                await interaction.response.send_message(
+                    "❌ You do not have permission to use this.",
+                    ephemeral=True
+                )
+                return
+            await interaction.response.send_modal(
+                self.cog.AdminChestModal(self.cog)
+            )
+
+
+async def setup(bot):
+    cog = Chests(bot)
+    await bot.add_cog(cog)
+    bot.add_view(cog.AdminChestsView(cog))
+    print("✅ Chests cog loaded!")
