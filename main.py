@@ -311,7 +311,7 @@ async def set_bot_presence():
             status=discord.Status.idle,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="⬇️ 👻 Over server security 👻 ⬇️ ➜➜ 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
+                name="⬇️ 👻 Monitors the order on the server 👻 ⬇️ ➜➜ 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
             )
         )
 
