@@ -212,6 +212,17 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
+        # rps.py
+        # =================================================
+
+try:
+    await self.load_extension("rps")
+    print("✅ rps.py loaded!")
+except Exception as e:
+    print(f"❌ Failed to load rps.py: {e}")
+
+        
+        # =================================================
         # drops.py
         # =================================================
 
