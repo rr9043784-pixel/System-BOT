@@ -2997,6 +2997,27 @@ class Chests(commands.Cog):
     # ADMIN CHESTS
     # =========================================================
 
+    # =========================================================
+    # PREFIX COMMANDS RESTORED
+    # =========================================================
+
+    @commands.command(name="chests")
+    @commands.guild_only()
+    async def chests_command(self, ctx):
+        """Open the chest menu."""
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+        user_id = ctx.author.id
+        user = self.get_user_data(user_id)
+        if not user.get("language"):
+            view = self.LanguageView(self, user_id)
+        else:
+            view = self.MainView(self, user_id)
+        await ctx.send(view=view)
+
     @commands.group(
         name="admin",
         invoke_without_command=True
