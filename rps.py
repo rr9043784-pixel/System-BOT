@@ -394,14 +394,18 @@ class ClassicRPSGame:
         self.lock = asyncio.Lock()
         self.deadline = time.monotonic() + CHOICE_TIMEOUT
         self.last_round_result = None
+        self.invite_deadline = time.monotonic() + INVITE_TIMEOUT
 
-    def invite_embed(self):
+    def invite_embed(self, seconds=None):
+        if seconds is None:
+            seconds = max(0, int(self.invite_deadline - time.monotonic() + 0.999))
         return discord.Embed(
             title="🎮 Classic Rock Paper Scissors",
             description=(
                 f"{self.challenger.mention} challenged {self.opponent.mention}!\n\n"
                 f"🔢 **Rounds:** {self.rounds_total}\n"
                 f"⏱️ **Time per round:** {CHOICE_TIMEOUT} seconds\n"
+                f"⌛ **Invitation expires in:** {seconds} seconds\n\n"
                 "Choose Accept to play, or Decline to refuse."
             ),
             color=discord.Color.blurple(),
@@ -513,6 +517,24 @@ class ClassicInviteView(discord.ui.View):
     def __init__(self, game):
         super().__init__(timeout=INVITE_TIMEOUT)
         self.game = game
+        self.timer_task = None
+
+    async def run_timer(self):
+        try:
+            while not self.game.accepted and not self.game.finished:
+                await asyncio.sleep(1)
+                if self.game.accepted or self.game.finished:
+                    return
+                remaining = max(0, int(self.game.invite_deadline - time.monotonic() + 0.999))
+                if remaining <= 0:
+                    return
+                if self.game.message:
+                    try:
+                        await self.game.message.edit(embed=self.game.invite_embed(remaining), view=self)
+                    except (discord.HTTPException, discord.NotFound):
+                        return
+        except asyncio.CancelledError:
+            pass
 
     @discord.ui.button(label="Accept", emoji="✅", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -701,6 +723,7 @@ async def classic_rps_command(interaction: discord.Interaction, opponent: discor
         view=view,
     )
     game.message = await interaction.original_response()
+    view.timer_task = asyncio.create_task(view.run_timer())
 
 
 class RPS(commands.Cog):
