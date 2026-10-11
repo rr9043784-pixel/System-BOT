@@ -10,6 +10,8 @@ from discord.ext import commands
 
 INVITE_TIMEOUT = 120
 CHOICE_TIMEOUT = 10
+CLASSIC_CHANNEL_ID = 1558706194288476251
+CHEST_RPS_CHANNEL_ID = 1529124683591581827
 CHEST_KEYS = {
     "chest": "chests",
     "mega": "mega_chests",
@@ -143,11 +145,25 @@ class RPSGame:
         )
 
     def game_embed(self):
+        # Keep each player's choice secret until the round is settled.
+        challenger_chosen = self.challenger.id in self.choices
+        opponent_chosen = self.opponent.id in self.choices
+        challenger_line = (
+            f"🔒 {self.challenger.mention}: **Choice locked**"
+            if challenger_chosen
+            else f"⏳ {self.challenger.mention}: *Choosing…*"
+        )
+        opponent_line = (
+            f"🔒 {self.opponent.mention}: **Choice locked**"
+            if opponent_chosen
+            else f"⏳ {self.opponent.mention}: *Choosing…*"
+        )
         return discord.Embed(
             title="🎮 Rock Paper Scissors",
             description=(
-                f"{self.player_line(self.challenger)}\n"
-                f"{self.player_line(self.opponent)}\n\n"
+                f"{challenger_line}\n"
+                f"{opponent_line}\n\n"
+                f"🤫 Choices stay hidden until the round ends.\n\n"
                 f"📦 Stake: **{self.amount} {self.chest_label()} each**\n"
                 f"⏱️ Choose within **{CHOICE_TIMEOUT} seconds**. Missing choices become random."
             ),
@@ -359,6 +375,166 @@ class GameView(discord.ui.View):
             self.stop()
 
 
+
+
+class ClassicRPSGame:
+    """A no-stakes Rock Paper Scissors round."""
+    def __init__(self, challenger, opponent):
+        self.challenger = challenger
+        self.opponent = opponent
+        self.message = None
+        self.choices = {}
+        self.finished = False
+        self.lock = asyncio.Lock()
+        self.deadline = time.monotonic() + CHOICE_TIMEOUT
+
+    def game_embed(self, seconds=None):
+        if seconds is None:
+            seconds = max(0, int(self.deadline - time.monotonic() + 0.999))
+        lines = []
+        for player in (self.challenger, self.opponent):
+            if player.id in self.choices:
+                lines.append(f"🔒 {player.mention}: **Choice locked**")
+            else:
+                lines.append(f"⏳ {player.mention}: *Choosing…*")
+        return discord.Embed(
+            title="🎮 Classic Rock Paper Scissors",
+            description=(
+                f"{lines[0]}\n{lines[1]}\n\n"
+                "🤫 Choices stay hidden until the round ends.\n\n"
+                f"⏱️ You have **{seconds} seconds** left!\n"
+                "If a player doesn't choose in time, the bot picks randomly."
+            ),
+            color=discord.Color.green(),
+        )
+
+    async def finish(self):
+        async with self.lock:
+            if self.finished:
+                return
+            for player in (self.challenger, self.opponent):
+                if player.id not in self.choices:
+                    self.choices[player.id] = random.choice(tuple(CHOICES.keys()))
+            self.finished = True
+            a = self.choices[self.challenger.id]
+            b = self.choices[self.opponent.id]
+            if a == b:
+                result = "🤝 **It's a draw!**"
+                color = discord.Color.gold()
+            elif (a, b) in (("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")):
+                result = f"🏆 **{self.challenger.mention} wins!**"
+                color = discord.Color.green()
+            else:
+                result = f"🏆 **{self.opponent.mention} wins!**"
+                color = discord.Color.green()
+
+            def player_line(player):
+                emoji, label = CHOICES[self.choices[player.id]]
+                return f"{player.mention}: {emoji} **{label}**"
+
+            if self.message:
+                try:
+                    await self.message.edit(
+                        embed=discord.Embed(
+                            title="🎮 Classic Rock Paper Scissors — Finished",
+                            description=(f"{player_line(self.challenger)}\n{player_line(self.opponent)}\n\n{result}"),
+                            color=color,
+                        ),
+                        view=None,
+                    )
+                except (discord.HTTPException, discord.NotFound):
+                    pass
+
+
+class ClassicGameView(discord.ui.View):
+    def __init__(self, game):
+        super().__init__(timeout=None)
+        self.game = game
+        self.task = None
+        for key, (emoji, label) in CHOICES.items():
+            button = discord.ui.Button(label=label, emoji=emoji, style=discord.ButtonStyle.primary)
+            button.callback = self.make_choice_callback(key)
+            self.add_item(button)
+
+    def make_choice_callback(self, choice):
+        async def callback(interaction: discord.Interaction):
+            game = self.game
+            if interaction.user.id not in (game.challenger.id, game.opponent.id):
+                await interaction.response.send_message("You are not a player in this game.", ephemeral=True)
+                return
+            if game.finished:
+                await interaction.response.send_message("This round has already finished.", ephemeral=True)
+                return
+            if time.monotonic() >= game.deadline:
+                await interaction.response.send_message("Time is up! The round is being finished.", ephemeral=True)
+                await game.finish()
+                return
+            old = game.choices.get(interaction.user.id)
+            if old == choice:
+                await interaction.response.send_message("You have already selected that option.", ephemeral=True)
+                return
+            game.choices[interaction.user.id] = choice
+            if old:
+                old_label = CHOICES[old][1]
+                new_label = CHOICES[choice][1]
+                await interaction.response.send_message(
+                    f"Your choice changed: **{old_label} → {new_label}**. Your choice stays hidden.", ephemeral=True
+                )
+                await game.message.edit(embed=game.game_embed(), view=self)
+            else:
+                await interaction.response.edit_message(embed=game.game_embed(), view=self)
+            if len(game.choices) == 2:
+                if self.task and not self.task.done():
+                    self.task.cancel()
+                await game.finish()
+        return callback
+
+    async def run_timer(self):
+        try:
+            while not self.game.finished:
+                remaining = max(0, int(self.game.deadline - time.monotonic() + 0.999))
+                if remaining <= 0:
+                    await self.game.finish()
+                    return
+                await asyncio.sleep(1)
+                if self.game.finished:
+                    return
+                remaining = max(0, int(self.game.deadline - time.monotonic() + 0.999))
+                try:
+                    await self.game.message.edit(embed=self.game.game_embed(remaining), view=self)
+                except (discord.HTTPException, discord.NotFound):
+                    return
+        except asyncio.CancelledError:
+            pass
+
+
+classic_group = app_commands.Group(name="classic", description="Classic games without chest stakes")
+
+
+@classic_group.command(name="rps", description="Play Rock Paper Scissors without chest stakes.")
+@app_commands.describe(opponent="The player you want to play against")
+async def classic_rps_command(interaction: discord.Interaction, opponent: discord.Member):
+    if interaction.channel_id != CLASSIC_CHANNEL_ID:
+        await interaction.response.send_message(
+            f"Use `/classic rps` in <#{CLASSIC_CHANNEL_ID}>.", ephemeral=True
+        )
+        return
+    if interaction.guild is None:
+        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        return
+    if opponent.bot:
+        await interaction.response.send_message("You cannot play against a bot.", ephemeral=True)
+        return
+    if opponent.id == interaction.user.id:
+        await interaction.response.send_message("You cannot play against yourself.", ephemeral=True)
+        return
+    game = ClassicRPSGame(interaction.user, opponent)
+    view = ClassicGameView(game)
+    await interaction.response.send_message(embed=game.game_embed(), view=view)
+    game.message = await interaction.original_response()
+    view.task = asyncio.create_task(view.run_timer())
+
+
 class RPS(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -379,6 +555,11 @@ class RPS(commands.Cog):
         chest_type: Literal["chest", "mega", "ultra"],
         amount: app_commands.Range[int, 1, 100000],
     ):
+        if interaction.channel_id != CHEST_RPS_CHANNEL_ID:
+            await interaction.response.send_message(
+                f"Use `/rps` in <#{CHEST_RPS_CHANNEL_ID}>.", ephemeral=True
+            )
+            return
         if invite.bot:
             await interaction.response.send_message("You cannot challenge a bot.", ephemeral=True)
             return
@@ -418,5 +599,5 @@ class RPS(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(RPS(bot))
+    bot.tree.add_command(classic_group)
     print("✅ rps.py loaded!")
- 
