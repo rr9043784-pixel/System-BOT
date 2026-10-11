@@ -378,17 +378,36 @@ class GameView(discord.ui.View):
 
 
 class ClassicRPSGame:
-    """A no-stakes Rock Paper Scissors round."""
-    def __init__(self, challenger, opponent):
+    """A no-stakes Rock Paper Scissors match with 1–5 rounds."""
+    def __init__(self, challenger, opponent, rounds):
         self.challenger = challenger
         self.opponent = opponent
+        self.rounds_total = rounds
+        self.round_number = 1
+        self.scores = {challenger.id: 0, opponent.id: 0}
+        self.round_draws = 0
         self.message = None
         self.choices = {}
         self.finished = False
+        self.started = False
+        self.accepted = False
         self.lock = asyncio.Lock()
         self.deadline = time.monotonic() + CHOICE_TIMEOUT
+        self.last_round_result = None
 
-    def game_embed(self, seconds=None):
+    def invite_embed(self):
+        return discord.Embed(
+            title="🎮 Classic Rock Paper Scissors",
+            description=(
+                f"{self.challenger.mention} challenged {self.opponent.mention}!\n\n"
+                f"🔢 **Rounds:** {self.rounds_total}\n"
+                f"⏱️ **Time per round:** {CHOICE_TIMEOUT} seconds\n"
+                "Choose Accept to play, or Decline to refuse."
+            ),
+            color=discord.Color.blurple(),
+        )
+
+    def game_embed(self, seconds=None, title=None):
         if seconds is None:
             seconds = max(0, int(self.deadline - time.monotonic() + 0.999))
         lines = []
@@ -397,53 +416,179 @@ class ClassicRPSGame:
                 lines.append(f"🔒 {player.mention}: **Choice locked**")
             else:
                 lines.append(f"⏳ {player.mention}: *Choosing…*")
-        return discord.Embed(
-            title="🎮 Classic Rock Paper Scissors",
-            description=(
-                f"{lines[0]}\n{lines[1]}\n\n"
-                "🤫 Choices stay hidden until the round ends.\n\n"
-                f"⏱️ You have **{seconds} seconds** left!\n"
-                "If a player doesn't choose in time, the bot picks randomly."
-            ),
-            color=discord.Color.green(),
+        desc = (
+            f"**Round {self.round_number}/{self.rounds_total}**\n"
+            f"{lines[0]}\n{lines[1]}\n\n"
+            "🤫 Choices stay hidden until this round ends.\n\n"
+            f"🏅 Score: {self.challenger.mention} **{self.scores[self.challenger.id]}** — "
+            f"**{self.scores[self.opponent.id]}** {self.opponent.mention}\n"
+            f"⏱️ You have **{seconds} seconds** left!\n"
+            "If a player doesn't choose in time, the bot picks randomly."
         )
+        if self.last_round_result:
+            desc = f"{self.last_round_result}\n\n{desc}"
+        return discord.Embed(title=title or "🎮 Classic Rock Paper Scissors", description=desc, color=discord.Color.green())
 
-    async def finish(self):
+    def player_line(self, player):
+        emoji, label = CHOICES[self.choices[player.id]]
+        return f"{player.mention}: {emoji} **{label}**"
+
+    async def finish_match(self):
+        self.finished = True
+        a_score = self.scores[self.challenger.id]
+        b_score = self.scores[self.opponent.id]
+        if a_score == b_score:
+            result = "🤝 **The match ended in a draw!**"
+            color = discord.Color.gold()
+        else:
+            winner = self.challenger if a_score > b_score else self.opponent
+            result = f"🏆 **{winner.mention} wins the match!**"
+            color = discord.Color.green()
+        if self.message:
+            try:
+                await self.message.edit(
+                    embed=discord.Embed(
+                        title="🎮 Classic Rock Paper Scissors — Finished",
+                        description=(
+                            f"**Final score**\n{self.challenger.mention}: **{a_score}** — "
+                            f"**{b_score}** {self.opponent.mention}\n\n{result}"
+                        ),
+                        color=color,
+                    ),
+                    view=None,
+                )
+            except (discord.HTTPException, discord.NotFound):
+                pass
+
+    async def finish_round(self):
         async with self.lock:
-            if self.finished:
+            if self.finished or len(self.choices) < 2:
                 return
-            for player in (self.challenger, self.opponent):
-                if player.id not in self.choices:
-                    self.choices[player.id] = random.choice(tuple(CHOICES.keys()))
-            self.finished = True
             a = self.choices[self.challenger.id]
             b = self.choices[self.opponent.id]
             if a == b:
-                result = "🤝 **It's a draw!**"
-                color = discord.Color.gold()
+                self.round_draws += 1
+                round_result = "🤝 This round is a draw."
             elif (a, b) in (("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")):
-                result = f"🏆 **{self.challenger.mention} wins!**"
-                color = discord.Color.green()
+                self.scores[self.challenger.id] += 1
+                round_result = f"🏅 {self.challenger.mention} wins round {self.round_number}!"
             else:
-                result = f"🏆 **{self.opponent.mention} wins!**"
-                color = discord.Color.green()
+                self.scores[self.opponent.id] += 1
+                round_result = f"🏅 {self.opponent.mention} wins round {self.round_number}!"
 
-            def player_line(player):
-                emoji, label = CHOICES[self.choices[player.id]]
-                return f"{player.mention}: {emoji} **{label}**"
-
+            result_text = (
+                f"**Round {self.round_number}/{self.rounds_total} results**\n"
+                f"{self.player_line(self.challenger)}\n{self.player_line(self.opponent)}\n\n"
+                f"{round_result}"
+            )
+            self.last_round_result = result_text
             if self.message:
                 try:
-                    await self.message.edit(
-                        embed=discord.Embed(
-                            title="🎮 Classic Rock Paper Scissors — Finished",
-                            description=(f"{player_line(self.challenger)}\n{player_line(self.opponent)}\n\n{result}"),
-                            color=color,
-                        ),
-                        view=None,
-                    )
+                    await self.message.edit(embed=self.game_embed(0, "🎮 Round Results"), view=None if self.round_number >= self.rounds_total else self.current_view)
                 except (discord.HTTPException, discord.NotFound):
                     pass
+
+            if self.round_number >= self.rounds_total:
+                await self.finish_match()
+                return
+
+            await asyncio.sleep(2)
+            if self.finished:
+                return
+            self.round_number += 1
+            self.choices.clear()
+            self.deadline = time.monotonic() + CHOICE_TIMEOUT
+            view = ClassicGameView(self)
+            self.current_view = view
+            if self.message:
+                try:
+                    await self.message.edit(embed=self.game_embed(), view=view)
+                except (discord.HTTPException, discord.NotFound):
+                    self.finished = True
+                    return
+            view.task = asyncio.create_task(view.run_timer())
+
+
+class ClassicInviteView(discord.ui.View):
+    def __init__(self, game):
+        super().__init__(timeout=INVITE_TIMEOUT)
+        self.game = game
+
+    @discord.ui.button(label="Accept", emoji="✅", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = self.game
+        if interaction.user.id != game.opponent.id:
+            await interaction.response.send_message("Only the invited player can accept this invitation.", ephemeral=True)
+            return
+        if game.finished or game.accepted:
+            await interaction.response.send_message("This invitation is no longer available.", ephemeral=True)
+            return
+        game.accepted = True
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="✅ Classic RPS Invitation Accepted",
+                description=(
+                    f"{game.opponent.mention} accepted the invitation.\n\n"
+                    f"🔢 Match length: **{game.rounds_total} round(s)**\n"
+                    f"Only {game.challenger.mention} can press **Start Game**."
+                ),
+                color=discord.Color.green(),
+            ),
+            view=ClassicAcceptedView(game),
+        )
+        self.stop()
+
+    @discord.ui.button(label="Decline", emoji="✖️", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = self.game
+        if interaction.user.id != game.opponent.id:
+            await interaction.response.send_message("Only the invited player can decline this invitation.", ephemeral=True)
+            return
+        game.finished = True
+        await interaction.response.edit_message(
+            content=f"**{game.opponent.display_name} declined {game.challenger.display_name}'s Classic RPS invitation.**",
+            embed=None,
+            view=None,
+        )
+        self.stop()
+
+    async def on_timeout(self):
+        game = self.game
+        if game.accepted or game.finished:
+            return
+        game.finished = True
+        if game.message:
+            try:
+                await game.message.edit(
+                    content=f"⏰ **Classic RPS invitation from {game.challenger.display_name} to {game.opponent.display_name} expired.**",
+                    embed=None,
+                    view=None,
+                )
+            except (discord.HTTPException, discord.NotFound):
+                pass
+
+
+class ClassicAcceptedView(discord.ui.View):
+    def __init__(self, game):
+        super().__init__(timeout=None)
+        self.game = game
+
+    @discord.ui.button(label="Start Game", emoji="▶️", style=discord.ButtonStyle.success)
+    async def start_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = self.game
+        if interaction.user.id != game.challenger.id:
+            await interaction.response.send_message("Only the challenger can start the game.", ephemeral=True)
+            return
+        if game.finished or game.started:
+            await interaction.response.send_message("This game is already closed or started.", ephemeral=True)
+            return
+        game.started = True
+        game.deadline = time.monotonic() + CHOICE_TIMEOUT
+        view = ClassicGameView(game)
+        game.current_view = view
+        await interaction.response.edit_message(content=None, embed=game.game_embed(), view=view)
+        game.message = interaction.message
+        view.task = asyncio.create_task(view.run_timer())
 
 
 class ClassicGameView(discord.ui.View):
@@ -463,11 +608,11 @@ class ClassicGameView(discord.ui.View):
                 await interaction.response.send_message("You are not a player in this game.", ephemeral=True)
                 return
             if game.finished:
-                await interaction.response.send_message("This round has already finished.", ephemeral=True)
+                await interaction.response.send_message("This match has already finished.", ephemeral=True)
                 return
             if time.monotonic() >= game.deadline:
                 await interaction.response.send_message("Time is up! The round is being finished.", ephemeral=True)
-                await game.finish()
+                await game.finish_round()
                 return
             old = game.choices.get(interaction.user.id)
             if old == choice:
@@ -486,7 +631,7 @@ class ClassicGameView(discord.ui.View):
             if len(game.choices) == 2:
                 if self.task and not self.task.done():
                     self.task.cancel()
-                await game.finish()
+                await game.finish_round()
         return callback
 
     async def run_timer(self):
@@ -494,7 +639,10 @@ class ClassicGameView(discord.ui.View):
             while not self.game.finished:
                 remaining = max(0, int(self.game.deadline - time.monotonic() + 0.999))
                 if remaining <= 0:
-                    await self.game.finish()
+                    for player in (self.game.challenger, self.game.opponent):
+                        if player.id not in self.game.choices:
+                            self.game.choices[player.id] = random.choice(tuple(CHOICES.keys()))
+                    await game_finish_round_safe(self.game)
                     return
                 await asyncio.sleep(1)
                 if self.game.finished:
@@ -508,12 +656,26 @@ class ClassicGameView(discord.ui.View):
             pass
 
 
+async def game_finish_round_safe(game):
+    # Route timer completion through the same scoring/round progression logic.
+    view = getattr(game, "current_view", None)
+    if view is not None:
+        await game.finish_round()
+
+
 classic_group = app_commands.Group(name="classic", description="Classic games without chest stakes")
 
 
 @classic_group.command(name="rps", description="Play Rock Paper Scissors without chest stakes.")
-@app_commands.describe(opponent="The player you want to play against")
-async def classic_rps_command(interaction: discord.Interaction, opponent: discord.Member):
+@app_commands.describe(opponent="The player you want to challenge", rounds="How many rounds to play (1–5)")
+@app_commands.choices(rounds=[
+    app_commands.Choice(name="1 round", value=1),
+    app_commands.Choice(name="2 rounds", value=2),
+    app_commands.Choice(name="3 rounds", value=3),
+    app_commands.Choice(name="4 rounds", value=4),
+    app_commands.Choice(name="5 rounds", value=5),
+])
+async def classic_rps_command(interaction: discord.Interaction, opponent: discord.Member, rounds: app_commands.Choice[int]):
     if interaction.channel_id != CLASSIC_CHANNEL_ID:
         await interaction.response.send_message(
             f"Use `/classic rps` in <#{CLASSIC_CHANNEL_ID}>.", ephemeral=True
@@ -528,11 +690,17 @@ async def classic_rps_command(interaction: discord.Interaction, opponent: discor
     if opponent.id == interaction.user.id:
         await interaction.response.send_message("You cannot play against yourself.", ephemeral=True)
         return
-    game = ClassicRPSGame(interaction.user, opponent)
-    view = ClassicGameView(game)
-    await interaction.response.send_message(embed=game.game_embed(), view=view)
+    game = ClassicRPSGame(interaction.user, opponent, rounds.value)
+    view = ClassicInviteView(game)
+    await interaction.response.send_message(
+        content=(
+            f"**{interaction.user.display_name} invited {opponent.display_name} to Classic Rock Paper Scissors!**\n"
+            f"{opponent.mention}, do you accept?"
+        ),
+        embed=game.invite_embed(),
+        view=view,
+    )
     game.message = await interaction.original_response()
-    view.task = asyncio.create_task(view.run_timer())
 
 
 class RPS(commands.Cog):
