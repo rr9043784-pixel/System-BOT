@@ -685,6 +685,47 @@ async def send_dm(
 
 
 # =================================================
+# AutoMod Logs
+# =================================================
+
+AUTOMOD_LOG_CHANNEL_ID = 1523192981170159677
+
+
+async def send_automod_log(message, violation, punishment, count):
+    """Send a moderation log embed to the configured log channel."""
+    guild = message.guild
+    channel = guild.get_channel(AUTOMOD_LOG_CHANNEL_ID)
+
+    if channel is None:
+        try:
+            channel = await guild.fetch_channel(AUTOMOD_LOG_CHANNEL_ID)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            print(f"❌ AutoMod log channel unavailable: {e}")
+            return
+
+    embed = discord.Embed(
+        title="🛡️ AutoMod — Violation Detected",
+        color=discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(
+        name="👤 User",
+        value=f"{message.author.mention}\\n`{message.author}`\\nID: `{message.author.id}`",
+        inline=False
+    )
+    embed.add_field(name="📌 Violation", value=violation, inline=True)
+    embed.add_field(name="⚖️ Punishment", value=punishment, inline=True)
+    embed.add_field(name="🔢 Violation count", value=f"`{count}/5`", inline=True)
+    embed.add_field(name="📍 Channel", value=message.channel.mention, inline=True)
+    embed.set_footer(text=f"AutoMod • {guild.name}")
+
+    try:
+        await channel.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException) as e:
+        print(f"❌ Failed to send AutoMod log: {e}")
+
+
+# =================================================
 # Punishment
 # =================================================
 
@@ -998,6 +1039,18 @@ class AutoMod(
                 violation
             )
 
+            count = get_warning_count(
+                message.guild.id,
+                message.author.id
+            )
+
+            await send_automod_log(
+                message,
+                violation,
+                punishment,
+                count
+            )
+
             print(
                 f"🛡️ AutoMod | "
                 f"{message.author} | "
@@ -1036,6 +1089,18 @@ class AutoMod(
                 violation
             )
 
+            count = get_warning_count(
+                message.guild.id,
+                message.author.id
+            )
+
+            await send_automod_log(
+                message,
+                violation,
+                punishment,
+                count
+            )
+
             print(
                 f"🛡️ AutoMod | "
                 f"{message.author} | "
@@ -1072,6 +1137,18 @@ class AutoMod(
             punishment = await punish_member(
                 message.author,
                 violation
+            )
+
+            count = get_warning_count(
+                message.guild.id,
+                message.author.id
+            )
+
+            await send_automod_log(
+                message,
+                violation,
+                punishment,
+                count
             )
 
             print(
