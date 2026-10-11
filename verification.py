@@ -694,6 +694,22 @@ class Verification(commands.Cog):
         self.check_blacklists.cancel()
 
     # =========================
+    # RESET APPLICATION WHEN USER LEAVES OR IS KICKED
+    # =========================
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        data = load_data()
+        application = data["applications"].get(str(member.id))
+
+        # Allow users who left or were kicked to apply again.
+        # Rejected applications and their 15-day blacklist are preserved.
+        if application and application.get("status") in ("pending", "accepted"):
+            application["status"] = "left"
+            application["left_at"] = time.time()
+            save_data(data)
+
+    # =========================
     # BLACKLIST CHECK
     # =========================
 
