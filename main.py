@@ -319,6 +319,8 @@ bot = TournamentBot(
     intents=intents
 )
 
+bot.web_app = app
+
 
 # =================================================
 # Presence
