@@ -212,6 +212,28 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
+        # welcome.py
+        # =================================================
+
+        try:
+
+            await self.load_extension(
+                "welcome"
+            )
+
+            print(
+                "✅ welcome.py loaded!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load welcome.py : {e}"
+            )
+
+
+        
+        # =================================================
         # rps.py
         # =================================================
 
