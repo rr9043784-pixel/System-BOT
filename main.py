@@ -297,6 +297,27 @@ class TournamentBot(commands.Bot):
 
 
         # =================================================
+        # suggest.py
+        # =================================================
+
+        try:
+
+            await self.load_extension(
+                "suggest"
+            )
+
+            print(
+                "✅ suggest.py loaded!"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load suggest.py: {e}"
+            )
+
+        
+        # =================================================
         # automod.py
         # =================================================
 
