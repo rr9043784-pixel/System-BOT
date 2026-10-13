@@ -1,1463 +1,1298 @@
+
+from __future__ import annotations
+
 import os
+import re
 import json
+import difflib
+import asyncio
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 import discord
-from discord import app_commands
-from discord.ext import commands, tasks
-from flask import Flask
-from threading import Thread
+from discord.ext import commands
 
 
-# =================================================
-# Tokens
-# =================================================
-
-TOKEN = os.environ["DISCORD_TOKEN"]
-
-
-# =================================================
-# Settings
-# =================================================
+# =========================
+# CONFIGURATION
+# =========================
 
 OWNER_ID = 1176149190192152626
+SUGGESTIONS_CHANNEL_ID = 1546116339922501682
 
-STATS_DATA_FILE = "stats_data.json"
-
-STATS_CHANNEL_ID = 1542994435472760953
-
-
-# =================================================
-# Status Emojis
-# =================================================
-
-ONLINE_PC_STATUS = "<:Online_pc_status:1557533156322582649>"
-IDLE_STATUS = "<:Idle_status:1557533355711660082>"
-DND_STATUS = "<:Doesnotbother_Status:1557533152639983646>"
-STREAMING_STATUS = "<:Streaming_Status:1557533349105631284>"
-OFFLINE_STATUS = "<:Offline_status:1557533351546458163>"
-
-
-# =================================================
-# Flask
-# =================================================
-
-app = Flask(__name__)
-
-
-@app.route("/")
-def home():
-
-    return "Tournament Bot is online!"
-
-
-def run_flask():
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
-
-
-# =================================================
-# Stats Data
-# =================================================
-
-def load_stats_data():
-
-    if not os.path.exists(
-        STATS_DATA_FILE
-    ):
-
-        return {
-            "message_id": None,
-            "channel_id": STATS_CHANNEL_ID,
-            "guild_id": None
-        }
-
-    try:
-
-        with open(
-            STATS_DATA_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            data = json.load(f)
-
-            data["channel_id"] = STATS_CHANNEL_ID
-
-            return data
-
-    except Exception as e:
-
-        print(
-            f"❌ Failed to load stats_data.json: {e}"
-        )
-
-        return {
-            "message_id": None,
-            "channel_id": STATS_CHANNEL_ID,
-            "guild_id": None
-        }
-
-
-def save_stats_data(data):
-
-    temp_file = STATS_DATA_FILE + ".tmp"
-
-    with open(
-        temp_file,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            data,
-            f,
-            indent=4
-        )
-
-    os.replace(
-        temp_file,
-        STATS_DATA_FILE
-    )
-
-
-stats_data = load_stats_data()
-
-
-# =================================================
-# Discord Bot
-# =================================================
-
-intents = discord.Intents.default()
-
-intents.message_content = True
-intents.members = True
-intents.presences = True
-
-
-class TournamentBot(commands.Bot):
-
-    async def setup_hook(self):
-
-        # =================================================
-        # message.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "message"
-            )
-
-            print(
-                "✅ message.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load message.py: {e}"
-            )
-
-
-        # =================================================
-        # ticket.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "ticket"
-            )
-
-            print(
-                "✅ ticket.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load ticket.py: {e}"
-            )
-
-
-        # =================================================
-        # chests.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "chests"
-            )
-
-            print(
-                "✅ chests.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load chests.py: {e}"
-            )
-
-
-        # =================================================
-        # welcome.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "welcome"
-            )
-
-            print(
-                "✅ welcome.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load welcome.py : {e}"
-            )
-
-
-        
-        # =================================================
-        # rps.py
-        # =================================================
-
-        try:
-            
-            await self.load_extension(
-                "rps"
-            )
-           
-            print(
-                "✅ rps.py loaded!"
-            )
-        
-        except Exception as e:
-    
-            print(
-                f"❌ Failed to load rps.py: {e}"
-            )
-
-        
-        # =================================================
-        # drops.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "drops"
-            )
-
-            print(
-                "✅ drops.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load drops.py: {e}"
-            )
-
-
-        # =================================================
-        # verification.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "verification"
-            )
-
-            print(
-                "✅ verification.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load verification.py: {e}"
-            )
-
-
-        # =================================================
-        # suggest.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "suggest"
-            )
-
-            print(
-                "✅ suggest.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load suggest.py: {e}"
-            )
-
-        
-        # =================================================
-        # automod.py
-        # =================================================
-
-        try:
-
-            await self.load_extension(
-                "automod"
-            )
-
-            print(
-                "✅ automod.py loaded!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to load automod.py: {e}"
-            )
-
-
-        # =================================================
-        # Sync Slash Commands
-        # =================================================
-
-        try:
-
-            await self.tree.sync()
-
-            print(
-                "✅ Slash commands synced!"
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Failed to sync slash commands: {e}"
-            )
-
-
-bot = TournamentBot(
-    command_prefix="!",
-    intents=intents
+DATA_FILE = Path(
+    os.getenv("SUGGESTIONS_DATA_FILE", "suggestions.json")
 )
 
-bot.web_app = app
+MAX_LENGTH = 1000
+COOLDOWN = 600
+MAX_DAILY = 3
+SIMILARITY_LIMIT = 0.65
+PAGE_SIZE = 5
+
+STATUSES = ("Pending", "Accepted", "Rejected")
+
+DATA = {
+    "next_id": 1,
+    "suggestions": {},
+    "last_submit": {},
+    "submit_dates": {},
+}
+
+LOCK = asyncio.Lock()
 
 
-# =================================================
-# Presence
-# =================================================
+# =========================
+# STORAGE
+# =========================
 
-async def set_bot_presence():
+def load_data():
+    global DATA
 
-    try:
-
-        await bot.change_presence(
-            status=discord.Status.idle,
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                name="👻 Monitors the order on the server 👻⠀  ➜➜ 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
-            )
-        )
-
-        print(
-            "🟡 Presence set: Idle | Watching Over server security"
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Failed to set presence: {e}"
-        )
-
-
-# =================================================
-# Bot Ready
-# =================================================
-
-@bot.event
-async def on_ready():
-
-    print(
-        f"🤖 Logged in as {bot.user}"
-    )
-
-    await set_bot_presence()
-
-    if not update_stats_message.is_running():
-
-        update_stats_message.start()
-
-    print(
-        "✅ Bot is ready!"
-    )
-
-
-# =================================================
-# Owner Check
-# =================================================
-
-def owner_only():
-
-    async def predicate(
-        interaction: discord.Interaction
-    ):
-
-        return interaction.user.id == OWNER_ID
-
-    return app_commands.check(
-        predicate
-    )
-
-
-# =================================================
-# Stats Text
-# =================================================
-
-def build_stats_text(
-    guild: discord.Guild
-):
-
-    members = guild.members
-
-    total_members = len(
-        members
-    )
-
-    humans = sum(
-        1
-        for member in members
-        if not member.bot
-    )
-
-    bots_count = sum(
-        1
-        for member in members
-        if member.bot
-    )
-
-
-    # =================================================
-    # Status
-    # =================================================
-
-    online = sum(
-        1
-        for member in members
-        if (
-            not member.bot
-            and member.status == discord.Status.online
-        )
-    )
-
-    idle = sum(
-        1
-        for member in members
-        if (
-            not member.bot
-            and member.status == discord.Status.idle
-        )
-    )
-
-    dnd = sum(
-        1
-        for member in members
-        if (
-            not member.bot
-            and member.status == discord.Status.dnd
-        )
-    )
-
-    offline = sum(
-        1
-        for member in members
-        if (
-            not member.bot
-            and member.status == discord.Status.offline
-        )
-    )
-
-
-    # =================================================
-    # Streaming
-    # =================================================
-
-    streaming = sum(
-        1
-        for member in members
-        if (
-            not member.bot
-            and any(
-                isinstance(
-                    activity,
-                    discord.Streaming
-                )
-                for activity in member.activities
-            )
-        )
-    )
-
-
-    # =================================================
-    # Channels
-    # =================================================
-
-    text_channels = sum(
-        1
-        for channel in guild.channels
-        if isinstance(
-            channel,
-            discord.TextChannel
-        )
-    )
-
-    voice_channels = sum(
-        1
-        for channel in guild.channels
-        if isinstance(
-            channel,
-            discord.VoiceChannel
-        )
-    )
-
-    categories = sum(
-        1
-        for channel in guild.channels
-        if isinstance(
-            channel,
-            discord.CategoryChannel
-        )
-    )
-
-
-    # =================================================
-    # Roles
-    # =================================================
-
-    roles = max(
-        len(guild.roles) - 1,
-        0
-    )
-
-
-    # =================================================
-    # Boosts
-    # =================================================
-
-    boosts = guild.premium_subscription_count or 0
-
-    boost_level = getattr(
-        guild,
-        "premium_tier",
-        0
-    )
+    if not DATA_FILE.exists():
+        save_data()
+        return
 
     try:
+        with DATA_FILE.open("r", encoding="utf-8") as file:
+            loaded = json.load(file)
 
-        boost_level_number = int(
-            getattr(
-                boost_level,
-                "value",
-                boost_level
-            )
-        )
+        if isinstance(loaded, dict):
+            DATA.update(loaded)
 
-    except (
-        TypeError,
-        ValueError
-    ):
+        DATA.setdefault("next_id", 1)
+        DATA.setdefault("suggestions", {})
+        DATA.setdefault("last_submit", {})
+        DATA.setdefault("submit_dates", {})
 
-        boost_level_number = 0
+    except (OSError, json.JSONDecodeError):
+        print("[Suggest] Could not load suggestions.json")
 
 
-    boost_levels = {
-        0: "No Level",
-        1: "Level 1",
-        2: "Level 2",
-        3: "Level 3"
-    }
+def save_data():
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    boost_level_text = boost_levels.get(
-        boost_level_number,
-        f"Level {boost_level_number}"
-    )
+    temporary = DATA_FILE.with_suffix(".tmp")
+
+    with temporary.open("w", encoding="utf-8") as file:
+        json.dump(DATA, file, ensure_ascii=False, indent=2)
+
+    temporary.replace(DATA_FILE)
 
 
-    # =================================================
-    # Created
-    # =================================================
-
-    created = (
-        f"<t:{int(guild.created_at.timestamp())}:F>"
-    )
+def now():
+    return datetime.now(timezone.utc)
 
 
-    # =================================================
-    # Updated
-    # =================================================
-
-    updated = (
-        f"<t:{int(discord.utils.utcnow().timestamp())}:R>"
-    )
+def timestamp(value=None):
+    value = value or now()
+    return value.isoformat()
 
 
-    # =================================================
-    # Final
-    # =================================================
-
-    return (
-        "📊 **BOT Statistics**\n"
-        "\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "\n"
-        f"👥 **Members:** {total_members:,}\n"
-        f"👤 Humans: {humans:,}\n"
-        f"🤖 Bots: {bots_count:,}\n"
-        "\n"
-        "⬇️ **Status**\n"
-        f"{ONLINE_PC_STATUS} Online: {online:,}\n"
-        f"{IDLE_STATUS} Idle: {idle:,}\n"
-        f"{DND_STATUS} Do Not Disturb: {dnd:,}\n"
-        f"{STREAMING_STATUS} Streaming: {streaming:,}\n"
-        f"{OFFLINE_STATUS} Offline: {offline:,}\n"
-        "\n"
-        "📁 **Channels**\n"
-        f"Text: {text_channels:,}\n"
-        f"Voice: {voice_channels:,}\n"
-        f"Categories: {categories:,}\n"
-        "\n"
-        f"🎭 **Roles:** {roles:,}\n"
-        "\n"
-        "🚀 **Server Boosts**\n"
-        f"Boosts: {boosts:,}\n"
-        f"Level: {boost_level_text}\n"
-        "\n"
-        f"📅 **Server Created:** {created}\n"
-        f"🔄 **Updated:** {updated}\n"
-        "\n"
-        "━━━━━━━━━━━━━━━━━━━━"
-    )
-
-
-# =================================================
-# Get Stats Channel
-# =================================================
-
-async def get_stats_channel():
-
+def parse_date(value):
     try:
+        return datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return now()
 
-        channel = bot.get_channel(
-            STATS_CHANNEL_ID
+
+def get_suggestion(suggestion_id):
+    return DATA["suggestions"].get(str(suggestion_id))
+
+
+def active_suggestions():
+    return [
+        suggestion
+        for suggestion in DATA["suggestions"].values()
+        if not suggestion.get("deleted", False)
+    ]
+
+
+def display_status(status):
+    if status == "Accepted":
+        return "✅ Accepted"
+    if status == "Rejected":
+        return "❌ Rejected"
+    return "🕒 Pending"
+
+
+def shorten(value, limit=180):
+    value = str(value)
+    return value if len(value) <= limit else value[:limit - 3] + "..."
+
+
+def normalize_text(value):
+    value = value.lower().strip()
+    value = re.sub(r"<@!?\d+>", "", value)
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+# =========================
+# EMBEDS
+# =========================
+
+def make_embed(suggestion):
+    suggestion_id = int(suggestion["id"])
+
+    embed = discord.Embed(
+        title=f"💡 Suggestion #{suggestion_id:03d}",
+        description=suggestion["text"],
+        color=(
+            discord.Color.green()
+            if suggestion["status"] == "Accepted"
+            else discord.Color.red()
+            if suggestion["status"] == "Rejected"
+            else discord.Color.blurple()
+        ),
+        timestamp=parse_date(suggestion["created_at"]),
+    )
+
+    embed.add_field(
+        name="Author",
+        value=f"<@{suggestion['author_id']}>",
+        inline=True,
+    )
+
+    embed.add_field(
+        name="Status",
+        value=display_status(suggestion["status"]),
+        inline=True,
+    )
+
+    embed.add_field(
+        name="Edited",
+        value="Yes" if suggestion.get("edited") else "No",
+        inline=True,
+    )
+
+    votes = suggestion.get("votes", {})
+    upvotes = sum(1 for vote in votes.values() if vote == "for")
+    downvotes = sum(1 for vote in votes.values() if vote == "against")
+
+    embed.add_field(
+        name="Community Votes",
+        value=f"👍 {upvotes}  ·  👎 {downvotes}",
+        inline=False,
+    )
+
+    comments = suggestion.get("comments", [])
+
+    if comments:
+        embed.add_field(
+            name="Owner Comment",
+            value=shorten(comments[-1], 1000),
+            inline=False,
         )
 
-        if channel is not None:
+    embed.set_footer(text="Suggestion System")
 
-            if isinstance(
-                channel,
-                discord.TextChannel
-            ):
-
-                return channel
+    return embed
 
 
-        channel = await bot.fetch_channel(
-            STATS_CHANNEL_ID
-        )
+def make_vote_embed(suggestion):
+    votes = suggestion.get("votes", {})
+    upvotes = sum(1 for vote in votes.values() if vote == "for")
+    downvotes = sum(1 for vote in votes.values() if vote == "against")
 
-        if not isinstance(
-            channel,
-            discord.TextChannel
-        ):
+    return discord.Embed(
+        title=f"🗳️ Vote on Suggestion #{int(suggestion['id']):03d}",
+        description=(
+            f"👍 **For:** {upvotes}\n"
+            f"👎 **Against:** {downvotes}\n\n"
+            "Each member can vote once. Votes cannot be changed."
+        ),
+        color=discord.Color.blurple(),
+    )
 
-            print(
-                f"❌ Stats channel {STATS_CHANNEL_ID} is not a text channel."
-            )
 
+async def get_suggestion_channel(bot):
+    channel = bot.get_channel(SUGGESTIONS_CHANNEL_ID)
+
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(SUGGESTIONS_CHANNEL_ID)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
 
-        return channel
+    return channel if hasattr(channel, "send") else None
 
-    except discord.NotFound:
 
-        print(
-            f"❌ Stats channel {STATS_CHANNEL_ID} does not exist."
-        )
+async def refresh_suggestion(bot, suggestion):
+    channel = await get_suggestion_channel(bot)
 
-    except discord.Forbidden:
+    if channel is None:
+        return
 
-        print(
-            f"❌ Bot cannot access stats channel {STATS_CHANNEL_ID}."
-        )
+    main_message_id = suggestion.get("message_id")
+    vote_message_id = suggestion.get("vote_message_id")
 
-    except discord.HTTPException as e:
+    if main_message_id:
+        try:
+            message = await channel.fetch_message(int(main_message_id))
+            await message.edit(
+                embed=make_embed(suggestion),
+                view=SuggestionView(int(suggestion["id"])),
+            )
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
 
-        print(
-            f"❌ Failed to fetch stats channel: {e}"
-        )
+    if vote_message_id:
+        try:
+            message = await channel.fetch_message(int(vote_message_id))
+            await message.edit(
+                embed=make_vote_embed(suggestion),
+                view=VoteView(
+                    int(suggestion["id"]),
+                    disabled=suggestion["status"] != "Pending",
+                ),
+            )
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
 
-    except Exception as e:
 
-        print(
-            f"❌ Stats channel error: {e}"
-        )
+# =========================
+# LIMITS AND SIMILAR IDEAS
+# =========================
+
+def check_limits(user_id):
+    key = str(user_id)
+    current = now()
+
+    last_value = DATA["last_submit"].get(key)
+
+    if last_value:
+        last_submit = parse_date(last_value)
+        elapsed = (current - last_submit).total_seconds()
+
+        if elapsed < COOLDOWN:
+            remaining = int(COOLDOWN - elapsed)
+            minutes = remaining // 60
+            seconds = remaining % 60
+
+            return (
+                "⏳ Please wait "
+                f"**{minutes}m {seconds}s** before submitting another suggestion."
+            )
+
+    today = current.date().isoformat()
+    dates = DATA["submit_dates"].get(key, [])
+
+    dates = [
+        value for value in dates
+        if value == today
+    ]
+
+    DATA["submit_dates"][key] = dates
+
+    if len(dates) >= MAX_DAILY:
+        return f"❌ You can submit up to **{MAX_DAILY} suggestions per day**."
 
     return None
 
 
-# =================================================
-# Update Stats
-# =================================================
+def find_similar(text):
+    normalized = normalize_text(text)
+    matches = []
 
-async def update_stats_for_guild(
-    guild: discord.Guild
-):
+    for suggestion in active_suggestions():
+        if suggestion["status"] != "Pending":
+            continue
 
-    global stats_data
+        existing = normalize_text(suggestion["text"])
 
-    if guild is None:
+        ratio = difflib.SequenceMatcher(
+            None,
+            normalized,
+            existing,
+        ).ratio()
 
-        return
+        if ratio >= SIMILARITY_LIMIT:
+            matches.append((ratio, suggestion))
+
+    matches.sort(key=lambda item: item[0], reverse=True)
+
+    return [suggestion for _, suggestion in matches[:3]]
 
 
-    text = build_stats_text(
-        guild
-    )
+# =========================
+# PUBLISH SUGGESTION
+# =========================
 
-
-    channel = await get_stats_channel()
+async def publish_suggestion(bot, user, text_value):
+    channel = await get_suggestion_channel(bot)
 
     if channel is None:
+        return None
 
-        print(
-            "❌ Statistics channel not found."
-        )
+    suggestion_id = int(DATA["next_id"])
 
-        return
+    suggestion = {
+        "id": suggestion_id,
+        "author_id": user.id,
+        "text": text_value,
+        "status": "Pending",
+        "votes": {},
+        "comments": [],
+        "created_at": timestamp(),
+        "edited": False,
+        "deleted": False,
+        "message_id": None,
+        "vote_message_id": None,
+    }
 
-
-    message_id = stats_data.get(
-        "message_id"
-    )
-
-    stored_guild_id = stats_data.get(
-        "guild_id"
-    )
-
-    stored_channel_id = stats_data.get(
-        "channel_id"
-    )
-
-
-    # =================================================
-    # Channel changed
-    # =================================================
-
-    if stored_channel_id != STATS_CHANNEL_ID:
-
-        message_id = None
-
-        stats_data["message_id"] = None
-        stats_data["channel_id"] = STATS_CHANNEL_ID
-
-
-    # =================================================
-    # Edit existing message
-    # =================================================
-
-    if (
-        message_id
-        and stored_guild_id == guild.id
-    ):
-
-        try:
-
-            message = await channel.fetch_message(
-                message_id
-            )
-
-            await message.edit(
-                content=text
-            )
-
-            print(
-                "🔄 Stats message updated."
-            )
-
-            return
-
-        except discord.NotFound:
-
-            print(
-                "⚠️ Old stats message not found. Creating a new one."
-            )
-
-            stats_data["message_id"] = None
-
-        except discord.Forbidden:
-
-            print(
-                "❌ Bot has no permission to edit stats."
-            )
-
-            return
-
-        except discord.HTTPException as e:
-
-            print(
-                f"❌ Failed to edit stats: {e}"
-            )
-
-            return
-
-
-    # =================================================
-    # Create new message
-    # =================================================
+    DATA["next_id"] = suggestion_id + 1
+    DATA["suggestions"][str(suggestion_id)] = suggestion
 
     try:
-
-        message = await channel.send(
-            text
+        main_message = await channel.send(
+            embed=make_embed(suggestion),
+            view=SuggestionView(suggestion_id),
         )
 
-        stats_data = {
-            "message_id": message.id,
-            "channel_id": STATS_CHANNEL_ID,
-            "guild_id": guild.id
-        }
+        suggestion["message_id"] = main_message.id
 
-        save_stats_data(
-            stats_data
+        vote_message = await channel.send(
+            embed=make_vote_embed(suggestion),
+            view=VoteView(suggestion_id),
         )
 
-        print(
-            f"✅ Stats message created: {message.id}"
-        )
+        suggestion["vote_message_id"] = vote_message.id
 
+    except (discord.Forbidden, discord.HTTPException):
+        DATA["suggestions"].pop(str(suggestion_id), None)
+        DATA["next_id"] = suggestion_id
+        save_data()
+        return None
+
+    key = str(user.id)
+    today = now().date().isoformat()
+
+    DATA["last_submit"][key] = timestamp()
+
+    dates = DATA["submit_dates"].setdefault(key, [])
+    dates.append(today)
+
+    save_data()
+
+    try:
+        await user.send(
+            f"✅ Your suggestion **#{suggestion_id:03d}** "
+            "has been submitted successfully."
+        )
     except discord.Forbidden:
+        pass
 
-        print(
-            "❌ Bot has no permission to send stats."
-        )
-
-    except discord.HTTPException as e:
-
-        print(
-            f"❌ Failed to create stats message: {e}"
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Unexpected stats error: {e}"
-        )
+    return suggestion_id
 
 
-# =================================================
-# Prefix Commands
-# =================================================
+# =========================
+# VOTING
+# =========================
 
-@bot.event
-async def on_message(
-    message
-):
+class VoteView(discord.ui.View):
+    def __init__(self, suggestion_id, disabled=False):
+        super().__init__(timeout=None)
 
-    # Игнорируем сообщения ботов
-    if message.author.bot:
+        self.suggestion_id = suggestion_id
 
-        return
-
-
-    # =================================================
-    # !my stats bot
-    # =================================================
-
-    if (
-        message.content.strip().lower()
-        == "!my stats bot"
-    ):
-
-        if message.author.id != OWNER_ID:
-
-            return
-
-        if message.guild is None:
-
-            return
-
-
-        try:
-
-            await message.delete()
-
-        except (
-            discord.NotFound,
-            discord.Forbidden,
-            discord.HTTPException
+        for label, vote_type, emoji in (
+            ("Vote For", "for", "👍"),
+            ("Vote Against", "against", "👎"),
         ):
-
-            pass
-
-
-        stats_data["guild_id"] = (
-            message.guild.id
-        )
-
-        stats_data["channel_id"] = (
-            STATS_CHANNEL_ID
-        )
-
-        stats_data["message_id"] = None
-
-        save_stats_data(
-            stats_data
-        )
-
-
-        print(
-            f"📊 Creating stats in channel {STATS_CHANNEL_ID}..."
-        )
-
-
-        await update_stats_for_guild(
-            message.guild
-        )
-
-        return
-
-
-    # =================================================
-    # IMPORTANT
-    # =================================================
-    # Не удаляем все ! команды здесь.
-    #
-    # Каждая команда сама решает,
-    # нужно ли удалять своё сообщение.
-    # =================================================
-
-
-    await bot.process_commands(
-        message
-    )
-
-
-# =================================================
-# Stats Auto Update
-# =================================================
-
-@tasks.loop(
-    minutes=1
-)
-async def update_stats_message():
-
-    await set_bot_presence()
-
-
-    guild_id = stats_data.get(
-        "guild_id"
-    )
-
-    if not guild_id:
-
-        return
-
-
-    guild = bot.get_guild(
-        guild_id
-    )
-
-    if not guild:
-
-        return
-
-
-    await update_stats_for_guild(
-        guild
-    )
-
-
-@update_stats_message.before_loop
-async def before_stats_loop():
-
-    await bot.wait_until_ready()
-
-
-# =================================================
-# OPEN DMS
-# =================================================
-
-class OpenDMsView(
-    discord.ui.View
-):
-
-    def __init__(
-        self,
-        user_id: int
-    ):
-
-        super().__init__(
-            timeout=300
-        )
-
-        self.user_id = user_id
-
-        self.check_button = None
-
-
-        settings_button = discord.ui.Button(
-            label="Through Settings",
-            emoji="⚙️",
-            style=discord.ButtonStyle.link,
-            url="https://discord.com/settings/privacy"
-        )
-
-        self.add_item(
-            settings_button
-        )
-
-
-        profile_button = discord.ui.Button(
-            label="Through Bot Profile",
-            emoji="🤖",
-            style=discord.ButtonStyle.secondary
-        )
-
-        profile_button.callback = (
-            self.profile_callback
-        )
-
-        self.add_item(
-            profile_button
-        )
-
-
-        self.check_button = discord.ui.Button(
-            label="Check DMs",
-            emoji="🔍",
-            style=discord.ButtonStyle.success
-        )
-
-        self.check_button.callback = (
-            self.check_dms_callback
-        )
-
-        self.add_item(
-            self.check_button
-        )
-
-
-    async def interaction_check(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        if interaction.user.id != self.user_id:
-
-            await interaction.response.send_message(
-                "❌ This panel belongs to another user.",
-                ephemeral=True
+            button = discord.ui.Button(
+                label=label,
+                emoji=emoji,
+                style=(
+                    discord.ButtonStyle.success
+                    if vote_type == "for"
+                    else discord.ButtonStyle.danger
+                ),
+                custom_id=f"suggest:vote:{vote_type}:{suggestion_id}",
+                disabled=disabled,
             )
 
+            async def callback(interaction, selected=vote_type):
+                await self.cast_vote(interaction, selected)
+
+            button.callback = callback
+            self.add_item(button)
+
+    async def cast_vote(self, interaction, vote_type):
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if not suggestion or suggestion.get("deleted"):
+            await interaction.response.send_message(
+                "❌ This suggestion is no longer available.",
+                ephemeral=True,
+            )
+            return
+
+        if suggestion["status"] != "Pending":
+            await interaction.response.send_message(
+                "❌ Voting is closed for this suggestion.",
+                ephemeral=True,
+            )
+            return
+
+        if interaction.user.id == int(suggestion["author_id"]):
+            await interaction.response.send_message(
+                "❌ You cannot vote on your own suggestion.",
+                ephemeral=True,
+            )
+            return
+
+        votes = suggestion.setdefault("votes", {})
+        user_key = str(interaction.user.id)
+
+        if user_key in votes:
+            await interaction.response.send_message(
+                "❌ You have already voted. Your vote cannot be changed.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            votes[user_key] = vote_type
+            save_data()
+
+        await interaction.response.send_message(
+            "✅ Your vote has been recorded.",
+            ephemeral=True,
+        )
+
+        await refresh_suggestion(interaction.client, suggestion)
+
+
+# =========================
+# SUGGESTION ACTION BUTTONS
+# =========================
+
+class SuggestionView(discord.ui.View):
+    def __init__(self, suggestion_id):
+        super().__init__(timeout=None)
+        self.suggestion_id = suggestion_id
+
+    async def interaction_check(self, interaction):
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if not suggestion or suggestion.get("deleted"):
+            await interaction.response.send_message(
+                "❌ This suggestion is no longer available.",
+                ephemeral=True,
+            )
             return False
 
         return True
 
+    @discord.ui.button(
+        label="Edit",
+        emoji="✏️",
+        style=discord.ButtonStyle.primary,
+        custom_id="suggest:edit",
+    )
+    async def edit_button(self, interaction, button):
+        suggestion = get_suggestion(self.suggestion_id)
 
-    async def profile_callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        await interaction.response.send_message(
-            "🤖 Open my profile and use **Add App** to add the bot to your apps.",
-            ephemeral=True
-        )
-
-
-    async def check_dms_callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        if self.check_button.disabled:
-
+        if interaction.user.id != int(suggestion["author_id"]):
             await interaction.response.send_message(
-                "✅ Your DMs are already open!",
-                ephemeral=True
+                "❌ Only the author can edit this suggestion.",
+                ephemeral=True,
             )
-
             return
 
-
-        try:
-
-            test_message = await interaction.user.send(
-                "✅ DM check successful."
-            )
-
-            try:
-
-                await test_message.delete()
-
-            except (
-                discord.Forbidden,
-                discord.HTTPException
-            ):
-
-                pass
-
-
-            self.check_button.disabled = True
-
-            await interaction.response.edit_message(
-                view=self
-            )
-
-            await interaction.followup.send(
-                "✅ Your DMs are now open!",
-                ephemeral=True
-            )
-
-        except discord.Forbidden:
-
+        if suggestion["status"] != "Pending":
             await interaction.response.send_message(
-                "❌ Your DMs are still closed.",
-                ephemeral=True
+                "❌ Only pending suggestions can be edited.",
+                ephemeral=True,
             )
+            return
 
-        except discord.HTTPException:
-
-            await interaction.response.send_message(
-                "❌ I couldn't check your DMs right now.",
-                ephemeral=True
-            )
-
-
-# =================================================
-# /open
-# =================================================
-
-open_group = app_commands.Group(
-    name="open",
-    description="Open and check settings"
-)
-
-
-@open_group.command(
-    name="dms",
-    description="Check and open your DMs with the bot"
-)
-async def open_dms(
-    interaction: discord.Interaction
-):
-
-    try:
-
-        test_message = await interaction.user.send(
-            "✅ DM check successful."
+        await interaction.response.send_modal(
+            EditSuggestionModal(self.suggestion_id)
         )
 
-        try:
+    @discord.ui.button(
+        label="Delete",
+        emoji="🗑️",
+        style=discord.ButtonStyle.danger,
+        custom_id="suggest:delete",
+    )
+    async def delete_button(self, interaction, button):
+        suggestion = get_suggestion(self.suggestion_id)
 
-            await test_message.delete()
-
-        except (
-            discord.Forbidden,
-            discord.HTTPException
+        if (
+            interaction.user.id != int(suggestion["author_id"])
+            and interaction.user.id != OWNER_ID
         ):
-
-            pass
-
+            await interaction.response.send_message(
+                "❌ You cannot delete this suggestion.",
+                ephemeral=True,
+            )
+            return
 
         await interaction.response.send_message(
-            "✅ Your DMs are already open!",
-            ephemeral=True
+            "Are you sure you want to delete this suggestion?",
+            view=DeleteConfirmView(self.suggestion_id, interaction.user.id),
+            ephemeral=True,
         )
 
-        return
+    @discord.ui.button(
+        label="Accept",
+        emoji="✅",
+        style=discord.ButtonStyle.success,
+        custom_id="suggest:accept",
+    )
+    async def accept_button(self, interaction, button):
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Only the bot owner can accept suggestions.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if suggestion["status"] != "Pending":
+            await interaction.response.send_message(
+                "This suggestion has already been reviewed.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            suggestion["status"] = "Accepted"
+            save_data()
+
+        await interaction.response.send_message(
+            "✅ Suggestion accepted.",
+            ephemeral=True,
+        )
+
+        await refresh_suggestion(interaction.client, suggestion)
+        await notify_author(interaction.client, suggestion, "Accepted")
+
+    @discord.ui.button(
+        label="Reject",
+        emoji="❌",
+        style=discord.ButtonStyle.danger,
+        custom_id="suggest:reject",
+    )
+    async def reject_button(self, interaction, button):
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Only the bot owner can reject suggestions.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if suggestion["status"] != "Pending":
+            await interaction.response.send_message(
+                "This suggestion has already been reviewed.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_modal(
+            RejectSuggestionModal(self.suggestion_id)
+        )
+
+    @discord.ui.button(
+        label="Comment",
+        emoji="💬",
+        style=discord.ButtonStyle.secondary,
+        custom_id="suggest:comment",
+    )
+    async def comment_button(self, interaction, button):
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Only the bot owner can comment.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_modal(
+            OwnerCommentModal(self.suggestion_id)
+        )
 
 
-    except discord.Forbidden:
+async def notify_author(bot, suggestion, status):
+    try:
+        user = await bot.fetch_user(int(suggestion["author_id"]))
 
+        await user.send(
+            f"📢 Your suggestion **#{int(suggestion['id']):03d}** "
+            f"has been **{status.lower()}**."
+        )
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
 
-    except discord.HTTPException:
+# =========================
+# EDIT MODAL
+# =========================
 
-        await interaction.response.send_message(
-            "❌ I couldn't check your DMs right now.",
-            ephemeral=True
+class EditSuggestionModal(discord.ui.Modal):
+    def __init__(self, suggestion_id):
+        super().__init__(title="Edit Suggestion")
+
+        self.suggestion_id = suggestion_id
+        suggestion = get_suggestion(suggestion_id)
+
+        self.text_input = discord.ui.TextInput(
+            label="Suggestion",
+            style=discord.TextStyle.paragraph,
+            max_length=MAX_LENGTH,
+            required=True,
+            default=suggestion["text"] if suggestion else "",
         )
 
-        return
+        self.add_item(self.text_input)
 
+    async def on_submit(self, interaction):
+        suggestion = get_suggestion(self.suggestion_id)
 
-    embed = discord.Embed(
-        title="📩 Open DMs",
-        description=(
-            "Your DMs are currently closed.\n\n"
-            "**Choose one of the methods below:**\n\n"
-            "⚙️ **Through Settings**\n"
-            "Open your Discord Privacy settings and allow "
-            "direct messages from server members.\n\n"
-            "🤖 **Through Bot Profile**\n"
-            "Open my profile and use **Add App**.\n\n"
-            "🔍 **Check DMs**\n"
-            "After changing the settings, press the button "
-            "to check again."
-        ),
-        color=discord.Color.blurple()
-    )
-
-
-    view = OpenDMsView(
-        interaction.user.id
-    )
-
-
-    await interaction.response.send_message(
-        embed=embed,
-        view=view,
-        ephemeral=True
-    )
-
-
-bot.tree.add_command(
-    open_group
-)
-
-
-# =================================================
-# /send
-# =================================================
-
-send_group = app_commands.Group(
-    name="send",
-    description="Send messages"
-)
-
-
-@send_group.command(
-    name="message",
-    description="Send a message to a channel"
-)
-@app_commands.describe(
-    text="Text to send",
-    channel="Channel where the message will be sent"
-)
-@owner_only()
-async def send_message(
-    interaction: discord.Interaction,
-    text: str,
-    channel: discord.TextChannel
-):
-
-    try:
-
-        await channel.send(
-            f"**BOT:** {text}"
-        )
-
-        await interaction.response.send_message(
-            "Message sent successfully.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ I don't have permission to send messages in that channel.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Failed to send the message.",
-            ephemeral=True
-        )
-
-
-@send_group.command(
-    name="dms",
-    description="Send a direct message to a user"
-)
-@app_commands.describe(
-    user="User to send the DM to",
-    message="Message to send"
-)
-@owner_only()
-async def send_dms(
-    interaction: discord.Interaction,
-    user: discord.User,
-    message: str
-):
-
-    try:
-
-        server_name = (
-            interaction.guild.name
-            if interaction.guild
-            else "Unknown Server"
-        )
-
-        await user.send(
-            f"**BOT:** {message}\n"
-            f"-# Server: {server_name}"
-        )
-
-        await interaction.response.send_message(
-            "DM sent successfully.",
-            ephemeral=True
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            "❌ Could not send a DM. The user's DMs are closed.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Could not send the DM.",
-            ephemeral=True
-        )
-
-
-bot.tree.add_command(
-    send_group
-)
-
-
-# =================================================
-# /clear
-# =================================================
-
-clear_group = app_commands.Group(
-    name="clear",
-    description="Clear messages"
-)
-
-
-@clear_group.command(
-    name="message",
-    description="Delete messages from a channel"
-)
-@app_commands.describe(
-    channel="Channel to clear",
-    number_of_messages="Number of messages to delete"
-)
-@owner_only()
-async def clear_message(
-    interaction: discord.Interaction,
-    channel: discord.TextChannel,
-    number_of_messages: app_commands.Range[
-        int,
-        1,
-        100
-    ]
-):
-
-    try:
-
-        deleted = await channel.purge(
-            limit=number_of_messages
-        )
-
-        if len(deleted) == 1:
-
+        if not suggestion or suggestion.get("deleted"):
             await interaction.response.send_message(
-                "1",
-                ephemeral=True
+                "❌ Suggestion not found.",
+                ephemeral=True,
+            )
+            return
+
+        if interaction.user.id != int(suggestion["author_id"]):
+            await interaction.response.send_message(
+                "❌ Only the author can edit this suggestion.",
+                ephemeral=True,
+            )
+            return
+
+        if suggestion["status"] != "Pending":
+            await interaction.response.send_message(
+                "❌ Only pending suggestions can be edited.",
+                ephemeral=True,
+            )
+            return
+
+        new_text = self.text_input.value.strip()
+
+        if not new_text:
+            await interaction.response.send_message(
+                "❌ The suggestion cannot be empty.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            suggestion["text"] = new_text
+            suggestion["edited"] = True
+            save_data()
+
+        await interaction.response.send_message(
+            "✅ Your suggestion has been updated.",
+            ephemeral=True,
+        )
+
+        await refresh_suggestion(interaction.client, suggestion)
+
+
+# =========================
+# DELETE CONFIRMATION
+# =========================
+
+class DeleteConfirmView(discord.ui.View):
+    def __init__(self, suggestion_id, requester_id):
+        super().__init__(timeout=60)
+        self.suggestion_id = suggestion_id
+        self.requester_id = requester_id
+
+    @discord.ui.button(
+        label="Confirm Delete",
+        style=discord.ButtonStyle.danger,
+    )
+    async def confirm(self, interaction, button):
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message(
+                "❌ This confirmation belongs to another user.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if not suggestion:
+            await interaction.response.edit_message(
+                content="Suggestion not found.",
+                view=None,
+            )
+            return
+
+        async with LOCK:
+            suggestion["deleted"] = True
+            save_data()
+
+        await interaction.response.edit_message(
+            content="🗑️ Suggestion deleted.",
+            view=None,
+        )
+
+        channel = await get_suggestion_channel(interaction.client)
+
+        if channel:
+            for key in ("message_id", "vote_message_id"):
+                message_id = suggestion.get(key)
+
+                if message_id:
+                    try:
+                        message = await channel.fetch_message(int(message_id))
+                        await message.delete()
+                    except (
+                        discord.NotFound,
+                        discord.Forbidden,
+                        discord.HTTPException,
+                    ):
+                        pass
+
+    @discord.ui.button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def cancel(self, interaction, button):
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message(
+                "❌ This confirmation belongs to another user.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.edit_message(
+            content="Deletion cancelled.",
+            view=None,
+        )
+
+
+# =========================
+# OWNER REJECTION MODAL
+# =========================
+
+class RejectSuggestionModal(discord.ui.Modal):
+    def __init__(self, suggestion_id):
+        super().__init__(title="Reject Suggestion")
+        self.suggestion_id = suggestion_id
+
+        self.reason = discord.ui.TextInput(
+            label="Reason (optional)",
+            placeholder="Explain why this suggestion was rejected...",
+            required=False,
+            max_length=500,
+            style=discord.TextStyle.paragraph,
+        )
+
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction):
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Only the bot owner can reject suggestions.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if not suggestion:
+            await interaction.response.send_message(
+                "Suggestion not found.",
+                ephemeral=True,
+            )
+            return
+
+        if suggestion["status"] != "Pending":
+            await interaction.response.send_message(
+                "This suggestion has already been reviewed.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            suggestion["status"] = "Rejected"
+
+            reason = self.reason.value.strip()
+            if reason:
+                suggestion.setdefault("comments", []).append(
+                    f"Rejection reason: {reason}"
+                )
+
+            save_data()
+
+        await interaction.response.send_message(
+            "❌ Suggestion rejected.",
+            ephemeral=True,
+        )
+
+        await refresh_suggestion(interaction.client, suggestion)
+        await notify_author(interaction.client, suggestion, "Rejected")
+
+
+# =========================
+# OWNER COMMENT MODAL
+# =========================
+
+class OwnerCommentModal(discord.ui.Modal):
+    def __init__(self, suggestion_id):
+        super().__init__(title="Comment on Suggestion")
+        self.suggestion_id = suggestion_id
+
+        self.comment = discord.ui.TextInput(
+            label="Comment",
+            placeholder="Write your comment...",
+            required=True,
+            max_length=1000,
+            style=discord.TextStyle.paragraph,
+        )
+
+        self.add_item(self.comment)
+
+    async def on_submit(self, interaction):
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Only the bot owner can comment.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion = get_suggestion(self.suggestion_id)
+
+        if not suggestion:
+            await interaction.response.send_message(
+                "Suggestion not found.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            suggestion.setdefault("comments", []).append(
+                self.comment.value.strip()
+            )
+            save_data()
+
+        await interaction.response.send_message(
+            "💬 Comment added.",
+            ephemeral=True,
+        )
+
+        await refresh_suggestion(interaction.client, suggestion)
+
+        try:
+            user = await interaction.client.fetch_user(
+                int(suggestion["author_id"])
+            )
+            await user.send(
+                f"💬 The owner commented on suggestion "
+                f"**#{int(suggestion['id']):03d}**:\n"
+                f"{self.comment.value.strip()}"
+            )
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+
+# =========================
+# NEW SUGGESTION MODAL
+# =========================
+
+class SuggestionModal(discord.ui.Modal):
+    def __init__(self, bot):
+        super().__init__(title="Submit a Suggestion")
+        self.bot = bot
+
+        self.text_input = discord.ui.TextInput(
+            label="Your suggestion",
+            placeholder="Describe your idea...",
+            style=discord.TextStyle.paragraph,
+            min_length=5,
+            max_length=MAX_LENGTH,
+            required=True,
+        )
+
+        self.add_item(self.text_input)
+
+    async def on_submit(self, interaction):
+        text_value = self.text_input.value.strip()
+
+        if len(text_value) < 5:
+            await interaction.response.send_message(
+                "❌ Please write at least 5 characters.",
+                ephemeral=True,
+            )
+            return
+
+        async with LOCK:
+            error = check_limits(interaction.user.id)
+
+        if error:
+            await interaction.response.send_message(
+                error,
+                ephemeral=True,
+            )
+            return
+
+        similar = find_similar(text_value)
+
+        if similar:
+            embed = discord.Embed(
+                title="⚠️ Similar Suggestions Found",
+                description=(
+                    "Your idea looks similar to an existing suggestion.\n"
+                    "You can review the matches or submit it anyway."
+                ),
+                color=discord.Color.orange(),
             )
 
+            for suggestion in similar:
+                embed.add_field(
+                    name=(
+                        f"Suggestion "
+                        f"#{int(suggestion['id']):03d}"
+                    ),
+                    value=shorten(suggestion["text"], 400),
+                    inline=False,
+                )
+
+            await interaction.response.send_message(
+                embed=embed,
+                view=SimilarView(
+                    self.bot,
+                    interaction.user.id,
+                    text_value,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        async with LOCK:
+            error = check_limits(interaction.user.id)
+
+            if error:
+                save_data()
+                await interaction.followup.send(
+                    error,
+                    ephemeral=True,
+                )
+                return
+
+            suggestion_id = await publish_suggestion(
+                self.bot,
+                interaction.user,
+                text_value,
+            )
+
+        if suggestion_id is None:
+            await interaction.followup.send(
+                "❌ Could not publish your suggestion. "
+                "Please try again later.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"✅ Your suggestion **#{suggestion_id:03d}** was submitted!",
+            ephemeral=True,
+        )
+
+
+# =========================
+# SIMILAR SUGGESTIONS VIEW
+# =========================
+
+class SimilarView(discord.ui.View):
+    def __init__(self, bot, author_id, text_value):
+        super().__init__(timeout=180)
+        self.bot = bot
+        self.author_id = author_id
+        self.text_value = text_value
+
+    @discord.ui.button(
+        label="Submit Anyway",
+        style=discord.ButtonStyle.success,
+    )
+    async def submit_anyway(self, interaction, button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "❌ This confirmation belongs to another user.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        async with LOCK:
+            error = check_limits(interaction.user.id)
+
+            if error:
+                save_data()
+                await interaction.followup.send(
+                    error,
+                    ephemeral=True,
+                )
+                return
+
+            suggestion_id = await publish_suggestion(
+                self.bot,
+                interaction.user,
+                self.text_value,
+            )
+
+        if suggestion_id is None:
+            await interaction.followup.send(
+                "❌ I couldn't submit your suggestion. "
+                "Please try again later.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"✅ Your suggestion **#{suggestion_id:03d}** has been submitted!",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def cancel(self, interaction, button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "❌ This confirmation belongs to another user.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.edit_message(
+            content="Submission cancelled.",
+            embed=None,
+            view=None,
+        )
+
+
+# =========================
+# OPEN SUGGESTION FORM
+# =========================
+
+class SuggestEntryView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=300)
+        self.bot = bot
+
+    @discord.ui.button(
+        label="Create Suggestion",
+        emoji="💡",
+        style=discord.ButtonStyle.primary,
+    )
+    async def create_suggestion(self, interaction, button):
+        await interaction.response.send_modal(
+            SuggestionModal(self.bot)
+        )
+
+
+# =========================
+# MY SUGGESTIONS PAGINATION
+# =========================
+
+class MineView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=180)
+        self.user_id = user_id
+        self.page = 0
+        self.entries = []
+        self.update_entries()
+
+    def update_entries(self):
+        self.entries = sorted(
+            [
+                suggestion
+                for suggestion in active_suggestions()
+                if int(suggestion["author_id"]) == self.user_id
+            ],
+            key=lambda item: int(item["id"]),
+            reverse=True,
+        )
+
+    def make_page_embed(self):
+        self.update_entries()
+
+        pages = max(
+            1,
+            (len(self.entries) + PAGE_SIZE - 1) // PAGE_SIZE,
+        )
+
+        self.page = max(0, min(self.page, pages - 1))
+
+        start = self.page * PAGE_SIZE
+        current = self.entries[start:start + PAGE_SIZE]
+
+        embed = discord.Embed(
+            title="📋 My Suggestions",
+            description=(
+                f"Page **{self.page + 1}/{pages}**\n"
+                f"Total suggestions: **{len(self.entries)}**"
+            ),
+            color=discord.Color.blurple(),
+        )
+
+        if not current:
+            embed.add_field(
+                name="No suggestions",
+                value="You haven't submitted any suggestions yet.",
+                inline=False,
+            )
         else:
+            for suggestion in current:
+                embed.add_field(
+                    name=(
+                        f"#{int(suggestion['id']):03d} · "
+                        f"{display_status(suggestion['status'])}"
+                    ),
+                    value=shorten(suggestion["text"], 250),
+                    inline=False,
+                )
 
-            await interaction.response.defer(
-                ephemeral=True
-            )
+        self.previous.disabled = self.page <= 0
+        self.next.disabled = self.page >= pages - 1
 
-    except discord.Forbidden:
+        return embed
 
-        await interaction.response.send_message(
-            "❌ I don't have permission to delete messages in this channel.",
-            ephemeral=True
-        )
-
-    except discord.HTTPException:
-
-        await interaction.response.send_message(
-            "❌ Failed to delete messages.",
-            ephemeral=True
-        )
-
-
-bot.tree.add_command(
-    clear_group
-)
-
-
-# =================================================
-# Slash Command Errors
-# =================================================
-
-@bot.tree.error
-async def on_app_command_error(
-    interaction: discord.Interaction,
-    error: app_commands.AppCommandError
-):
-
-    if isinstance(
-        error,
-        app_commands.CheckFailure
-    ):
-
-        if not interaction.response.is_done():
-
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
+                "❌ This menu belongs to another user.",
+                ephemeral=True,
+            )
+            return False
+
+        return True
+
+    @discord.ui.button(
+        label="Previous",
+        emoji="◀️",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def previous(self, interaction, button):
+        self.page -= 1
+
+        await interaction.response.edit_message(
+            embed=self.make_page_embed(),
+            view=self,
+        )
+
+    @discord.ui.button(
+        label="Next",
+        emoji="▶️",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def next(self, interaction, button):
+        self.page += 1
+
+        await interaction.response.edit_message(
+            embed=self.make_page_embed(),
+            view=self,
+        )
+
+
+# =========================
+# PREFIX HANDLER: ? ONLY
+# =========================
+
+class SuggestCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+
+        content = message.content.strip().lower()
+
+        if content not in {
+            "?suggest",
+            "?suggest help",
+            "?suggest mine",
+        }:
+            return
+
+        try:
+            await message.delete()
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+        try:
+            if content == "?suggest":
+                await message.author.send(
+                    "💡 **Create a Suggestion**\n"
+                    "Press the button below to submit your idea.",
+                    view=SuggestEntryView(self.bot),
+                )
+
+            elif content == "?suggest help":
+                embed = discord.Embed(
+                    title="💡 Suggestion Help",
+                    description=(
+                        "`?suggest` — create a suggestion\n"
+                        "`?suggest mine` — view your suggestions\n"
+                        "`?suggest help` — show this help message"
+                    ),
+                    color=discord.Color.blurple(),
+                )
+
+                await message.author.send(embed=embed)
+
+            elif content == "?suggest mine":
+                view = MineView(message.author.id)
+
+                await message.author.send(
+                    embed=view.make_page_embed(),
+                    view=view,
+                )
+
+        except discord.Forbidden:
+            try:
+                await message.channel.send(
+                    "❌ Enable Direct Messages from server members "
+                    "and try again.",
+                    delete_after=10,
+                )
+            except discord.HTTPException:
+                pass
+
+
+# =========================
+# EXTENSION SETUP
+# =========================
+
+async def setup(bot):
+    load_data()
+
+    await bot.add_cog(SuggestCog(bot))
+
+    for suggestion in active_suggestions():
+        suggestion_id = int(suggestion["id"])
+
+        message_id = suggestion.get("message_id")
+        if message_id:
+            bot.add_view(
+                SuggestionView(suggestion_id),
+                message_id=int(message_id),
             )
 
-
-# =================================================
-# Start Flask
-# =================================================
-
-Thread(
-    target=run_flask,
-    daemon=True
-).start()
-
-
-# =================================================
-# Start Bot
-# =================================================
-
-bot.run(
-    TOKEN
-        )
+        vote_message_id = suggestion.get("vote_message_id")
+        if vote_message_id:
+            bot.add_view(
+                VoteView(
+                    suggestion_id,
+                    disabled=suggestion["status"] != "Pending",
+                ),
+                message_id=int(vote_message_id),
+            )
