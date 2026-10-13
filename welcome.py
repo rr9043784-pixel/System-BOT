@@ -80,7 +80,7 @@ class Welcome(commands.Cog):
 
         try:
             await channel.send(
-                content=f"{member.mention}\n>>>",
+                content=f"{member.mention}",
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions(
                     users=True,
