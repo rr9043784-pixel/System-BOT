@@ -853,17 +853,18 @@ class Message(commands.Cog):
 
         system = system.lower()
 
-        if system == "economy":
+                if system == "economy":
             embed = discord.Embed(
                 title="💰 Economy Commands",
                 description=(
-                    "Choose your language from the menu below.\n"
+                    "Choose your language using the menu below.\n"
                     "The command list will be shown privately to you."
                 ),
                 colour=discord.Colour.from_rgb(88, 101, 242),
             )
 
-            await ctx.send(embed=embed, view=EconomyLanguageView())
+            view = EconomyLanguageView()
+            await ctx.send(embed=embed, view=view)
             return
 
         if system == "message":
