@@ -8,7 +8,7 @@ from discord.ext import commands
 OWNER_ID = 1176149190192152626
 
 # =========================================================
-# FEATURE ROLE IDS
+# ROLE IDS
 # =========================================================
 
 RUSSIAN_ROLE_ID = 1540457657771757578
@@ -26,10 +26,6 @@ PC_ROLE_ID = 1545280805905895504
 XBOX_ROLE_ID = 1545281911151398942
 PLAYSTATION_ROLE_ID = 1545281770818248805
 SWITCH_ROLE_ID = 1545283995665834086
-
-# =========================================================
-# PING ROLE IDS
-# =========================================================
 
 YOUTUBE_ROLE_ID = 1541715251018465351
 TOURNAMENT_ROLE_ID = 1541715118872731768
@@ -65,13 +61,13 @@ async def replace_role(member, role_id, role_group):
     if selected_role is None:
         return False
 
-    remove_roles = [
+    roles_to_remove = [
         role for role in member.roles
         if role.id in role_group and role.id != role_id
     ]
 
-    if remove_roles:
-        await member.remove_roles(*remove_roles)
+    if roles_to_remove:
+        await member.remove_roles(*roles_to_remove)
 
     if selected_role not in member.roles:
         await member.add_roles(selected_role)
@@ -80,59 +76,59 @@ async def replace_role(member, role_id, role_group):
 
 
 # =========================================================
-# FEATURE SELECT MENUS
+# FEATURE SELECTS
 # =========================================================
 
 class RoleSelect(discord.ui.Select):
-    def __init__(self, placeholder, custom_id, options, role_group, message_type):
+    def __init__(self, placeholder, custom_id, options, role_group, role_name):
         super().__init__(
             placeholder=placeholder,
             min_values=1,
             max_values=1,
             options=options,
-            custom_id=custom_id
+            custom_id=custom_id,
         )
         self.role_group = role_group
-        self.message_type = message_type
+        self.role_name = role_name
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message(
                 "❌ Use this menu in the server.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
-        role_id = int(self.values[0])
-
         try:
+            role_id = int(self.values[0])
             success = await replace_role(
-                interaction.user, role_id, self.role_group
+                interaction.user,
+                role_id,
+                self.role_group,
             )
 
             if not success:
                 await interaction.response.send_message(
                     "❌ The selected role could not be found.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 return
 
             role = interaction.guild.get_role(role_id)
-
             await interaction.response.send_message(
-                f"✅ Your {self.message_type} has been set to **{role.name}**.",
-                ephemeral=True
+                f"✅ Your {self.role_name} has been set to **{role.name}**.",
+                ephemeral=True,
             )
 
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ I don't have permission to manage this role.",
-                ephemeral=True
+                ephemeral=True,
             )
         except discord.HTTPException:
             await interaction.response.send_message(
                 "❌ Something went wrong. Please try again.",
-                ephemeral=True
+                ephemeral=True,
             )
 
 
@@ -145,7 +141,7 @@ def language_select():
             discord.SelectOption(label="English", emoji="🇬🇧", value=str(ENGLISH_ROLE_ID)),
         ],
         LANGUAGE_ROLES,
-        "language"
+        "language",
     )
 
 
@@ -161,7 +157,7 @@ def color_select():
             discord.SelectOption(label="Bright Green", emoji="🟢", value=str(GREEN_ROLE_ID)),
         ],
         COLOR_ROLES,
-        "nickname color"
+        "nickname color",
     )
 
 
@@ -178,7 +174,7 @@ def platform_select():
             discord.SelectOption(label="Nintendo Switch", emoji="🕹️", value=str(SWITCH_ROLE_ID)),
         ],
         PLATFORM_ROLES,
-        "platform"
+        "platform",
     )
 
 
@@ -211,7 +207,7 @@ class FeaturesView(discord.ui.LayoutView):
             discord.ui.ActionRow(platform_select()),
             discord.ui.Separator(),
             discord.ui.TextDisplay("-# Select an option from the menus above."),
-            accent_colour=discord.Colour.from_rgb(88, 101, 242)
+            accent_colour=discord.Colour.from_rgb(88, 101, 242),
         )
 
         self.add_item(container)
@@ -227,7 +223,7 @@ class PingButton(discord.ui.Button):
             label=label,
             emoji=emoji,
             style=discord.ButtonStyle.secondary,
-            custom_id=custom_id
+            custom_id=custom_id,
         )
         self.role_id = role_id
 
@@ -235,7 +231,7 @@ class PingButton(discord.ui.Button):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message(
                 "❌ Use this button in the server.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -244,29 +240,29 @@ class PingButton(discord.ui.Button):
         if role is None:
             await interaction.response.send_message(
                 "❌ The selected role could not be found.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
         try:
             if role in interaction.user.roles:
                 await interaction.user.remove_roles(role)
-                text = f"🔕 **{role.name}** notifications disabled."
+                message = f"🔕 **{role.name}** notifications disabled."
             else:
                 await interaction.user.add_roles(role)
-                text = f"🔔 **{role.name}** notifications enabled."
+                message = f"🔔 **{role.name}** notifications enabled."
 
-            await interaction.response.send_message(text, ephemeral=True)
+            await interaction.response.send_message(message, ephemeral=True)
 
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ I don't have permission to manage this role.",
-                ephemeral=True
+                ephemeral=True,
             )
         except discord.HTTPException:
             await interaction.response.send_message(
                 "❌ Something went wrong. Please try again.",
-                ephemeral=True
+                ephemeral=True,
             )
 
 
@@ -276,14 +272,14 @@ class RemovePingRolesButton(discord.ui.Button):
             label="Remove all ping roles",
             emoji="❌",
             style=discord.ButtonStyle.secondary,
-            custom_id="features_remove_ping_roles_v2"
+            custom_id="features_remove_ping_roles_v2",
         )
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message(
                 "❌ Use this button in the server.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -298,17 +294,17 @@ class RemovePingRolesButton(discord.ui.Button):
 
             await interaction.response.send_message(
                 "✅ All notification roles have been removed.",
-                ephemeral=True
+                ephemeral=True,
             )
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ I don't have permission to manage these roles.",
-                ephemeral=True
+                ephemeral=True,
             )
         except discord.HTTPException:
             await interaction.response.send_message(
                 "❌ Something went wrong. Please try again.",
-                ephemeral=True
+                ephemeral=True,
             )
 
 
@@ -321,22 +317,30 @@ class PingView(discord.ui.LayoutView):
                 "# 🔔 Choose\nChoose which notifications you want to receive."
             ),
             discord.ui.Separator(),
-            discord.ui.TextDisplay("### ▶️ YouTube\nGet notified about new YouTube content."),
+            discord.ui.TextDisplay(
+                "### ▶️ YouTube\nGet notified about new YouTube content."
+            ),
             discord.ui.ActionRow(
                 PingButton("YouTube", "▶️", YOUTUBE_ROLE_ID, "ping_youtube_v2")
             ),
             discord.ui.Separator(),
-            discord.ui.TextDisplay("### 🏆 Tournament\nGet notified about tournaments and events."),
+            discord.ui.TextDisplay(
+                "### 🏆 Tournament\nGet notified about tournaments and events."
+            ),
             discord.ui.ActionRow(
                 PingButton("Tournament", "🏆", TOURNAMENT_ROLE_ID, "ping_tournament_v2")
             ),
             discord.ui.Separator(),
-            discord.ui.TextDisplay("### 🎁 Giveaway\nGet notified about giveaways."),
+            discord.ui.TextDisplay(
+                "### 🎁 Giveaway\nGet notified about giveaways."
+            ),
             discord.ui.ActionRow(
                 PingButton("Giveaway", "🎁", GIVEAWAY_ROLE_ID, "ping_giveaway_v2")
             ),
             discord.ui.Separator(),
-            discord.ui.TextDisplay("### 📰 News\nGet notified about important server news."),
+            discord.ui.TextDisplay(
+                "### 📰 News\nGet notified about important server news."
+            ),
             discord.ui.ActionRow(
                 PingButton("News", "📰", NEWS_ROLE_ID, "ping_news_v2")
             ),
@@ -346,7 +350,7 @@ class PingView(discord.ui.LayoutView):
             discord.ui.TextDisplay(
                 "-# Click a button to enable or disable a notification role."
             ),
-            accent_colour=discord.Colour.from_rgb(88, 101, 242)
+            accent_colour=discord.Colour.from_rgb(88, 101, 242),
         )
 
         self.add_item(container)
@@ -357,8 +361,7 @@ class PingView(discord.ui.LayoutView):
 # =========================================================
 
 ECONOMY_COMMANDS = {
-    "en": """
-# 💰 Economy Commands
+    "en": """# 💰 Economy Commands
 
 ## 🎮 Games
 `. sm <amount/all>` — Play the slot machine.
@@ -389,11 +392,9 @@ ECONOMY_COMMANDS = {
 
 ## 📦 Item Information
 `. item-info <item name>` — View information about an item.
-Example: `. item-info Клан`
-""",
+Example: `. item-info Клан`""",
 
-    "ru": """
-# 💰 Команды экономики
+    "ru": """# 💰 Команды экономики
 
 ## 🎮 Игры
 `. sm <сумма/all>` — Игровой автомат.
@@ -424,16 +425,14 @@ Example: `. item-info Клан`
 
 ## 📦 Информация о предметах
 `. item-info <название предмета>` — Информация о предмете.
-Пример: `. item-info Клан`
-""",
+Пример: `. item-info Клан`""",
 
-    "ro": """
-# 💰 Comenzi Economie
+    "ro": """# 💰 Comenzi Economie
 
 ## 🎮 Jocuri
 `. sm <sumă/all>` — Joacă la sloturi.
 `. bj <sumă/all/half>` — Joacă blackjack; half înseamnă jumătate din bani.
-`. cf <sumă/all>` — Joacă lupte de cocoși.
+`. cf <sumă/all>` — Lupte de cocoși.
 `. roulette <sumă/all> <black/red> <număr 2-36>` — Joacă ruletă.
 `. russian-roulette <sumă/all>` — Ruletă rusească.
 `. russian-roulette start` — Începe ruleta rusească.
@@ -459,17 +458,15 @@ Example: `. item-info Клан`
 
 ## 📦 Informații despre obiecte
 `. item-info <numele obiectului>` — Informații despre obiect.
-Exemplu: `. item-info Клан`
-""",
+Exemplu: `. item-info Клан`""",
 
-    "uz": """
-# 💰 Iqtisod buyruqlari
+    "uz": """# 💰 Iqtisod buyruqlari
 
 ## 🎮 O'yinlar
 `. sm <miqdor/all>` — Slot o'yinini o'ynash.
 `. bj <miqdor/all/half>` — Blackjack; half — pulning yarmi.
-`. cf <miqdor/all>` — Xo'roz jangini o'ynash.
-`. roulette <miqdor/all> <black/red> <2-36 soni>` — Ruletka o'ynash.
+`. cf <miqdor/all>` — Xo'roz jangi.
+`. roulette <miqdor/all> <black/red> <2-36 soni>` — Ruletka.
 `. russian-roulette <miqdor/all>` — Rus ruletkasi.
 `. russian-roulette start` — Rus ruletkasini boshlash.
 `. buy c` — Xo'roz jangi uchun tovuq sotib olish.
@@ -494,17 +491,15 @@ Exemplu: `. item-info Клан`
 
 ## 📦 Buyum haqida
 `. item-info <buyum nomi>` — Buyum haqida ma'lumot.
-Misol: `. item-info Клан`
-""",
+Misol: `. item-info Клан`""",
 
-    "kk": """
-# 💰 Экономика командалары
+    "kk": """# 💰 Экономика командалары
 
 ## 🎮 Ойындар
 `. sm <сома/all>` — Слот ойынын ойнау.
 `. bj <сома/all/half>` — Блэкджек; half — ақшаның жартысы.
-`. cf <сома/all>` — Әтеш төбелесін ойнау.
-`. roulette <сома/all> <black/red> <2-36 саны>` — Рулетка ойнау.
+`. cf <сома/all>` — Әтеш төбелесі.
+`. roulette <сома/all> <black/red> <2-36 саны>` — Рулетка.
 `. russian-roulette <сома/all>` — Орыс рулеткасы.
 `. russian-roulette start` — Орыс рулеткасын бастау.
 `. buy c` — Әтеш төбелесіне тауық сатып алу.
@@ -528,18 +523,16 @@ Misol: `. item-info Клан`
 `. help` — Экономика ботының көмегі.
 
 ## 📦 Зат туралы ақпарат
-`. item-info <зат атауы>` — Зат туралы ақпарат алу.
-Мысал: `. item-info Клан`
-""",
+`. item-info <зат атауы>` — Зат туралы ақпарат.
+Мысал: `. item-info Клан`""",
 
-    "tr": """
-# 💰 Ekonomi Komutları
+    "tr": """# 💰 Ekonomi Komutları
 
 ## 🎮 Oyunlar
 `. sm <miktar/all>` — Slot makinesi oyna.
 `. bj <miktar/all/half>` — Blackjack; half paranızın yarısıdır.
-`. cf <miktar/all>` — Horoz dövüşü oyna.
-`. roulette <miktar/all> <black/red> <2-36 sayı>` — Rulet oyna.
+`. cf <miktar/all>` — Horoz dövüşü.
+`. roulette <miktar/all> <black/red> <2-36 sayı>` — Rulet.
 `. russian-roulette <miktar/all>` — Rus ruleti.
 `. russian-roulette start` — Rus ruletini başlat.
 `. buy c` — Horoz dövüşü için tavuk satın al.
@@ -560,15 +553,13 @@ Misol: `. item-info Клан`
 ## 🛒 Mağaza
 `. store` — Mağazayı aç.
 `. inv` — Envanteri kontrol et.
-`. help` — Ekonomi botunun yardımını göster.
+`. help` — Ekonomi botunun yardımı.
 
-## 📦 Eşya Bilgisi
-`. item-info <eşya adı>` — Eşya hakkında bilgi göster.
-Örnek: `. item-info Клан`
-""",
+## 📦 Eşya bilgisi
+`. item-info <eşya adı>` — Eşya hakkında bilgi.
+Örnek: `. item-info Клан`""",
 
-    "es": """
-# 💰 Comandos de Economía
+    "es": """# 💰 Comandos de Economía
 
 ## 🎮 Juegos
 `. sm <cantidad/all>` — Jugar a la tragaperras.
@@ -599,20 +590,18 @@ Misol: `. item-info Клан`
 
 ## 📦 Información de objetos
 `. item-info <nombre del objeto>` — Información del objeto.
-Ejemplo: `. item-info Клан`
-""",
+Ejemplo: `. item-info Клан`""",
 
-    "fr": """
-# 💰 Commandes Économie
+    "fr": """# 💰 Commandes Économie
 
 ## 🎮 Jeux
-`. sm <montant/all>` — Jouer à la machine à sous.
+`. sm <montant/all>` — Machine à sous.
 `. bj <montant/all/half>` — Blackjack ; half utilise la moitié de votre argent.
 `. cf <montant/all>` — Combats de coqs.
-`. roulette <montant/all> <black/red> <nombre 2-36>` — Jouer à la roulette.
+`. roulette <montant/all> <black/red> <nombre 2-36>` — Roulette.
 `. russian-roulette <montant/all>` — Roulette russe.
-`. russian-roulette start` — Démarrer une partie de roulette russe.
-`. buy c` — Acheter une poule pour les combats de coqs.
+`. russian-roulette start` — Démarrer la roulette russe.
+`. buy c` — Acheter une poule pour les combats.
 
 ## 💵 Gains
 `. work` — Travailler pour gagner de l'argent.
@@ -633,17 +622,15 @@ Ejemplo: `. item-info Клан`
 `. help` — Aide du bot économique.
 
 ## 📦 Informations sur les objets
-`. item-info <nom de l'objet>` — Afficher les informations d'un objet.
-Exemple : `. item-info Клан`
-""",
+`. item-info <nom de l'objet>` — Informations sur un objet.
+Exemple : `. item-info Клан`""",
 
-    "de": """
-# 💰 Wirtschaftsbefehle
+    "de": """# 💰 Wirtschaftsbefehle
 
 ## 🎮 Spiele
 `. sm <betrag/all>` — Spielautomaten spielen.
 `. bj <betrag/all/half>` — Blackjack; half verwendet die Hälfte deines Geldes.
-`. cf <betrag/all>` — Hahnenkämpfe spielen.
+`. cf <betrag/all>` — Hahnenkämpfe.
 `. roulette <betrag/all> <black/red> <Zahl 2-36>` — Roulette spielen.
 `. russian-roulette <betrag/all>` — Russisches Roulette.
 `. russian-roulette start` — Russisches Roulette starten.
@@ -665,23 +652,21 @@ Exemple : `. item-info Клан`
 ## 🛒 Shop
 `. store` — Shop öffnen.
 `. inv` — Inventar ansehen.
-`. help` — Hilfe des Wirtschaftsbots anzeigen.
+`. help` — Hilfe des Wirtschaftsbots.
 
 ## 📦 Gegenstandsinformationen
-`. item-info <Gegenstandsname>` — Informationen über einen Gegenstand anzeigen.
-Beispiel: `. item-info Клан`
-""",
+`. item-info <Gegenstandsname>` — Informationen über einen Gegenstand.
+Beispiel: `. item-info Клан`""",
 
-    "it": """
-# 💰 Comandi Economia
+    "it": """# 💰 Comandi Economia
 
 ## 🎮 Giochi
 `. sm <importo/all>` — Gioca alle slot machine.
 `. bj <importo/all/half>` — Blackjack; half usa metà dei tuoi soldi.
 `. cf <importo/all>` — Combattimenti tra galli.
-`. roulette <importo/all> <black/red> <numero 2-36>` — Gioca alla roulette.
+`. roulette <importo/all> <black/red> <numero 2-36>` — Roulette.
 `. russian-roulette <importo/all>` — Roulette russa.
-`. russian-roulette start` — Avvia una partita di roulette russa.
+`. russian-roulette start` — Avvia la roulette russa.
 `. buy c` — Compra una gallina per i combattimenti.
 
 ## 💵 Guadagni
@@ -700,21 +685,19 @@ Beispiel: `. item-info Клан`
 ## 🛒 Negozio
 `. store` — Apri il negozio.
 `. inv` — Controlla l'inventario.
-`. help` — Mostra l'aiuto del bot economico.
+`. help` — Aiuto del bot economico.
 
 ## 📦 Informazioni sugli oggetti
-`. item-info <nome oggetto>` — Mostra informazioni su un oggetto.
-Esempio: `. item-info Клан`
-""",
+`. item-info <nome oggetto>` — Informazioni su un oggetto.
+Esempio: `. item-info Клан`""",
 
-    "uk": """
-# 💰 Команди економіки
+    "uk": """# 💰 Команди економіки
 
 ## 🎮 Ігри
-`. sm <сума/all>` — Грати в ігровий автомат.
+`. sm <сума/all>` — Ігровий автомат.
 `. bj <сума/all/half>` — Блекджек; half використовує половину грошей.
 `. cf <сума/all>` — Півнячі бої.
-`. roulette <сума/all> <black/red> <число 2-36>` — Грати в рулетку.
+`. roulette <сума/all> <black/red> <число 2-36>` — Рулетка.
 `. russian-roulette <сума/all>` — Російська рулетка.
 `. russian-roulette start` — Почати російську рулетку.
 `. buy c` — Купити курку для півнячих боїв.
@@ -739,17 +722,15 @@ Esempio: `. item-info Клан`
 
 ## 📦 Інформація про предмети
 `. item-info <назва предмета>` — Інформація про предмет.
-Приклад: `. item-info Клан`
-""",
+Приклад: `. item-info Клан`""",
 
-    "pl": """
-# 💰 Komendy Ekonomii
+    "pl": """# 💰 Komendy Ekonomii
 
 ## 🎮 Gry
 `. sm <kwota/all>` — Graj na automacie.
 `. bj <kwota/all/half>` — Blackjack; half oznacza połowę pieniędzy.
 `. cf <kwota/all>` — Walki kogutów.
-`. roulette <kwota/all> <black/red> <liczba 2-36>` — Graj w ruletkę.
+`. roulette <kwota/all> <black/red> <liczba 2-36>` — Ruletka.
 `. russian-roulette <kwota/all>` — Rosyjska ruletka.
 `. russian-roulette start` — Rozpocznij rosyjską ruletkę.
 `. buy c` — Kup kurę do walk kogutów.
@@ -773,9 +754,8 @@ Esempio: `. item-info Клан`
 `. help` — Pomoc bota ekonomicznego.
 
 ## 📦 Informacje o przedmiotach
-`. item-info <nazwa przedmiotu>` — Pokaż informacje o przedmiocie.
-Przykład: `. item-info Клан`
-"""
+`. item-info <nazwa przedmiotu>` — Informacje o przedmiocie.
+Przykład: `. item-info Клан`"""
 }
 
 
@@ -783,61 +763,52 @@ Przykład: `. item-info Клан`
 # ECONOMY LANGUAGE SELECT
 # =========================================================
 
-ECONOMY_LANGUAGES = [
-    ("🇬🇧 English", "en"),
-    ("🇷🇺 Russian", "ru"),
-    ("🇷🇴 Romanian", "ro"),
-    ("🇺🇿 Uzbek", "uz"),
-    ("🇰🇿 Kazakh", "kk"),
-    ("🇹🇷 Turkish", "tr"),
-    ("🇪🇸 Spanish", "es"),
-    ("🇫🇷 French", "fr"),
-    ("🇩🇪 German", "de"),
-    ("🇮🇹 Italian", "it"),
-    ("🇺🇦 Ukrainian", "uk"),
-    ("🇵🇱 Polish", "pl"),
-]
-
-
 class EconomyLanguageSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(
-                label=label.split(" ", 1)[1],
-                emoji=label.split(" ", 1)[0],
-                value=code
-            )
-            for label, code in ECONOMY_LANGUAGES
+            discord.SelectOption(label="English", emoji="🇬🇧", value="en"),
+            discord.SelectOption(label="Russian", emoji="🇷🇺", value="ru"),
+            discord.SelectOption(label="Romanian", emoji="🇷🇴", value="ro"),
+            discord.SelectOption(label="Uzbek", emoji="🇺🇿", value="uz"),
+            discord.SelectOption(label="Kazakh", emoji="🇰🇿", value="kk"),
+            discord.SelectOption(label="Turkish", emoji="🇹🇷", value="tr"),
+            discord.SelectOption(label="Spanish", emoji="🇪🇸", value="es"),
+            discord.SelectOption(label="French", emoji="🇫🇷", value="fr"),
+            discord.SelectOption(label="German", emoji="🇩🇪", value="de"),
+            discord.SelectOption(label="Italian", emoji="🇮🇹", value="it"),
+            discord.SelectOption(label="Ukrainian", emoji="🇺🇦", value="uk"),
+            discord.SelectOption(label="Polish", emoji="🇵🇱", value="pl"),
         ]
 
         super().__init__(
-            placeholder="🌐 Choose a language / Выбери язык",
+            placeholder="🌐 Choose your language",
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="economy_commands_language_v1"
+            custom_id="economy_commands_language_v2",
         )
 
     async def callback(self, interaction: discord.Interaction):
         language = self.values[0]
-        text = ECONOMY_COMMANDS.get(
-            language,
-            ECONOMY_COMMANDS["en"]
+        content = ECONOMY_COMMANDS.get(language, ECONOMY_COMMANDS["en"])
+
+        # Send a new private response after selecting a language.
+        # Split the content if it exceeds Discord's message limit.
+        chunks = [
+            content[i:i + 1900]
+            for i in range(0, len(content), 1900)
+        ]
+
+        await interaction.response.send_message(
+            chunks[0],
+            ephemeral=True,
         )
 
-        # Discord message content has a 2000-character limit.
-        # Use an embed so the help text can be displayed in one message.
-        embed = discord.Embed(
-            description=text,
-            colour=discord.Colour.from_rgb(88, 101, 242)
-        )
-        embed.set_footer(text="Economy Commands")
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=embed,
-            view=None
-        )
+        for chunk in chunks[1:]:
+            await interaction.followup.send(
+                chunk,
+                ephemeral=True,
+            )
 
 
 class EconomyLanguageView(discord.ui.View):
@@ -847,7 +818,7 @@ class EconomyLanguageView(discord.ui.View):
 
 
 # =========================================================
-# COG
+# MESSAGE COG
 # =========================================================
 
 class Message(commands.Cog):
@@ -874,67 +845,102 @@ class Message(commands.Cog):
 
         await ctx.send(view=PingView())
 
-    @commands.command(name="economy")
-    async def economy(self, ctx, action=None):
-        if not action or action.lower() != "commands":
-            return
-
-        try:
-            await ctx.message.delete()
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-            pass
-
-        try:
-            await ctx.author.send(
-                content=(
-                    "🌐 **Economy Commands**\n"
-                    "Choose your language below.\n\n"
-                    "Выбери язык, чтобы посмотреть команды экономики."
-                ),
-                view=EconomyLanguageView()
-            )
-
-        except discord.Forbidden:
-            try:
-                await ctx.send(
-                    f"{ctx.author.mention}, I couldn't DM you. "
-                    "Please enable direct messages from server members "
-                    "and try `!economy commands` again.",
-                    delete_after=15
-                )
-            except discord.HTTPException:
-                pass
-
     @commands.command(name="commands")
     async def commands_message(self, ctx, system=None):
-        if not system or system.lower() != "message":
+        if not system:
             return
 
-        embed = discord.Embed(
-            title="📚 Message System Commands",
-            description=(
-                "`!features panel` — Create the Features panel.\n"
-                "`!ping panel` — Create the notification roles panel.\n"
-                "`!economy commands` — Choose a language and view economy commands.\n"
-                "`!commands Message` — Show this command list."
-            ),
-            colour=discord.Colour.from_rgb(88, 101, 242)
-        )
+        system = system.lower()
 
-        try:
-            await ctx.author.send(embed=embed)
-
-            try:
-                await ctx.message.delete()
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-                pass
-
-        except discord.Forbidden:
-            await ctx.send(
-                f"{ctx.author.mention}, please enable DMs to receive "
-                "the Message System command list.",
-                delete_after=15
+        if system == "economy":
+            embed = discord.Embed(
+                title="💰 Economy Commands",
+                description=(
+                    "Choose your language from the menu below.\n"
+                    "The command list will be shown privately to you."
+                ),
+                colour=discord.Colour.from_rgb(88, 101, 242),
             )
+
+            await ctx.send(
+                embed=embed,
+                view=EconomyLanguageView(),
+            )
+            return
+
+        if system == "message":
+            embed = discord.Embed(
+                title="📚 Message System Commands",
+                description=(
+                    "📚 All commands bot 📚 
+
+**🎁 CHESTS**
+`!chests`
+`!chest info`
+`!remove <type_chest> <amount> <user>`
+`!admin chests`
+
+**💰 DROPS**
+
+`!money economy <amount> <quantity> [user] [role]`
+`!drop <chest_type> <amount> <quantity> [role] [user]`
+
+**🎫 TICKETS**
+`!ticket panel`
+`!ticket block @user staff`
+`!ticket block @user moder`
+`!ticket blocks`
+`!answer ticket <number> <message>`
+`!close ticket <number>`
+
+**📋 FEATURES**
+`!features panel`
+
+**🔔 PING**
+`!ping panel`
+
+**📘 ECONOMY**
+`!commands economy`
+
+**💡 IDEA**
+`?suggest`
+`?suggest help`
+`?suggest mine`
+`!commands suggest`
+
+**🏆 TOURNAMENT 🏆**
+`/create tour channel:#channel` — post the creation panel
+`!bracket r1` — create Round 1
+`!bracket r2` — create next round
+`!match 1 267899` — send a room code
+`!qual 1 @winner` — record a winner
+`!delete tour` — delete this tournament
+`!training tour @user` — training mode
+`!team @user` — create a duo
+`!team @user1 @user2` — create a trio
+`!edit qualified` — correct a qualified player
+
+**ℹ️ VERIFICATION**
+`!verification panel`
+
+**🧹 CLEAR**
+`/clear message <number>`
+
+**📩 SEND**
+`/send message`
+`/send dms`
+
+**✂️ RPS**
+`/rps`
+`/classic rps`
+
+**📊 STATS**
+`!my stats bot`"
+                ),
+                colour=discord.Colour.from_rgb(88, 101, 242),
+            )
+
+            await ctx.send(embed=embed)
 
 
 # =========================================================
@@ -948,6 +954,4 @@ async def setup(bot):
     bot.add_view(PingView())
     bot.add_view(EconomyLanguageView())
 
-    print(
-        "✅ FeaturesView, PingView and EconomyLanguageView registered!"
-        )
+    print("✅ FeaturesView, PingView and EconomyLanguageView registered!")
