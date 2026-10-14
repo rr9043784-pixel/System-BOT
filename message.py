@@ -846,14 +846,14 @@ class Message(commands.Cog):
         await ctx.send(view=PingView())
 
 
-    @commands.command(name="commands")
+@commands.command(name="commands")
     async def commands_message(self, ctx, system=None):
         if not system:
             return
 
         system = system.lower()
 
-                if system == "economy":
+        if system == "economy":
             embed = discord.Embed(
                 title="💰 Economy Commands",
                 description=(
@@ -863,8 +863,10 @@ class Message(commands.Cog):
                 colour=discord.Colour.from_rgb(88, 101, 242),
             )
 
-            view = EconomyLanguageView()
-            await ctx.send(embed=embed, view=view)
+            await ctx.send(
+                embed=embed,
+                view=EconomyLanguageView()
+            )
             return
 
         if system == "message":
@@ -904,16 +906,16 @@ class Message(commands.Cog):
 `!commands suggest`
 
 **🏆 TOURNAMENT 🏆**
-`/create tour channel:#channel` — Post the creation panel
-`!bracket r1` — Create Round 1
-`!bracket r2` — Create the next round
-`!match 1 267899` — Send a room code
-`!qual 1 @winner` — Record a winner
-`!delete tour` — Delete this tournament
-`!training tour @user` — Training mode
-`!team @user` — Create a duo
-`!team @user1 @user2` — Create a trio
-`!edit qualified` — Correct a qualified player
+`/create tour channel:#channel`
+`!bracket r1`
+`!bracket r2`
+`!match 1 267899`
+`!qual 1 @winner`
+`!delete tour`
+`!training tour @user`
+`!team @user`
+`!team @user1 @user2`
+`!edit qualified`
 
 **ℹ️ VERIFICATION ℹ️**
 `!verification panel`
