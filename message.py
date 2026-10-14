@@ -845,6 +845,7 @@ class Message(commands.Cog):
 
         await ctx.send(view=PingView())
 
+
     @commands.command(name="commands")
     async def commands_message(self, ctx, system=None):
         if not system:
@@ -862,30 +863,23 @@ class Message(commands.Cog):
                 colour=discord.Colour.from_rgb(88, 101, 242),
             )
 
-            await ctx.send(
-                embed=embed,
-                view=EconomyLanguageView(),
-            )
+            await ctx.send(embed=embed, view=EconomyLanguageView())
             return
 
         if system == "message":
-            embed = discord.Embed(
-                title="📚 Message System Commands",
-                description=(
-                    "📚 All commands bot 📚 
+            description = """📚 **ALL BOT COMMANDS**
 
-**🎁 CHESTS**
+**🎁 CHESTS 🎁**
 `!chests`
 `!chest info`
 `!remove <type_chest> <amount> <user>`
 `!admin chests`
 
-**💰 DROPS**
-
+**💰 DROPS 💰**
 `!money economy <amount> <quantity> [user] [role]`
 `!drop <chest_type> <amount> <quantity> [role] [user]`
 
-**🎫 TICKETS**
+**🎫 TICKETS 🎫**
 `!ticket panel`
 `!ticket block @user staff`
 `!ticket block @user moder`
@@ -893,54 +887,58 @@ class Message(commands.Cog):
 `!answer ticket <number> <message>`
 `!close ticket <number>`
 
-**📋 FEATURES**
+**📋 FEATURES 📋**
 `!features panel`
 
-**🔔 PING**
+**🔔 PING 🔔**
 `!ping panel`
 
-**📘 ECONOMY**
+**📘 ECONOMY 📘**
 `!commands economy`
 
-**💡 IDEA**
+**💡 IDEA 💡**
 `?suggest`
 `?suggest help`
 `?suggest mine`
 `!commands suggest`
 
 **🏆 TOURNAMENT 🏆**
-`/create tour channel:#channel` — post the creation panel
-`!bracket r1` — create Round 1
-`!bracket r2` — create next round
-`!match 1 267899` — send a room code
-`!qual 1 @winner` — record a winner
-`!delete tour` — delete this tournament
-`!training tour @user` — training mode
-`!team @user` — create a duo
-`!team @user1 @user2` — create a trio
-`!edit qualified` — correct a qualified player
+`/create tour channel:#channel` — Post the creation panel
+`!bracket r1` — Create Round 1
+`!bracket r2` — Create the next round
+`!match 1 267899` — Send a room code
+`!qual 1 @winner` — Record a winner
+`!delete tour` — Delete this tournament
+`!training tour @user` — Training mode
+`!team @user` — Create a duo
+`!team @user1 @user2` — Create a trio
+`!edit qualified` — Correct a qualified player
 
-**ℹ️ VERIFICATION**
+**ℹ️ VERIFICATION ℹ️**
 `!verification panel`
 
-**🧹 CLEAR**
+**🧹 CLEAR 🧹**
 `/clear message <number>`
 
-**📩 SEND**
+**📩 SEND 📩**
 `/send message`
 `/send dms`
 
-**✂️ RPS**
+**✂️ RPS ✂️**
 `/rps`
 `/classic rps`
 
-**📊 STATS**
-`!my stats bot`"
-                ),
+**📊 STATS 📊**
+`!my stats bot`"""
+
+            embed = discord.Embed(
+                title="📚 Message System Commands",
+                description=description,
                 colour=discord.Colour.from_rgb(88, 101, 242),
             )
 
             await ctx.send(embed=embed)
+
 
 
 # =========================================================
