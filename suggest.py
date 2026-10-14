@@ -886,12 +886,14 @@ class SuggestCog(commands.Cog):
             inline=False,
         )
         embed.set_footer(text="RULL • Suggestion System")
-        try:
-    await ctx.message.delete()
-except (discord.Forbidden, discord.HTTPException):
-    pass
 
-await ctx.send(embed=embed, reference=None)
+        # Delete the user's command and send a normal message (not a reply).
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     async def _send_help(self, message):
         embed = discord.Embed(
