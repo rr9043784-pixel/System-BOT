@@ -886,7 +886,12 @@ class SuggestCog(commands.Cog):
             inline=False,
         )
         embed.set_footer(text="RULL • Suggestion System")
-        await ctx.reply(embed=embed, mention_author=False)
+        try:
+    await ctx.message.delete()
+except (discord.Forbidden, discord.HTTPException):
+    pass
+
+await ctx.send(embed=embed, reference=None)
 
     async def _send_help(self, message):
         embed = discord.Embed(
