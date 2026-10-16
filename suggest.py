@@ -845,55 +845,6 @@ class SuggestCog(commands.Cog):
                     "I couldn't DM you. Enable direct messages and try again.", delete_after=10
                 )
 
-    @commands.command(name="commands")
-    async def suggest_commands(self, ctx, system: str = None):
-        """Show the available commands and controls for a system."""
-        if system is None or system.lower() != "suggest":
-            return
-
-        embed = discord.Embed(
-            title="💡 Suggestion System — Commands",
-            description="Here are all available commands and controls for the Suggestion System.",
-            color=discord.Color.blurple(),
-        )
-        embed.add_field(
-            name="📝 User Commands",
-            value=(
-                "`?suggest` — Open the Suggestion Center.\n"
-                "`?suggest help` — View suggestion rules.\n"
-                "`?suggest mine` — View your suggestions from the last 14 days."
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="🔘 Suggestion Buttons",
-            value=(
-                "`Write Suggestion` — Submit a suggestion.\n"
-                "`Edit` — Edit your own pending suggestion.\n"
-                "`Delete` — Delete your own pending suggestion.\n"
-                "`Vote For` — Vote in favor.\n"
-                "`Vote Against` — Vote against."
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="🛡️ Owner Controls",
-            value=(
-                "`Accept` — Accept a suggestion.\n"
-                "`Reject` — Reject a suggestion with a reason.\n"
-                "`Comment` — Add an owner comment.\n"
-                "`Admin Delete` — Administratively delete a suggestion."
-            ),
-            inline=False,
-        )
-        embed.set_footer(text="RULL • Suggestion System")
-        # Remove the command message and automatically remove the bot's help message after 10 seconds.
-        try:
-            await ctx.message.delete()
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-        await ctx.send(embed=embed, delete_after=10, allowed_mentions=discord.AllowedMentions.none())
-
     async def _send_help(self, message):
         embed = discord.Embed(
             title="💡 Suggestion Rules",
