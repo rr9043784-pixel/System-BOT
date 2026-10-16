@@ -836,7 +836,8 @@ class SuggestCog(commands.Cog):
             await message.author.send(embed=view.make_page_embed(), view=view)
             if message.guild:
                 await message.channel.send(
-                    f"{message.author.mention}, check your DMs.", delete_after=8
+                    f"{message.author.mention}, check your DMs.", delete_after=10,
+                    allowed_mentions=discord.AllowedMentions.none()
                 )
         except discord.Forbidden:
             if message.guild:
@@ -886,14 +887,12 @@ class SuggestCog(commands.Cog):
             inline=False,
         )
         embed.set_footer(text="RULL • Suggestion System")
-
-        # Delete the user's command and send a normal message (not a reply).
+        # Remove the command message and automatically remove the bot's help message after 10 seconds.
         try:
             await ctx.message.delete()
         except (discord.Forbidden, discord.HTTPException):
             pass
-
-        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await ctx.send(embed=embed, delete_after=10, allowed_mentions=discord.AllowedMentions.none())
 
     async def _send_help(self, message):
         embed = discord.Embed(
@@ -912,6 +911,12 @@ class SuggestCog(commands.Cog):
         )
         try:
             await message.author.send(embed=embed)
+            if message.guild:
+                await message.channel.send(
+                    f"{message.author.mention}, I've sent the suggestion rules to your DMs.",
+                    delete_after=10,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
         except discord.Forbidden:
             if message.guild:
                 await message.channel.send(
@@ -942,13 +947,14 @@ class SuggestCog(commands.Cog):
                 )
                 if message.guild:
                     await message.channel.send(
-                        f"{message.author.mention}, I've sent you a DM.", delete_after=8
+                        f"{message.author.mention}, I've sent you a DM.", delete_after=10,
+                        allowed_mentions=discord.AllowedMentions.none()
                     )
             except discord.Forbidden:
                 if message.guild:
                     await message.channel.send(
                         "I couldn't DM you. Please enable direct messages and try `?suggest` again.",
-                        delete_after=12,
+                        delete_after=10,
                     )
 
 
