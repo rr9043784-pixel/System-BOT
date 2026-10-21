@@ -34,7 +34,8 @@ EXTENSIONS = [
     "welcome",
     "suggest",
     "automod",
-    "generates",
+    "generates"
+    "ai",
 ]
 
 logging.basicConfig(
