@@ -34,7 +34,7 @@ EXTENSIONS = [
     "welcome",
     "suggest",
     "automod",
-    "generates"
+    "generates",
     "ai",
 ]
 
