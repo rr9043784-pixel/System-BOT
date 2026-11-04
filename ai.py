@@ -1,4 +1,3 @@
-
 import os
 import io
 import json
@@ -17,19 +16,29 @@ from openai import AsyncOpenAI
 DB_PATH = os.getenv("AI_DB_PATH", "ai_chats.db")
 CHAT_CATEGORY_ID = int(os.getenv("AI_CATEGORY_ID", "0"))
 
-CHAT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+# FreeTheAI OpenAI-compatible API.
+API_KEY = os.getenv("FTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+API_BASE_URL = os.getenv(
+    "AI_BASE_URL",
+    "https://api.freetheai.org/v1",
+)
+CHAT_MODEL = os.getenv(
+    "AI_MODEL",
+    "fta/zai/glm-5.3-flash",
+)
 
-MAX_IMAGE_SIZE = 8 * 1024 * 1024
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_HISTORY_MESSAGES = 12
 
 SYSTEM_PROMPT = """
-You are a helpful AI assistant inside a Discord server.
-Respond in the same language as the user.
-You can help with programming, education, translations,
+You are a helpful, friendly AI assistant inside a Discord server.
+Automatically detect the language used by the user and reply in that
+same language. Support every language your model can understand.
+Keep the conversation natural and useful, like a capable general
+assistant. You can help with programming, education, translations,
 ideas, writing, and questions about uploaded images.
 Be accurate and honest. If you do not know, say so.
-Never claim to have created an image unless you did.
+Never claim to have created an image unless you actually did.
 Do not generate videos.
 """
 
@@ -57,7 +66,6 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
         con.execute("""
             CREATE TABLE IF NOT EXISTS ai_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +115,62 @@ def delete_chat_data(channel_id):
         )
 
 
+def normalize_content(role, content):
+    """
+    Convert old Responses API history to Chat Completions format.
+    This keeps existing SQLite chat history compatible.
+    """
+    if isinstance(content, str):
+        return content
+
+    if not isinstance(content, list):
+        return str(content)
+
+    normalized = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("type")
+
+        if item_type in ("input_text", "text"):
+            normalized.append({
+                "type": "text",
+                "text": item.get("text", ""),
+            })
+
+        elif item_type == "input_image":
+            image_url = item.get("image_url")
+            if image_url:
+                normalized.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                })
+
+        elif item_type == "image_url":
+            image_url = item.get("image_url")
+            if isinstance(image_url, str):
+                normalized.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                })
+            elif isinstance(image_url, dict):
+                normalized.append(item)
+
+    if not normalized:
+        return str(content)
+
+    # Chat Completions accepts multimodal arrays for user messages.
+    if role == "user":
+        return normalized
+
+    return "\n".join(
+        item.get("text", "")
+        for item in normalized
+        if item.get("type") == "text"
+    )
+
+
 def load_history(channel_id):
     with db() as con:
         rows = con.execute("""
@@ -126,7 +190,7 @@ def load_history(channel_id):
 
         result.append({
             "role": row["role"],
-            "content": content,
+            "content": normalize_content(row["role"], content),
         })
 
     return result
@@ -142,7 +206,6 @@ def save_history_message(channel_id, role, content):
             VALUES (?, ?, ?)
         """, (channel_id, role, content))
 
-        # Retain recent context without growing forever.
         con.execute("""
             DELETE FROM ai_history
             WHERE channel_id = ?
@@ -194,10 +257,8 @@ async def create_private_chat(bot, guild, user):
     }
 
     category = None
-
     if CHAT_CATEGORY_ID:
         candidate = guild.get_channel(CHAT_CATEGORY_ID)
-
         if isinstance(candidate, discord.CategoryChannel):
             category = candidate
 
@@ -206,29 +267,23 @@ async def create_private_chat(bot, guild, user):
         for char in user.display_name
     ).strip("-")
 
-    safe_name = (safe_name[:35] or "user")
-    channel_name = f"ai-{safe_name}"
-
+    channel_name = f"ai-{(safe_name[:35] or 'user')}"
     channel = await guild.create_text_channel(
         name=channel_name,
         category=category,
         overwrites=overwrites,
         topic=f"Private AI chat for user ID {user.id}",
-        reason="Creating a private OpenAI chat",
+        reason="Creating a private AI chat",
     )
 
-    register_chat(
-        channel.id,
-        user.id,
-        guild.id,
-        channel.name,
-    )
+    register_chat(channel.id, user.id, guild.id, channel.name)
 
     await channel.send(
         f"**AI Chat**\n"
         f"Welcome, {user.mention}!\n\n"
         "Send a message to start chatting. You can also attach "
         "an image and ask questions about it.\n\n"
+        "The assistant automatically replies in your language.\n"
         "Use `!openai panel` to manage your chats."
     )
 
@@ -250,7 +305,6 @@ class ChatListView(discord.ui.View):
         self.guild_id = guild_id
         self.chats = chats
         self.page = page
-
         self.build_items()
 
     async def interaction_check(self, interaction):
@@ -260,7 +314,6 @@ class ChatListView(discord.ui.View):
                 ephemeral=True,
             )
             return False
-
         return True
 
     def build_items(self):
@@ -268,14 +321,14 @@ class ChatListView(discord.ui.View):
         page_chats = self.chats[start:start + self.PAGE_SIZE]
 
         if page_chats:
-            options = []
-
-            for chat in page_chats:
-                options.append(discord.SelectOption(
+            options = [
+                discord.SelectOption(
                     label=chat["channel_name"][:100],
                     value=str(chat["channel_id"]),
                     description=f"Chat ID: {chat['channel_id']}",
-                ))
+                )
+                for chat in page_chats
+            ]
 
             select = discord.ui.Select(
                 placeholder="Select a chat to open",
@@ -283,7 +336,6 @@ class ChatListView(discord.ui.View):
                 max_values=1,
                 options=options,
             )
-
             select.callback = self.select_chat
             self.add_item(select)
 
@@ -317,7 +369,6 @@ class ChatListView(discord.ui.View):
             return
 
         channel = self.bot.get_channel(channel_id)
-
         if channel is None:
             try:
                 channel = await self.bot.fetch_channel(channel_id)
@@ -345,7 +396,6 @@ class ChatListView(discord.ui.View):
         self.page -= 1
         self.clear_items()
         self.build_items()
-
         await interaction.response.edit_message(
             content=self.page_text(),
             view=self,
@@ -355,7 +405,6 @@ class ChatListView(discord.ui.View):
         self.page += 1
         self.clear_items()
         self.build_items()
-
         await interaction.response.edit_message(
             content=self.page_text(),
             view=self,
@@ -364,10 +413,8 @@ class ChatListView(discord.ui.View):
     def page_text(self):
         total_pages = max(
             1,
-            (len(self.chats) + self.PAGE_SIZE - 1)
-            // self.PAGE_SIZE,
+            (len(self.chats) + self.PAGE_SIZE - 1) // self.PAGE_SIZE,
         )
-
         return (
             f"**Your AI Chats**\n"
             f"Page {self.page + 1} of {total_pages}\n"
@@ -393,7 +440,6 @@ class AIPanelView(discord.ui.View):
                 ephemeral=True,
             )
             return False
-
         return True
 
     @discord.ui.button(
@@ -410,18 +456,15 @@ class AIPanelView(discord.ui.View):
                 interaction.guild,
                 interaction.user,
             )
-
             await interaction.followup.send(
                 f"Your private AI chat is ready: {channel.mention}",
                 ephemeral=True,
             )
-
         except discord.Forbidden:
             await interaction.followup.send(
                 "I need permission to manage channels and send messages.",
                 ephemeral=True,
             )
-
         except Exception:
             logging.exception("Failed to create AI chat")
             await interaction.followup.send(
@@ -476,11 +519,14 @@ class AICog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        api_key = os.getenv("OPENAI_API_KEY")
-
         self.client = (
-            AsyncOpenAI(api_key=api_key)
-            if api_key else None
+            AsyncOpenAI(
+                api_key=API_KEY,
+                base_url=API_BASE_URL,
+                timeout=90.0,
+                max_retries=2,
+            )
+            if API_KEY else None
         )
 
     async def cog_load(self):
@@ -488,10 +534,13 @@ class AICog(commands.Cog):
 
         if self.client is None:
             logging.error(
-                "OPENAI_API_KEY is missing. AI chat will not work."
+                "FTAI_API_KEY is missing. AI chat will not work."
             )
         else:
-            logging.info("OpenAI client initialized.")
+            logging.info(
+                "AI client initialized with model %s.",
+                CHAT_MODEL,
+            )
 
     async def cog_unload(self):
         if self.client is not None:
@@ -510,17 +559,17 @@ class AICog(commands.Cog):
     @commands.guild_only()
     async def openai_panel(self, ctx):
         embed = discord.Embed(
-            title="OpenAI Assistant",
+            title="AI Assistant",
             description=(
-                "Chat with AI, ask questions, analyze images, "
-                "and create images.\n\n"
+                "Chat with an AI assistant, ask questions, "
+                "and analyze images.\n\n"
                 "**Features**\n"
                 "• Private chat channels\n"
                 "• Saved chat history\n"
                 "• Image understanding\n"
-                "• Image generation\n"
-                "• Multiple languages\n\n"
-                "Video processing is not supported."
+                "• Automatic language detection\n"
+                "• Multilingual conversations\n\n"
+                "Image generation is not included in the free chat API."
             ),
             color=discord.Color.blurple(),
         )
@@ -536,7 +585,6 @@ class AICog(commands.Cog):
             return
 
         record = get_chat(message.channel.id)
-
         if record is None:
             return
 
@@ -553,17 +601,14 @@ class AICog(commands.Cog):
             )
             return
 
-        attachments = list(message.attachments)
         image_attachments = []
         unsupported = []
 
-        for attachment in attachments:
+        for attachment in message.attachments:
             content_type = attachment.content_type or ""
-
             if content_type.startswith("image/"):
                 image_attachments.append(attachment)
             else:
-                # Includes video and other non-image files.
                 unsupported.append(attachment.filename)
 
         if unsupported:
@@ -580,16 +625,18 @@ class AICog(commands.Cog):
             )
             return
 
-        user_content = [{
-            "type": "input_text",
-            "text": message.content.strip() or "Describe this image.",
-        }]
+        user_content = []
+        user_text = message.content.strip() or "Describe this image."
+        user_content.append({
+            "type": "text",
+            "text": user_text,
+        })
 
         for attachment in image_attachments[:3]:
             if attachment.size > MAX_IMAGE_SIZE:
                 await message.reply(
                     f"`{attachment.filename}` is too large. "
-                    "Maximum image size is 8 MB."
+                    "Maximum image size is 5 MB."
                 )
                 return
 
@@ -599,35 +646,47 @@ class AICog(commands.Cog):
                 mime = attachment.content_type or "image/png"
 
                 user_content.append({
-                    "type": "input_image",
-                    "image_url": f"data:{mime};base64,{encoded}",
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime};base64,{encoded}"
+                    },
                 })
-
             except Exception:
                 logging.exception("Failed to read image attachment")
                 await message.reply("I could not read that image.")
                 return
 
+        content_to_save = (
+            user_text if not image_attachments else user_content
+        )
+
         save_history_message(
             message.channel.id,
             "user",
-            user_content,
+            content_to_save,
         )
-
         history = load_history(message.channel.id)
 
         async with message.channel.typing():
             try:
-                response = await self.client.responses.create(
+                response = await self.client.chat.completions.create(
                     model=CHAT_MODEL,
-                    instructions=SYSTEM_PROMPT,
-                    input=history,
-                    max_output_tokens=1500,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": SYSTEM_PROMPT,
+                        },
+                        *history,
+                    ],
+                    max_tokens=1500,
                 )
 
-                answer = response.output_text or (
+                answer = response.choices[0].message.content or (
                     "I could not generate a response."
                 )
+
+                if not isinstance(answer, str):
+                    answer = str(answer)
 
                 save_history_message(
                     message.channel.id,
@@ -635,69 +694,47 @@ class AICog(commands.Cog):
                     answer,
                 )
 
-                # Discord message limit is 2000 characters.
                 for start in range(0, len(answer), 1900):
                     await message.reply(
                         answer[start:start + 1900],
                         mention_author=False,
                     )
 
-            except Exception:
-                logging.exception("OpenAI chat request failed")
+            except Exception as error:
+                logging.exception("AI chat request failed")
+                error_text = str(error).lower()
 
-                await message.reply(
-                    "I couldn't answer right now. Check the API key, "
-                    "API billing, and model access."
-                )
+                if "check-in" in error_text or "check in" in error_text:
+                    user_message = (
+                        "Free AI access needs today's account check-in. "
+                        "Please ask the account administrator to complete it."
+                    )
+                elif "429" in error_text or "rate limit" in error_text:
+                    user_message = (
+                        "The free AI request limit is currently reached "
+                        "or another request is still running. Please try later."
+                    )
+                elif "text only" in error_text or "image" in error_text:
+                    user_message = (
+                        "This model could not process the attached image. "
+                        "Please try a text message or use an image-capable model."
+                    )
+                else:
+                    user_message = (
+                        "I couldn't answer right now. The AI service may be "
+                        "busy, the daily limit may be reached, or the API "
+                        "configuration may be incorrect."
+                    )
+
+                await message.reply(user_message)
 
     @commands.command(name="aiimage")
     @commands.guild_only()
-    async def create_image(self, ctx, *, prompt: str):
-        if self.client is None:
-            await ctx.reply("AI is not configured.")
-            return
-
-        if not prompt.strip():
-            await ctx.reply(
-                "Example: `!aiimage a fantasy treasure chest`"
-            )
-            return
-
-        async with ctx.typing():
-            try:
-                result = await self.client.images.generate(
-                    model=IMAGE_MODEL,
-                    prompt=prompt,
-                    size="1024x1024",
-                )
-
-                encoded = result.data[0].b64_json
-
-                if not encoded:
-                    await ctx.reply(
-                        "No image was returned by the image service."
-                    )
-                    return
-
-                image_bytes = base64.b64decode(encoded)
-
-                file = discord.File(
-                    io.BytesIO(image_bytes),
-                    filename="ai_image.png",
-                )
-
-                await ctx.reply(
-                    content=f"**Generated image:** {prompt[:500]}",
-                    file=file,
-                    mention_author=False,
-                )
-
-            except Exception:
-                logging.exception("Image generation failed")
-                await ctx.reply(
-                    "Image generation failed. Check API billing, "
-                    "image model availability, and permissions."
-                )
+    async def create_image(self, ctx, *, prompt: str = ""):
+        await ctx.reply(
+            "Image generation is not available through the free chat model. "
+            "Text chat and image understanding are supported."
+        )
 
 
 async def setup(bot):
