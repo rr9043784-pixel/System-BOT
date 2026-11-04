@@ -1,5 +1,4 @@
 import os
-import io
 import json
 import base64
 import logging
@@ -16,16 +15,11 @@ from openai import AsyncOpenAI
 DB_PATH = os.getenv("AI_DB_PATH", "ai_chats.db")
 CHAT_CATEGORY_ID = int(os.getenv("AI_CATEGORY_ID", "0"))
 
-# FreeTheAI OpenAI-compatible API.
-API_KEY = os.getenv("FTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-API_BASE_URL = os.getenv(
-    "AI_BASE_URL",
-    "https://api.freetheai.org/v1",
-)
-CHAT_MODEL = os.getenv(
-    "AI_MODEL",
-    "fta/zai/glm-5.3-flash",
-)
+# OpenAI API configuration.
+# Add OPENAI_API_KEY to Railway Variables.
+API_KEY = os.getenv("OPENAI_API_KEY")
+API_BASE_URL = "https://api.openai.com/v1"
+CHAT_MODEL = "gpt-4.1-mini"
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_HISTORY_MESSAGES = 12
@@ -116,10 +110,7 @@ def delete_chat_data(channel_id):
 
 
 def normalize_content(role, content):
-    """
-    Convert old Responses API history to Chat Completions format.
-    This keeps existing SQLite chat history compatible.
-    """
+    """Convert stored multimodal history to Chat Completions format."""
     if isinstance(content, str):
         return content
 
@@ -160,7 +151,6 @@ def normalize_content(role, content):
     if not normalized:
         return str(content)
 
-    # Chat Completions accepts multimodal arrays for user messages.
     if role == "user":
         return normalized
 
@@ -227,9 +217,11 @@ def save_history_message(channel_id, role, content):
 # =========================================================
 
 async def create_private_chat(bot, guild, user):
-    bot_member = guild.me
+    if guild is None:
+        raise RuntimeError("This command must be used inside a server.")
 
-    if bot_member is None:
+    bot_member = guild.me
+    if bot_member is None and bot.user is not None:
         bot_member = guild.get_member(bot.user.id)
 
     if bot_member is None:
@@ -534,11 +526,11 @@ class AICog(commands.Cog):
 
         if self.client is None:
             logging.error(
-                "FTAI_API_KEY is missing. AI chat will not work."
+                "OPENAI_API_KEY is missing. AI chat will not work."
             )
         else:
             logging.info(
-                "AI client initialized with model %s.",
+                "OpenAI client initialized with model %s.",
                 CHAT_MODEL,
             )
 
@@ -569,7 +561,7 @@ class AICog(commands.Cog):
                 "• Image understanding\n"
                 "• Automatic language detection\n"
                 "• Multilingual conversations\n\n"
-                "Image generation is not included in the free chat API."
+                "Image generation is not included in this chat."
             ),
             color=discord.Color.blurple(),
         )
@@ -701,29 +693,36 @@ class AICog(commands.Cog):
                     )
 
             except Exception as error:
-                logging.exception("AI chat request failed")
+                logging.exception("OpenAI chat request failed")
                 error_text = str(error).lower()
 
-                if "check-in" in error_text or "check in" in error_text:
+                if "401" in error_text or "unauthorized" in error_text:
                     user_message = (
-                        "Free AI access needs today's account check-in. "
-                        "Please ask the account administrator to complete it."
+                        "OpenAI authentication failed. Please check the "
+                        "OPENAI_API_KEY setting in Railway."
+                    )
+                elif (
+                    "insufficient_quota" in error_text
+                    or "billing" in error_text
+                    or "quota" in error_text
+                ):
+                    user_message = (
+                        "OpenAI API usage is unavailable for this account. "
+                        "Please check the API billing and usage limits."
                     )
                 elif "429" in error_text or "rate limit" in error_text:
                     user_message = (
-                        "The free AI request limit is currently reached "
-                        "or another request is still running. Please try later."
+                        "The OpenAI request limit was reached. Please try again later."
                     )
                 elif "text only" in error_text or "image" in error_text:
                     user_message = (
-                        "This model could not process the attached image. "
-                        "Please try a text message or use an image-capable model."
+                        "The model could not process the attached image. "
+                        "Please try a text message."
                     )
                 else:
                     user_message = (
-                        "I couldn't answer right now. The AI service may be "
-                        "busy, the daily limit may be reached, or the API "
-                        "configuration may be incorrect."
+                        "I couldn't get a response from OpenAI right now. "
+                        "Please try again later or check the bot logs."
                     )
 
                 await message.reply(user_message)
@@ -732,8 +731,7 @@ class AICog(commands.Cog):
     @commands.guild_only()
     async def create_image(self, ctx, *, prompt: str = ""):
         await ctx.reply(
-            "Image generation is not available through the free chat model. "
-            "Text chat and image understanding are supported."
+            "Image generation is not available in this AI chat."
         )
 
 
