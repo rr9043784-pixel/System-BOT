@@ -35,7 +35,7 @@ EXTENSIONS = [
     "suggest",
     "automod",
     "generates",
-    "ai",
+    "gameprofiles",
 ]
 
 logging.basicConfig(
