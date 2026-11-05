@@ -21,6 +21,10 @@ import base64
 import io
 import os
 import re
+import json
+import sqlite3
+import secrets
+import string
 from datetime import datetime, timezone
 from typing import Any
 
@@ -52,6 +56,120 @@ GAME_LIST = [
 ]
 
 DEFAULT_ACCENT = discord.Colour(0x5865F2)
+
+
+# Railway persistence:
+# If a Railway Volume is mounted at /data, the database is stored there.
+# Otherwise it is stored beside this file. You can override with GAME_PROFILES_DB.
+DB_PATH = os.getenv(
+    "GAME_PROFILES_DB",
+    "/data/gameprofiles.sqlite3" if os.path.isdir("/data") else "gameprofiles.sqlite3",
+)
+
+
+def init_db() -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS game_profile_registrations (
+                discord_id TEXT NOT NULL,
+                game_key TEXT NOT NULL,
+                username TEXT NOT NULL,
+                username_key TEXT NOT NULL,
+                registered_at TEXT NOT NULL,
+                PRIMARY KEY (discord_id, game_key),
+                UNIQUE (game_key, username_key)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS game_profile_pending (
+                discord_id TEXT NOT NULL, game_key TEXT NOT NULL, username TEXT NOT NULL,
+                code TEXT NOT NULL, created_at TEXT NOT NULL,
+                PRIMARY KEY (discord_id, game_key), UNIQUE (game_key, username)
+            )
+        """)
+        db.commit()
+
+
+def get_registration(discord_id: int, game_key: str) -> dict | None:
+    init_db()
+    with sqlite3.connect(DB_PATH) as db:
+        db.row_factory = sqlite3.Row
+        row = db.execute(
+            "SELECT discord_id, game_key, username, username_key, registered_at "
+            "FROM game_profile_registrations WHERE discord_id=? AND game_key=?",
+            (str(discord_id), game_key),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def register_account(discord_id: int, game_key: str, username: str) -> tuple[bool, str]:
+    """Returns (success, reason). SQLite constraints prevent duplicate claims."""
+    init_db()
+    username_key = username.strip().casefold()
+    registered_at = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute(
+                "INSERT INTO game_profile_registrations "
+                "(discord_id, game_key, username, username_key, registered_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (str(discord_id), game_key, username.strip(), username_key, registered_at),
+            )
+            db.commit()
+        return True, "registered"
+    except sqlite3.IntegrityError:
+        # Check whether this Discord user already registered this game.
+        existing = get_registration(discord_id, game_key)
+        if existing:
+            return False, "already_registered"
+        return False, "username_taken"
+
+
+def save_pending(discord_id: int, game_key: str, username: str, code: str) -> tuple[bool, str]:
+    init_db()
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            existing = db.execute(
+                "SELECT discord_id FROM game_profile_pending WHERE game_key=? AND username=?",
+                (game_key, username.casefold()),
+            ).fetchone()
+            if existing and str(existing[0]) != str(discord_id):
+                return False, "account_pending"
+            db.execute(
+                "INSERT INTO game_profile_pending "
+                "(discord_id, game_key, username, code, created_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(discord_id, game_key) DO UPDATE SET "
+                "username=excluded.username, code=excluded.code, created_at=excluded.created_at",
+                (str(discord_id), game_key, username.casefold(), code, datetime.now(timezone.utc).isoformat()),
+            )
+            db.commit()
+        return True, "pending"
+    except sqlite3.IntegrityError:
+        return False, "account_pending"
+
+
+def get_pending(discord_id: int, game_key: str) -> dict | None:
+    init_db()
+    with sqlite3.connect(DB_PATH) as db:
+        db.row_factory = sqlite3.Row
+        row = db.execute(
+            "SELECT * FROM game_profile_pending WHERE discord_id=? AND game_key=?",
+            (str(discord_id), game_key),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_pending(discord_id: int, game_key: str) -> None:
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("DELETE FROM game_profile_pending WHERE discord_id=? AND game_key=?",
+                   (str(discord_id), game_key))
+        db.commit()
+
+
+def make_verification_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "LEGENDS-" + "".join(secrets.choice(alphabet) for _ in range(8))
 
 
 # ───────────────────────────── HTTP helpers ─────────────────────────
@@ -286,23 +404,60 @@ class GameProfileModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.user.id != self.parent_view.owner_id:
             await interaction.response.send_message(
-                "Only the person who opened this menu can use it.",
+                "Only the person who opened this menu can use it.", ephemeral=True
+            )
+            return
+
+        existing = get_registration(interaction.user.id, self.game_key)
+        if existing:
+            await interaction.response.send_message(
+                f"You have already registered your {self.parent_view.game_name(self.game_key)} account.",
                 ephemeral=True,
             )
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         try:
+            username = str(self.username).strip()
             if self.game_key == "roblox":
-                profile = await get_roblox_profile(str(self.username))
-            elif self.game_key == "minecraft":
-                profile = await get_minecraft_profile(str(self.username))
-            else:
-                profile = await get_brawlstars_profile(str(self.username))
+                profile = await get_roblox_profile(username)
+                canonical_username = profile["username"]
+                code = make_verification_code()
+                ok, reason = save_pending(interaction.user.id, self.game_key, canonical_username, code)
+                if not ok:
+                    await interaction.followup.send(
+                        "This Roblox account already has a pending verification or is linked elsewhere.",
+                        ephemeral=True,
+                    )
+                    return
+                self.parent_view.pending = {"game_key": self.game_key, "username": canonical_username, "code": code}
+                self.parent_view.profile = profile
+                self.parent_view.accent = profile["accent"]
+                await self.parent_view.show_verification()
+                await interaction.followup.send(
+                    "**Verification started.** Add this exact code to your Roblox profile description, "
+                    "save the change, then press **Verify Account** in the Game Profiles message:\n"
+                    f"`{code}`\n\n"
+                    "Do not share this code with anyone. It expires when you start a new verification.",
+                    ephemeral=True,
+                )
+                return
 
+            # These games do not expose a reliable public profile field that this bot can
+            # write/read as proof of ownership. Never mark a username/tag as verified.
+            if self.game_key == "minecraft":
+                profile = await get_minecraft_profile(username)
+                note = "Minecraft profile found, but ownership cannot currently be verified automatically."
+            else:
+                profile = await get_brawlstars_profile(username)
+                note = "Brawl Stars profile found, but the public API does not prove account ownership."
             self.parent_view.profile = profile
             self.parent_view.accent = profile["accent"]
-            await self.parent_view.show_profile()
+            await self.parent_view.show_unverified(note)
+            await interaction.followup.send(
+                "The profile was found, but it has **not** been registered as verified. "
+                "This prevents someone from claiming another player's account.", ephemeral=True
+            )
         except (ValueError, LookupError, RuntimeError, aiohttp.ClientError) as exc:
             await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
         except Exception:
@@ -311,13 +466,13 @@ class GameProfileModal(discord.ui.Modal):
                 ephemeral=True,
             )
 
-
 class GameProfilesView(discord.ui.LayoutView):
     def __init__(self, owner_id: int):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.owner_id = owner_id
         self.page = 0
         self.profile: dict | None = None
+        self.pending: dict | None = None
         self.accent = DEFAULT_ACCENT
         self.message: discord.Message | None = None
         self.expired = False
@@ -337,6 +492,10 @@ class GameProfilesView(discord.ui.LayoutView):
             )
             return False
         return True
+
+    @staticmethod
+    def game_name(game_key: str) -> str:
+        return next((name for key, name, _ in GAME_LIST if key == game_key), "game")
 
     def build_menu(self):
         self.clear_items()
@@ -381,7 +540,34 @@ class GameProfilesView(discord.ui.LayoutView):
 
         async def select_callback(interaction: discord.Interaction):
             key = select.values[0]
-            await interaction.response.send_modal(GameProfileModal(self, key))
+            registered = get_registration(interaction.user.id, key)
+            if not registered:
+                await interaction.response.send_modal(GameProfileModal(self, key))
+                return
+
+            await interaction.response.defer()
+            try:
+                username = registered["username"]
+                if key == "roblox":
+                    profile = await get_roblox_profile(username)
+                elif key == "minecraft":
+                    profile = await get_minecraft_profile(username)
+                else:
+                    profile = await get_brawlstars_profile(username)
+
+                self.profile = profile
+                self.accent = profile["accent"]
+                await self.show_profile()
+            except (ValueError, LookupError, RuntimeError, aiohttp.ClientError) as exc:
+                await interaction.followup.send(
+                    f"⚠️ Could not load your registered account: {exc}",
+                    ephemeral=True,
+                )
+            except Exception:
+                await interaction.followup.send(
+                    "Could not load your registered profile. Please try again later.",
+                    ephemeral=True,
+                )
 
         select.callback = select_callback
         self.add_item(discord.ui.ActionRow(select))
@@ -399,6 +585,95 @@ class GameProfilesView(discord.ui.LayoutView):
         prev_button.callback = self.page_back
         next_button.callback = self.page_next
         self.add_item(discord.ui.ActionRow(prev_button, next_button))
+
+    async def show_verification(self):
+        if not self.message or not self.profile or not self.pending:
+            return
+        self.clear_items()
+        profile = self.profile
+        accessory = discord.ui.Thumbnail(
+            profile.get("avatar") or "https://cdn.discordapp.com/embed/avatars/0.png",
+            description="Roblox avatar",
+        )
+        self.add_item(discord.ui.Container(
+            discord.ui.Section(
+                discord.ui.TextDisplay(
+                    f"# {ROBLOX_EMOJI} Roblox Verification\n"
+                    f"**{profile['username']}**\n`{profile['id']}`"
+                ), accessory=accessory,
+            ),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(
+                "**1.** Open your Roblox profile.\n"
+                "**2.** Put the one-time code sent to you by the bot into your profile description.\n"
+                "**3.** Save the description, then press **Verify Account** below.\n\n"
+                "The bot checks the public description. Your Roblox password is never requested."
+            ),
+            accent_colour=self.accent,
+        ))
+        verify = discord.ui.Button(label="Verify Account", emoji="🔐", style=discord.ButtonStyle.success)
+        verify.callback = self.verify_roblox
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+        cancel.callback = self.cancel_verification
+        self.add_item(discord.ui.ActionRow(verify, cancel))
+        await self.message.edit(view=self)
+
+    async def show_unverified(self, note: str):
+        if not self.message or not self.profile:
+            return
+        self.clear_items()
+        p = self.profile
+        self.add_item(discord.ui.Container(
+            discord.ui.Section(
+                discord.ui.TextDisplay(f"# {game_emoji(p['game'])} {p['game']} Profile\n**{p['username']}**"),
+                accessory=discord.ui.Thumbnail(p.get("avatar") or "https://cdn.discordapp.com/embed/avatars/0.png"),
+            ),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(f"⚠️ **Unverified**\n{note}\n\n{p.get('url', '')}"),
+            accent_colour=discord.Colour.orange(),
+        ))
+        back = discord.ui.Button(label="Back", emoji="↩️", style=discord.ButtonStyle.secondary)
+        back.callback = self.back_to_games
+        self.add_item(discord.ui.ActionRow(back))
+        await self.message.edit(view=self)
+
+    async def verify_roblox(self, interaction: discord.Interaction):
+        pending = get_pending(interaction.user.id, "roblox")
+        if not pending or not self.pending:
+            await interaction.response.send_message("No active Roblox verification was found. Start again.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        try:
+            profile = await get_roblox_profile(pending["username"])
+            description = str(profile.get("description", ""))
+            if pending["code"] not in description:
+                await interaction.followup.send(
+                    "I couldn't find the verification code in that Roblox profile description. "
+                    "Add the exact code, save it, and try again.", ephemeral=True
+                )
+                return
+            ok, reason = register_account(interaction.user.id, "roblox", profile["username"])
+            if not ok:
+                await interaction.followup.send(
+                    "This Roblox account is already linked to another Discord account, or you already registered Roblox.",
+                    ephemeral=True,
+                )
+                return
+            delete_pending(interaction.user.id, "roblox")
+            self.pending = None
+            self.profile = profile
+            self.accent = profile["accent"]
+            await self.show_profile()
+            await interaction.followup.send("✅ Roblox account successfully verified and linked!", ephemeral=True)
+        except (ValueError, LookupError, RuntimeError, aiohttp.ClientError) as exc:
+            await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+
+    async def cancel_verification(self, interaction: discord.Interaction):
+        delete_pending(interaction.user.id, "roblox")
+        self.pending = None
+        self.profile = None
+        self.build_menu()
+        await interaction.response.edit_message(view=self)
 
     async def show_profile(self):
         if not self.message or not self.profile:
@@ -449,6 +724,7 @@ class GameProfilesView(discord.ui.LayoutView):
 
     async def back_to_games(self, interaction: discord.Interaction):
         self.profile = None
+        self.pending = None
         self.accent = DEFAULT_ACCENT
         self.build_menu()
         await interaction.response.edit_message(view=self)
@@ -482,6 +758,7 @@ class GameProfilesView(discord.ui.LayoutView):
 class GameProfiles(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        init_db()
 
     @app_commands.command(
         name="gameprofiles",
