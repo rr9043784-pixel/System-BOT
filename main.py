@@ -36,6 +36,7 @@ EXTENSIONS = [
     "automod",
     "generates",
     "gameprofiles",
+    "announcement_site",
 ]
 
 logging.basicConfig(
