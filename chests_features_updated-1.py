@@ -1,0 +1,3948 @@
+import os
+import json
+import random
+import asyncio
+import tempfile
+import time
+
+import discord
+import numpy as np
+from discord.ext import commands
+from threading import Thread
+from flask import Flask, request, jsonify
+
+
+DATA_FILE = os.environ.get("CHESTS_DATA_FILE", "chests_data.json")
+
+MENU_TIMEOUT = 300
+DAILY_COOLDOWN = 86400
+WEEKLY_COOLDOWN = 604800
+
+ULTRA_ROLE_ID = 1529128872036143164
+PHOENIX_ROLE_ID = 1557679056864940072
+
+PHOENIX_MAX = 2
+
+OWNER_ID = 1176149190192152626
+
+
+LANGUAGES = {
+    "en": "🇬🇧 English",
+    "ru": "🇷🇺 Russian",
+    "ro": "🇷🇴 Romanian",
+    "uz": "🇺🇿 Uzbek",
+    "kk": "🇰🇿 Kazakh",
+    "tr": "🇹🇷 Turkish",
+    "es": "🇪🇸 Spanish",
+    "fr": "🇫🇷 French",
+    "de": "🇩🇪 German",
+    "it": "🇮🇹 Italian",
+    "uk": "🇺🇦 Ukrainian",
+    "pl": "🇵🇱 Polish"
+}
+
+
+ROLE_REWARDS = [
+    {
+        "name": {
+            "en": "Common",
+            "ru": "Обычная",
+            "ro": "Comună",
+            "uz": "Oddiy",
+            "kk": "Кәдімгі",
+            "tr": "Yaygın",
+            "es": "Común",
+            "fr": "Commune",
+            "de": "Gewöhnlich",
+            "it": "Comune",
+            "uk": "Звичайна",
+            "pl": "Zwykła"
+        },
+        "emoji": "⚪",
+        "role_id": 1529127245128667308,
+        "chance": 40.0
+    },
+    {
+        "name": {
+            "en": "Uncommon",
+            "ru": "Необычная",
+            "ro": "Neobișnuită",
+            "uz": "Noodatiy",
+            "kk": "Ерекше",
+            "tr": "Sıradışı",
+            "es": "Poco común",
+            "fr": "Peu commune",
+            "de": "Ungewöhnlich",
+            "it": "Non comune",
+            "uk": "Незвичайна",
+            "pl": "Niezwykła"
+        },
+        "emoji": "🟢",
+        "role_id": 1529155257081401575,
+        "chance": 25.0
+    },
+    {
+        "name": {
+            "en": "Rare",
+            "ru": "Редкая",
+            "ro": "Rară",
+            "uz": "Noyob",
+            "kk": "Сирек",
+            "tr": "Nadir",
+            "es": "Rara",
+            "fr": "Rare",
+            "de": "Selten",
+            "it": "Rara",
+            "uk": "Рідкісна",
+            "pl": "Rzadka"
+        },
+        "emoji": "🔵",
+        "role_id": 1529127682392985731,
+        "chance": 17.0
+    },
+    {
+        "name": {
+            "en": "Epic",
+            "ru": "Эпическая",
+            "ro": "Epică",
+            "uz": "Epik",
+            "kk": "Эпикалық",
+            "tr": "Epik",
+            "es": "Épica",
+            "fr": "Épique",
+            "de": "Episch",
+            "it": "Epica",
+            "uk": "Епічна",
+            "pl": "Epicka"
+        },
+        "emoji": "🟣",
+        "role_id": 1529127837192159494,
+        "chance": 10.0
+    },
+    {
+        "name": {
+            "en": "Heroic",
+            "ru": "Героическая",
+            "ro": "Eroică",
+            "uz": "Qahramonona",
+            "kk": "Батырлық",
+            "tr": "Kahramanca",
+            "es": "Heroica",
+            "fr": "Héroïque",
+            "de": "Heldenhaft",
+            "it": "Eroica",
+            "uk": "Героїчна",
+            "pl": "Bohaterska"
+        },
+        "emoji": "🟠",
+        "role_id": 1529155677476356198,
+        "chance": 5.0
+    },
+    {
+        "name": {
+            "en": "Mythic",
+            "ru": "Мифическая",
+            "ro": "Mitică",
+            "uz": "Afsonaviy",
+            "kk": "Мифтік",
+            "tr": "Mistik",
+            "es": "Mítica",
+            "fr": "Mythique",
+            "de": "Mythisch",
+            "it": "Mitica",
+            "uk": "Міфічна",
+            "pl": "Mityczna"
+        },
+        "emoji": "🔴",
+        "role_id": 1529128399094681760,
+        "chance": 2.2
+    },
+    {
+        "name": {
+            "en": "Legendary",
+            "ru": "Легендарная",
+            "ro": "Legendară",
+            "uz": "Afsonaviy",
+            "kk": "Аңызға айналған",
+            "tr": "Efsanevi",
+            "es": "Legendaria",
+            "fr": "Légendaire",
+            "de": "Legendär",
+            "it": "Leggendaria",
+            "uk": "Легендарна",
+            "pl": "Legendarną"
+        },
+        "emoji": "🟡",
+        "role_id": 1529128791916544111,
+        "chance": 0.6
+    },
+    {
+        "name": {
+            "en": "Cosmic",
+            "ru": "Космическая",
+            "ro": "Cosmică",
+            "uz": "Kosmik",
+            "kk": "Ғарыштық",
+            "tr": "Kozmik",
+            "es": "Cósmica",
+            "fr": "Cosmique",
+            "de": "Kosmisch",
+            "it": "Cosmica",
+            "uk": "Космічна",
+            "pl": "Kosmiczna"
+        },
+        "emoji": "🌌",
+        "role_id": 1529156030317990019,
+        "chance": 0.15
+    },
+    {
+        "name": {
+            "en": "Galactic",
+            "ru": "Галактическая",
+            "ro": "Galactică",
+            "uz": "Galaktik",
+            "kk": "Галактикалық",
+            "tr": "Galaktik",
+            "es": "Galáctica",
+            "fr": "Galactique",
+            "de": "Galaktisch",
+            "it": "Galattica",
+            "uk": "Галактична",
+            "pl": "Galaktyczna"
+        },
+        "emoji": "🌠",
+        "role_id": 1529156293393383474,
+        "chance": 0.04
+    },
+    {
+        "name": {
+            "en": "Ultra",
+            "ru": "Ultra",
+            "ro": "Ultra",
+            "uz": "Ultra",
+            "kk": "Ultra",
+            "tr": "Ultra",
+            "es": "Ultra",
+            "fr": "Ultra",
+            "de": "Ultra",
+            "it": "Ultra",
+            "uk": "Ultra",
+            "pl": "Ultra"
+        },
+        "emoji": "💎",
+        "role_id": ULTRA_ROLE_ID,
+        "chance": 0.01
+    },
+    {
+        "name": {
+            "en": "Phoenix",
+            "ru": "Phoenix",
+            "ro": "Phoenix",
+            "uz": "Phoenix",
+            "kk": "Phoenix",
+            "tr": "Phoenix",
+            "es": "Phoenix",
+            "fr": "Phoenix",
+            "de": "Phoenix",
+            "it": "Phoenix",
+            "uk": "Phoenix",
+            "pl": "Phoenix"
+        },
+        "emoji": "🔥",
+        "role_id": PHOENIX_ROLE_ID,
+        "chance": 0.001
+    }
+]
+
+
+class Chests(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.data = self.load_data()
+
+        self.save_lock = asyncio.Lock()
+        self.open_lock = asyncio.Lock()
+        # Timestamp of each user's latest !chests menu.
+        self.menu_started_at = {}
+
+    # =========================================================
+    # DATA
+    # =========================================================
+
+    def load_data(self):
+
+        if not os.path.exists(DATA_FILE):
+            return {"users": {}}
+
+        try:
+            with open(
+                DATA_FILE,
+                "r",
+                encoding="utf-8"
+            ) as file:
+                data = json.load(file)
+
+            if not isinstance(data, dict):
+                raise ValueError("Invalid data")
+
+            data.setdefault("users", {})
+
+            if not isinstance(data["users"], dict):
+                raise ValueError("Invalid users data")
+
+            return data
+
+        except Exception as e:
+
+            print(
+                f"❌ Failed to load {DATA_FILE}: {e}"
+            )
+
+            return {"users": {}}
+
+    async def save_data(self):
+
+        async with self.save_lock:
+
+            directory = os.path.dirname(
+                os.path.abspath(DATA_FILE)
+            )
+
+            fd, temp_path = tempfile.mkstemp(
+                dir=directory,
+                prefix="chests_",
+                suffix=".tmp"
+            )
+
+            try:
+
+                with os.fdopen(
+                    fd,
+                    "w",
+                    encoding="utf-8"
+                ) as file:
+
+                    json.dump(
+                        self.data,
+                        file,
+                        ensure_ascii=False,
+                        indent=4
+                    )
+
+                    file.flush()
+                    os.fsync(
+                        file.fileno()
+                    )
+
+                os.replace(
+                    temp_path,
+                    DATA_FILE
+                )
+
+            except Exception:
+
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+                raise
+
+    def get_user_data(self, user_id):
+
+        user_id = str(user_id)
+
+        if user_id not in self.data["users"]:
+
+            self.data["users"][user_id] = {
+                "chests": 0,
+                "mega_chests": 0,
+                "ultra_chests": 0,
+                "language": None,
+                "daily_next": 0,
+                "weekly_next": 0,
+                "opened_normal": 0,
+                "opened_mega": 0,
+                "opened_ultra": 0,
+                "chest_history": [],
+                "opening_events": [],
+                "level_rewards_claimed": [],
+                "daily_quest": {},
+                "daily_quest_date": "",
+                "achievements": []
+            }
+
+        user = self.data["users"][user_id]
+
+        user.setdefault("chests", 0)
+        user.setdefault("mega_chests", 0)
+        user.setdefault("ultra_chests", 0)
+        user.setdefault("language", None)
+        user.setdefault("daily_next", 0)
+        user.setdefault("weekly_next", 0)
+        user.setdefault("opened_normal", 0)
+        user.setdefault("opened_mega", 0)
+        user.setdefault("opened_ultra", 0)
+        user.setdefault("chest_history", [])
+        user.setdefault("opening_events", [])
+        user.setdefault("level_rewards_claimed", [])
+        user.setdefault("daily_quest", {})
+        user.setdefault("daily_quest_date", "")
+        user.setdefault("achievements", [])
+
+        return user
+
+    # =========================================================
+    # QUESTS / LEVELS / PERIOD LEADERBOARDS
+    # =========================================================
+
+    LEVEL_REWARDS = {
+        5: {"chest": 10, "mega": 0, "ultra": 0},
+        10: {"chest": 25, "mega": 1, "ultra": 0},
+        25: {"chest": 50, "mega": 5, "ultra": 1},
+        50: {"chest": 100, "mega": 25, "ultra": 1},
+        100: {"chest": 100, "mega": 25, "ultra": 5},
+    }
+
+    QUEST_POOL = [
+        ("Open 5 Normal Chests", "opened_normal", 5, "chest", 5),
+        ("Open 10 Normal Chests", "opened_normal", 10, "chest", 10),
+        ("Open 2 Mega Chests", "opened_mega", 2, "chest", 10),
+        ("Open 3 Mega Chests", "opened_mega", 3, "mega", 1),
+        ("Open 1 Ultra Chest", "opened_ultra", 1, "mega", 2),
+        ("Open 3 Ultra Chests", "opened_ultra", 3, "ultra", 1),
+    ]
+
+    def opened_total(self, user):
+        return sum(int(user.get(k, 0)) for k in ("opened_normal", "opened_mega", "opened_ultra"))
+
+    def current_level(self, user):
+        # Level milestones are based on lifetime chest openings.
+        total = self.opened_total(user)
+        return min(100, total)
+
+    def ensure_daily_quest(self, user_id):
+        user = self.get_user_data(user_id)
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if user.get("daily_quest_date") != today or not user.get("daily_quest"):
+            quest = random.choice(self.QUEST_POOL)
+            key, target = quest[1], int(quest[2])
+            user["daily_quest_date"] = today
+            user["daily_quest"] = {
+                "title": quest[0], "stat": key, "target": target,
+                "reward_type": quest[3], "reward": int(quest[4]),
+                "start_value": int(user.get(key, 0)), "completed": False
+            }
+        return user["daily_quest"]
+
+    async def grant_level_rewards(self, user_id):
+        user = self.get_user_data(user_id)
+        total = self.opened_total(user)
+        claimed = set(int(x) for x in user.get("level_rewards_claimed", []))
+        newly_claimed = []
+        for level, reward in self.LEVEL_REWARDS.items():
+            if total >= level and level not in claimed:
+                user["chests"] += reward["chest"]
+                user["mega_chests"] += reward["mega"]
+                user["ultra_chests"] += reward["ultra"]
+                claimed.add(level)
+                newly_claimed.append((level, reward))
+        user["level_rewards_claimed"] = sorted(claimed)
+        return newly_claimed
+
+    async def update_daily_quest(self, user_id):
+        user = self.get_user_data(user_id)
+        quest = self.ensure_daily_quest(user_id)
+        if quest.get("completed"):
+            return None
+        progress = max(0, int(user.get(quest["stat"], 0)) - int(quest.get("start_value", 0)))
+        if progress < int(quest["target"]):
+            return None
+        quest["completed"] = True
+        kind = quest.get("reward_type", "chest")
+        amount = int(quest.get("reward", 1))
+        if kind == "chest":
+            user["chests"] += amount
+        elif kind == "mega":
+            user["mega_chests"] += amount
+        elif kind == "ultra":
+            user["ultra_chests"] += amount
+        # Completion message is displayed on the next quest view; reward is immediately saved.
+        await self.save_data()
+        return f"🎉 Quest completed! Reward: **{amount} {kind.title()} Chest(s)**"
+
+    def period_openings(self, user, period):
+        now = int(time.time())
+        if period == "daily":
+            cutoff = now - 86400
+        elif period == "monthly":
+            cutoff = now - 30 * 86400
+        elif period == "yearly":
+            cutoff = now - 365 * 86400
+        else:
+            cutoff = 0
+        events = user.get("opening_events", [])
+        return sum(int(e.get("count", 0)) for e in events if int(e.get("time", 0)) >= cutoff)
+
+    def leaderboard_text(self, period):
+        users = self.data.get("users", {})
+        ranked = []
+        for uid, user in users.items():
+            if period == "all":
+                score = self.opened_total(user)
+            else:
+                score = self.period_openings(user, period)
+            if score:
+                ranked.append((uid, score))
+        ranked.sort(key=lambda x: x[1], reverse=True)
+        titles = {"daily": "Daily", "monthly": "Monthly", "yearly": "Yearly", "all": "All Time"}
+        lines = [f"# 🏆 {titles.get(period, 'Daily')} Chest Leaderboard", ""]
+        for rank, (uid, score) in enumerate(ranked[:10], 1):
+            medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, f"{rank}.")
+            lines.append(f"{medal} <@{uid}> — **{score}** chests")
+        if not ranked:
+            lines.append("No chest openings recorded yet.")
+        return "\\n".join(lines)
+
+    def record_opening_event(self, user_id, count):
+        user = self.get_user_data(user_id)
+        events = user.setdefault("opening_events", [])
+        events.append({"time": int(time.time()), "count": int(count)})
+        # Keep enough history for the yearly leaderboard plus a small safety margin.
+        cutoff = int(time.time()) - 370 * 86400
+        user["opening_events"] = [e for e in events if int(e.get("time", 0)) >= cutoff]
+
+    def record_chest_history(self, user_id, chest_type, amount, details=""):
+        """Record a compact chest-opening entry for the user's history."""
+        user = self.get_user_data(user_id)
+        history = user.setdefault("chest_history", [])
+        history.append({
+            "time": int(time.time()),
+            "type": str(chest_type),
+            "amount": int(amount),
+            "details": str(details)[:500]
+        })
+        if int(amount) > 0:
+            self.record_opening_event(user_id, int(amount))
+        # Keep the most recent 20 entries to prevent unbounded data growth.
+        user["chest_history"] = history[-20:]
+
+    async def add_chests(
+        self,
+        user_id,
+        amount,
+        chest_type="chest"
+    ):
+
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return False
+
+        if amount <= 0:
+            return False
+
+        user = self.get_user_data(user_id)
+
+        if chest_type == "chest":
+            user["chests"] += amount
+
+        elif chest_type == "mega":
+            user["mega_chests"] += amount
+
+        elif chest_type == "ultra":
+            user["ultra_chests"] += amount
+
+        else:
+            return False
+
+        await self.save_data()
+
+        return True
+
+    def menu_has_expired(self, user_id):
+        started = self.menu_started_at.get(user_id)
+        return started is None or (asyncio.get_running_loop().time() - started >= MENU_TIMEOUT)
+
+    async def reject_expired_menu(self, interaction, user_id):
+        if not self.menu_has_expired(user_id):
+            return False
+        await interaction.response.send_message(self.t(user_id, "expired"), ephemeral=True)
+        return True
+
+    # =========================================================
+    # LANGUAGE
+    # =========================================================
+
+    def language(self, user_id):
+
+        language = self.get_user_data(
+            user_id
+        ).get("language")
+
+        return language if language in LANGUAGES else "en"
+
+    def t(
+        self,
+        user_id,
+        key,
+        **kwargs
+    ):
+
+        lang = kwargs.pop("_language", self.language(user_id))
+
+        texts = {
+
+            "title": {
+                "en": "🎁 Chests",
+                "ru": "🎁 Сундуки",
+                "ro": "🎁 Cufere",
+                "uz": "🎁 Sandiqlar",
+                "kk": "🎁 Сандықтар",
+                "tr": "🎁 Sandıklar",
+                "es": "🎁 Cofres",
+                "fr": "🎁 Coffres",
+                "de": "🎁 Truhen",
+                "it": "🎁 Forzieri",
+                "uk": "🎁 Скрині",
+                "pl": "🎁 Skrzynie"
+            },
+
+            "language_prompt": {
+                "en": "🌐 Select your language",
+                "ru": "🌐 Выберите язык",
+                "ro": "🌐 Selectează limba",
+                "uz": "🌐 Tilni tanlang",
+                "kk": "🌐 Тілді таңдаңыз",
+                "tr": "🌐 Dilinizi seçin",
+                "es": "🌐 Selecciona tu idioma",
+                "fr": "🌐 Choisissez votre langue",
+                "de": "🌐 Sprache auswählen",
+                "it": "🌐 Seleziona la lingua",
+                "uk": "🌐 Оберіть мову",
+                "pl": "🌐 Wybierz język"
+            },
+
+            "normal_chest": {
+                "en": "🎁 Chest",
+                "ru": "🎁 Сундук",
+                "ro": "🎁 Cufăr",
+                "uz": "🎁 Sandıq",
+                "kk": "🎁 Сандық",
+                "tr": "🎁 Sandık",
+                "es": "🎁 Cofre",
+                "fr": "🎁 Coffre",
+                "de": "🎁 Truhe",
+                "it": "🎁 Forziere",
+                "uk": "🎁 Скриня",
+                "pl": "🎁 Skrzynia"
+            },
+
+            "mega_chest": {
+                "en": "💎 Mega Chest",
+                "ru": "💎 Mega Chest",
+                "ro": "💎 Mega Chest",
+                "uz": "💎 Mega Chest",
+                "kk": "💎 Mega Chest",
+                "tr": "💎 Mega Chest",
+                "es": "💎 Mega Chest",
+                "fr": "💎 Mega Chest",
+                "de": "💎 Mega Chest",
+                "it": "💎 Mega Chest",
+                "uk": "💎 Mega Chest",
+                "pl": "💎 Mega Chest"
+            },
+
+            "ultra_chest": {
+                "en": "⚡ Ultra Chest",
+                "ru": "⚡ Ultra Chest",
+                "ro": "⚡ Ultra Chest",
+                "uz": "⚡ Ultra Chest",
+                "kk": "⚡ Ultra Chest",
+                "tr": "⚡ Ultra Chest",
+                "es": "⚡ Ultra Chest",
+                "fr": "⚡ Ultra Chest",
+                "de": "⚡ Ultra Chest",
+                "it": "⚡ Ultra Chest",
+                "uk": "⚡ Ultra Chest",
+                "pl": "⚡ Ultra Chest"
+            },
+
+            "chest": {
+                "en": "🎁 Chest: {value}",
+                "ru": "🎁 Сундук: {value}",
+                "ro": "🎁 Cufere: {value}",
+                "uz": "🎁 Sandıqlar: {value}",
+                "kk": "🎁 Сандықтар: {value}",
+                "tr": "🎁 Sandık: {value}",
+                "es": "🎁 Cofres: {value}",
+                "fr": "🎁 Coffres: {value}",
+                "de": "🎁 Truhen: {value}",
+                "it": "🎁 Forzieri: {value}",
+                "uk": "🎁 Скрині: {value}",
+                "pl": "🎁 Skrzynie: {value}"
+            },
+
+            "mega": {
+                "en": "💎 Mega Chest: {value}",
+                "ru": "💎 Mega Chest: {value}",
+                "ro": "💎 Mega Chest: {value}",
+                "uz": "💎 Mega Chest: {value}",
+                "kk": "💎 Mega Chest: {value}",
+                "tr": "💎 Mega Chest: {value}",
+                "es": "💎 Mega Chest: {value}",
+                "fr": "💎 Mega Chest: {value}",
+                "de": "💎 Mega Chest: {value}",
+                "it": "💎 Mega Chest: {value}",
+                "uk": "💎 Mega Chest: {value}",
+                "pl": "💎 Mega Chest: {value}"
+            },
+
+            "ultra": {
+                "en": "⚡ Ultra Chest: {value}",
+                "ru": "⚡ Ultra Chest: {value}",
+                "ro": "⚡ Ultra Chest: {value}",
+                "uz": "⚡ Ultra Chest: {value}",
+                "kk": "⚡ Ultra Chest: {value}",
+                "tr": "⚡ Ultra Chest: {value}",
+                "es": "⚡ Ultra Chest: {value}",
+                "fr": "⚡ Ultra Chest: {value}",
+                "de": "⚡ Ultra Chest: {value}",
+                "it": "⚡ Ultra Chest: {value}",
+                "uk": "⚡ Ultra Chest: {value}",
+                "pl": "⚡ Ultra Chest: {value}"
+            },
+
+            "total": {
+                "en": "Total: {value} Chests",
+                "ru": "Всего: {value} сундуков",
+                "ro": "Total: {value} cufere",
+                "uz": "Jami: {value} sandıq",
+                "kk": "Барлығы: {value} сандық",
+                "tr": "Toplam: {value} sandık",
+                "es": "Total: {value} cofres",
+                "fr": "Total : {value} coffres",
+                "de": "Gesamt: {value} Truhen",
+                "it": "Totale: {value} forzieri",
+                "uk": "Всього: {value} скринь",
+                "pl": "Łącznie: {value} skrzyń"
+            },
+
+            "daily_available": {
+                "en": "📅 Daily Chest: Available",
+                "ru": "📅 Ежедневный сундук: Доступен",
+                "ro": "📅 Cufăr zilnic: Disponibil",
+                "uz": "📅 Kunlik sandıq: Mavjud",
+                "kk": "📅 Күнделікті сандық: Қолжетімді",
+                "tr": "📅 Günlük Sandık: Hazır",
+                "es": "📅 Cofre diario: Disponible",
+                "fr": "📅 Coffre quotidien : Disponible",
+                "de": "📅 Tägliche Truhe: Verfügbar",
+                "it": "📅 Forziere giornaliero: Disponibile",
+                "uk": "📅 Щоденна скриня: Доступна",
+                "pl": "📅 Dzienna skrzynia: Dostępna"
+            },
+
+            "weekly_available": {
+                "en": "📆 Weekly Mega: Available",
+                "ru": "📆 Еженедельный Mega: Доступен",
+                "ro": "📆 Mega săptămânal: Disponibil",
+                "uz": "📆 Haftalik Mega: Mavjud",
+                "kk": "📆 Апталық Mega: Қолжетімді",
+                "tr": "📆 Haftalık Mega: Hazır",
+                "es": "📆 Mega semanal: Disponible",
+                "fr": "📆 Mega hebdomadaire : Disponible",
+                "de": "📆 Wöchentlicher Mega: Verfügbar",
+                "it": "📆 Mega settimanale: Disponibile",
+                "uk": "📆 Щотижневий Mega: Доступний",
+                "pl": "📆 Tygodniowy Mega: Dostępny"
+            },
+
+            "daily_next": {
+                "en": "📅 Daily Chest: {timestamp}",
+                "ru": "📅 Ежедневный сундук: {timestamp}",
+                "ro": "📅 Cufăr zilnic: {timestamp}",
+                "uz": "📅 Kunlik sandıq: {timestamp}",
+                "kk": "📅 Күнделікті сандық: {timestamp}",
+                "tr": "📅 Günlük Sandık: {timestamp}",
+                "es": "📅 Cofre diario: {timestamp}",
+                "fr": "📅 Coffre quotidien : {timestamp}",
+                "de": "📅 Tägliche Truhe: {timestamp}",
+                "it": "📅 Forziere giornaliero: {timestamp}",
+                "uk": "📅 Щоденна скриня: {timestamp}",
+                "pl": "📅 Dzienna skrzynia: {timestamp}"
+            },
+
+            "weekly_next": {
+                "en": "📆 Weekly Mega: {timestamp}",
+                "ru": "📆 Еженедельный Mega: {timestamp}",
+                "ro": "📆 Mega săptămânal: {timestamp}",
+                "uz": "📆 Haftalik Mega: {timestamp}",
+                "kk": "📆 Апталық Mega: {timestamp}",
+                "tr": "📆 Haftalık Mega: {timestamp}",
+                "es": "📆 Mega semanal: {timestamp}",
+                "fr": "📆 Mega hebdomadaire : {timestamp}",
+                "de": "📆 Wöchentlicher Mega: {timestamp}",
+                "it": "📆 Mega settimanale: {timestamp}",
+                "uk": "📆 Щотижневий Mega: {timestamp}",
+                "pl": "📆 Tygodniowy Mega: {timestamp}"
+            },
+
+            "open_one": {
+                "en": "🔓 Open",
+                "ru": "🔓 Открыть",
+                "ro": "🔓 Deschide",
+                "uz": "🔓 Ochish",
+                "kk": "🔓 Ашу",
+                "tr": "🔓 Aç",
+                "es": "🔓 Abrir",
+                "fr": "🔓 Ouvrir",
+                "de": "🔓 Öffnen",
+                "it": "🔓 Apri",
+                "uk": "🔓 Відкрити",
+                "pl": "🔓 Otwórz"
+            },
+
+            "open_all": {
+                "en": "📦 Open All",
+                "ru": "📦 Открыть все",
+                "ro": "📦 Deschide tot",
+                "uz": "📦 Hammasini ochish",
+                "kk": "📦 Барлығын ашу",
+                "tr": "📦 Hepsini Aç",
+                "es": "📦 Abrir todo",
+                "fr": "📦 Tout ouvrir",
+                "de": "📦 Alle öffnen",
+                "it": "📦 Apri tutto",
+                "uk": "📦 Відкрити все",
+                "pl": "📦 Otwórz wszystko"
+            },
+
+            "back": {
+                "en": "🔙 Back",
+                "ru": "🔙 Назад",
+                "ro": "🔙 Înapoi",
+                "uz": "🔙 Orqaga",
+                "kk": "🔙 Артқа",
+                "tr": "🔙 Geri",
+                "es": "🔙 Atrás",
+                "fr": "🔙 Retour",
+                "de": "🔙 Zurück",
+                "it": "🔙 Indietro",
+                "uk": "🔙 Назад",
+                "pl": "🔙 Wstecz"
+            },
+
+            "info": {
+                "en": "ℹ️ Chest Information",
+                "ru": "ℹ️ Информация о сундуках",
+                "ro": "ℹ️ Informații despre cufere",
+                "uz": "ℹ️ Sandiqlar haqida",
+                "kk": "ℹ️ Сандықтар туралы ақпарат",
+                "tr": "ℹ️ Sandık Bilgileri",
+                "es": "ℹ️ Información de cofres",
+                "fr": "ℹ️ Informations sur les coffres",
+                "de": "ℹ️ Truheninformationen",
+                "it": "ℹ️ Informazioni sui forzieri",
+                "uk": "ℹ️ Інформація про скрині",
+                "pl": "ℹ️ Informacje o skrzyniach"
+            },
+
+            "not_owner": {
+                "en": "❌ These chests don't belong to you.",
+                "ru": "❌ Эти сундуки принадлежат не вам.",
+                "ro": "❌ Aceste cufere nu îți aparțin.",
+                "uz": "❌ Bu sandiqlar sizniki emas.",
+                "kk": "❌ Бұл сандықтар сізге тиесілі емес.",
+                "tr": "❌ Bu sandıklar sana ait değil.",
+                "es": "❌ Estos cofres no te pertenecen.",
+                "fr": "❌ Ces coffres ne vous appartiennent pas.",
+                "de": "❌ Diese Truhen gehören dir nicht.",
+                "it": "❌ Questi forzieri non ti appartengono.",
+                "uk": "❌ Ці скрині не належать вам.",
+                "pl": "❌ Te skrzynie nie należą do ciebie."
+            },
+
+            "expired": {
+                "en": "⏰ This chest menu has expired. Use !chests again.",
+                "ru": "⏰ Срок действия меню истёк. Используйте !chests снова.",
+                "ro": "⏰ Meniul a expirat. Folosește din nou !chests.",
+                "uz": "⏰ Menyu muddati tugadi. !chests ni qayta ishlating.",
+                "kk": "⏰ Мәзірдің мерзімі аяқталды. !chests қайта қолданыңыз.",
+                "tr": "⏰ Sandık menüsünün süresi doldu. !chests kullanın.",
+                "es": "⏰ El menú expiró. Usa !chests de nuevo.",
+                "fr": "⏰ Le menu a expiré. Utilisez !chests.",
+                "de": "⏰ Das Menü ist abgelaufen. Nutze !chests erneut.",
+                "it": "⏰ Il menu è scaduto. Usa di nuovo !chests.",
+                "uk": "⏰ Термін дії меню минув. Використайте !chests.",
+                "pl": "⏰ Menu wygasło. Użyj ponownie !chests."
+            },
+
+            "no_chests": {
+                "en": "❌ You don't have any of these chests.",
+                "ru": "❌ У вас нет таких сундуков.",
+                "ro": "❌ Nu ai astfel de cufere.",
+                "uz": "❌ Sizda bunday sandiq yo‘q.",
+                "kk": "❌ Сізде мұндай сандық жоқ.",
+                "tr": "❌ Bu sandıktan sende yok.",
+                "es": "❌ No tienes estos cofres.",
+                "fr": "❌ Vous n'avez pas ce coffre.",
+                "de": "❌ Du hast keine solchen Truhen.",
+                "it": "❌ Non hai questi forzieri.",
+                "uk": "❌ У вас немає таких скринь.",
+                "pl": "❌ Nie masz takich skrzyń."
+            },
+
+            "phoenix_block": {
+                "en": "🔥 You cannot open or claim chests because you already have the Phoenix role.",
+                "ru": "🔥 Вы не можете открывать или получать сундуки, потому что у вас уже есть роль Phoenix.",
+                "ro": "🔥 Nu poți deschide sau revendica cufere deoarece ai deja rolul Phoenix.",
+                "uz": "🔥 Siz Phoenix roliga ega bo‘lganingiz uchun sandiqlarni ocholmaysiz yoki ololmaysiz.",
+                "kk": "🔥 Сізде Phoenix рөлі бар, сондықтан сандықтарды аша немесе ала алмайсыз.",
+                "tr": "🔥 Phoenix rolüne sahip olduğun için sandık açamaz veya alamazsın.",
+                "es": "🔥 No puedes abrir ni reclamar cofres porque tienes el rol Phoenix.",
+                "fr": "🔥 Vous ne pouvez pas ouvrir ou récupérer des coffres car vous avez le rôle Phoenix.",
+                "de": "🔥 Du kannst keine Truhen öffnen oder beanspruchen, da du die Phoenix-Rolle hast.",
+                "it": "🔥 Non puoi aprire o riscattare forzieri perché possiedi il ruolo Phoenix.",
+                "uk": "🔥 Ви не можете відкривати або отримувати скрині, бо маєте роль Phoenix.",
+                "pl": "🔥 Nie możesz otwierać ani odbierać skrzyń, ponieważ masz rolę Phoenix."
+            },
+
+            "daily_unavailable": {
+                "en": "❌ Daily Chest is not available yet.\nNext: {timestamp}",
+                "ru": "❌ Ежедневный сундук пока недоступен.\nСледующий: {timestamp}",
+                "ro": "❌ Cufărul zilnic nu este încă disponibil.\nUrmătorul: {timestamp}",
+                "uz": "❌ Kunlik sandıq hali mavjud emas.\nKeyingisi: {timestamp}",
+                "kk": "❌ Күнделікті сандық әлі қолжетімсіз.\nКелесі: {timestamp}",
+                "tr": "❌ Günlük Sandık henüz hazır değil.\nSonraki: {timestamp}",
+                "es": "❌ El cofre diario aún no está disponible.\nSiguiente: {timestamp}",
+                "fr": "❌ Le coffre quotidien n'est pas encore disponible.\nSuivant : {timestamp}",
+                "de": "❌ Die tägliche Truhe ist noch nicht verfügbar.\nNächste: {timestamp}",
+                "it": "❌ Il forziere giornaliero non è ancora disponibile.\nProssimo: {timestamp}",
+                "uk": "❌ Щоденна скриня ще недоступна.\nНаступна: {timestamp}",
+                "pl": "❌ Dzienna skrzynia nie jest jeszcze dostępna.\nNastępna: {timestamp}"
+            },
+
+            "weekly_unavailable": {
+                "en": "❌ Weekly Mega is not available yet.\nNext: {timestamp}",
+                "ru": "❌ Еженедельный Mega пока недоступен.\nСледующий: {timestamp}",
+                "ro": "❌ Mega săptămânal nu este încă disponibil.\nUrmătorul: {timestamp}",
+                "uz": "❌ Haftalik Mega hali mavjud emas.\nKeyingisi: {timestamp}",
+                "kk": "❌ Апталық Mega әлі қолжетімсіз.\nКелесі: {timestamp}",
+                "tr": "❌ Haftalık Mega henüz hazır değil.\nSonraki: {timestamp}",
+                "es": "❌ El Mega semanal aún no está disponible.\nSiguiente: {timestamp}",
+                "fr": "❌ Le Mega hebdomadaire n'est pas encore disponible.\nSuivant : {timestamp}",
+                "de": "❌ Der wöchentliche Mega ist noch nicht verfügbar.\nNächster: {timestamp}",
+                "it": "❌ Il Mega settimanale non è ancora disponibile.\nProssimo: {timestamp}",
+                "uk": "❌ Щотижневий Mega ще недоступний.\nНаступний: {timestamp}",
+                "pl": "❌ Tygodniowy Mega nie jest jeszcze dostępny.\nNastępny: {timestamp}"
+            },
+
+            "reward": {
+                "en": "🏆 Reward:",
+                "ru": "🏆 Награда:",
+                "ro": "🏆 Recompensă:",
+                "uz": "🏆 Mukofot:",
+                "kk": "🏆 Сыйлық:",
+                "tr": "🏆 Ödül:",
+                "es": "🏆 Recompensa:",
+                "fr": "🏆 Récompense :",
+                "de": "🏆 Belohnung:",
+                "it": "🏆 Ricompensa:",
+                "uk": "🏆 Нагорода:",
+                "pl": "🏆 Nagroda:"
+            },
+
+            "role_not_given": {
+                "en": "⬇️ Your current role is higher or equal. The reward was not given.",
+                "ru": "⬇️ Ваша текущая роль выше или такая же. Награда не выдана.",
+                "ro": "⬇️ Rolul tău actual este mai mare sau egal. Recompensa nu a fost oferită.",
+                "uz": "⬇️ Hozirgi rolingiz yuqori yoki teng. Mukofot berilmadi.",
+                "kk": "⬇️ Қазіргі рөліңіз жоғары немесе тең. Сыйлық берілмеді.",
+                "tr": "⬇️ Mevcut rolün daha yüksek veya eşit. Ödül verilmedi.",
+                "es": "⬇️ Tu rol actual es superior o igual. No se otorgó la recompensa.",
+                "fr": "⬇️ Votre rôle actuel est supérieur ou égal. La récompense n'a pas été donnée.",
+                "de": "⬇️ Deine aktuelle Rolle ist höher oder gleich. Die Belohnung wurde nicht vergeben.",
+                "it": "⬇️ Il tuo ruolo attuale è superiore o uguale. La ricompensa non è stata assegnata.",
+                "uk": "⬇️ Ваша поточна роль вища або така сама. Нагороду не видано.",
+                "pl": "⬇️ Twoja obecna rola jest wyższa lub równa. Nagroda nie została przyznana."
+            },
+
+            "bonus": {
+                "en": "💎 Bonus:",
+                "ru": "💎 Бонус:",
+                "ro": "💎 Bonus:",
+                "uz": "💎 Bonus:",
+                "kk": "💎 Бонус:",
+                "tr": "💎 Bonus:",
+                "es": "💎 Bonificación:",
+                "fr": "💎 Bonus :",
+                "de": "💎 Bonus:",
+                "it": "💎 Bonus:",
+                "uk": "💎 Бонус:",
+                "pl": "💎 Bonus:"
+            },
+
+            "mega_bonus": {
+                "en": "+1 Mega Chest",
+                "ru": "+1 Mega Chest",
+                "ro": "+1 Mega Chest",
+                "uz": "+1 Mega Chest",
+                "kk": "+1 Mega Chest",
+                "tr": "+1 Mega Chest",
+                "es": "+1 Mega Chest",
+                "fr": "+1 Mega Chest",
+                "de": "+1 Mega Chest",
+                "it": "+1 Mega Chest",
+                "uk": "+1 Mega Chest",
+                "pl": "+1 Mega Chest"
+            },
+
+            "ultra_bonus": {
+                "en": "+1 Ultra Chest",
+                "ru": "+1 Ultra Chest",
+                "ro": "+1 Ultra Chest",
+                "uz": "+1 Ultra Chest",
+                "kk": "+1 Ultra Chest",
+                "tr": "+1 Ultra Chest",
+                "es": "+1 Ultra Chest",
+                "fr": "+1 Ultra Chest",
+                "de": "+1 Ultra Chest",
+                "it": "+1 Ultra Chest",
+                "uk": "+1 Ultra Chest",
+                "pl": "+1 Ultra Chest"
+            },
+
+            "remaining_chest": {
+                "en": "📦 Chest remaining: {value}",
+                "ru": "📦 Осталось сундуков: {value}",
+                "ro": "📦 Cufere rămase: {value}",
+                "uz": "📦 Qolgan sandiqlar: {value}",
+                "kk": "📦 Қалған сандықтар: {value}",
+                "tr": "📦 Kalan sandık: {value}",
+                "es": "📦 Cofres restantes: {value}",
+                "fr": "📦 Coffres restants : {value}",
+                "de": "📦 Verbleibende Truhen: {value}",
+                "it": "📦 Forzieri rimasti: {value}",
+                "uk": "📦 Залишилось скринь: {value}",
+                "pl": "📦 Pozostałe skrzynie: {value}"
+            },
+
+            "remaining_mega": {
+                "en": "💎 Mega Chest remaining: {value}",
+                "ru": "💎 Осталось Mega Chest: {value}",
+                "ro": "💎 Mega Chest rămase: {value}",
+                "uz": "💎 Qolgan Mega Chest: {value}",
+                "kk": "💎 Қалған Mega Chest: {value}",
+                "tr": "💎 Kalan Mega Chest: {value}",
+                "es": "💎 Mega Chest restantes: {value}",
+                "fr": "💎 Mega Chest restants : {value}",
+                "de": "💎 Verbleibende Mega Chest: {value}",
+                "it": "💎 Mega Chest rimasti: {value}",
+                "uk": "💎 Залишилось Mega Chest: {value}",
+                "pl": "💎 Pozostałe Mega Chest: {value}"
+            },
+
+            "remaining_ultra": {
+                "en": "⚡ Ultra Chest remaining: {value}",
+                "ru": "⚡ Осталось Ultra Chest: {value}",
+                "ro": "⚡ Ultra Chest rămase: {value}",
+                "uz": "⚡ Qolgan Ultra Chest: {value}",
+                "kk": "⚡ Қалған Ultra Chest: {value}",
+                "tr": "⚡ Kalan Ultra Chest: {value}",
+                "es": "⚡ Ultra Chest restantes: {value}",
+                "fr": "⚡ Ultra Chest restants : {value}",
+                "de": "⚡ Verbleibende Ultra Chest: {value}",
+                "it": "⚡ Ultra Chest rimasti: {value}",
+                "uk": "⚡ Залишилось Ultra Chest: {value}",
+                "pl": "⚡ Pozostałe Ultra Chest: {value}"
+            },
+
+            "opened_all": {
+                "en": "🎁 Opened All",
+                "ru": "🎁 Открыты все",
+                "ro": "🎁 Toate deschise",
+                "uz": "🎁 Hammasi ochildi",
+                "kk": "🎁 Барлығы ашылды",
+                "tr": "🎁 Hepsi Açıldı",
+                "es": "🎁 Todos abiertos",
+                "fr": "🎁 Tous ouverts",
+                "de": "🎁 Alle geöffnet",
+                "it": "🎁 Tutti aperti",
+                "uk": "🎁 Усі відкрито",
+                "pl": "🎁 Wszystkie otwarte"
+            },
+
+            "chest_opened": {
+                "en": "🎁 Chest Opened!",
+                "ru": "🎁 Сундук открыт!",
+                "ro": "🎁 Cufăr deschis!",
+                "uz": "🎁 Sandıq ochildi!",
+                "kk": "🎁 Сандық ашылды!",
+                "tr": "🎁 Sandık Açıldı!",
+                "es": "🎁 ¡Cofre abierto!",
+                "fr": "🎁 Coffre ouvert !",
+                "de": "🎁 Truhe geöffnet!",
+                "it": "🎁 Forziere aperto!",
+                "uk": "🎁 Скриню відкрито!",
+                "pl": "🎁 Skrzynia otwarta!"
+            },
+
+            "mega_opened": {
+                "en": "💎 Mega Chest Opened!",
+                "ru": "💎 Mega Chest открыт!",
+                "ro": "💎 Mega Chest deschis!",
+                "uz": "💎 Mega Chest ochildi!",
+                "kk": "💎 Mega Chest ашылды!",
+                "tr": "💎 Mega Chest Açıldı!",
+                "es": "💎 ¡Mega Chest abierto!",
+                "fr": "💎 Mega Chest ouvert !",
+                "de": "💎 Mega Chest geöffnet!",
+                "it": "💎 Mega Chest aperto!",
+                "uk": "💎 Mega Chest відкрито!",
+                "pl": "💎 Mega Chest otwarty!"
+            },
+
+            "ultra_opened": {
+                "en": "⚡ Ultra Chest Opened!",
+                "ru": "⚡ Ultra Chest открыт!",
+                "ro": "⚡ Ultra Chest deschis!",
+                "uz": "⚡ Ultra Chest ochildi!",
+                "kk": "⚡ Ultra Chest ашылды!",
+                "tr": "⚡ Ultra Chest Açıldı!",
+                "es": "⚡ ¡Ultra Chest abierto!",
+                "fr": "⚡ Ultra Chest ouvert !",
+                "de": "⚡ Ultra Chest geöffnet!",
+                "it": "⚡ Ultra Chest aperto!",
+                "uk": "⚡ Ultra Chest відкрито!",
+                "pl": "⚡ Ultra Chest otwarty!"
+            },
+
+            "daily_claimed": {
+                "en": "📅 Daily Chest Claimed!",
+                "ru": "📅 Ежедневный сундук получен!",
+                "ro": "📅 Cufărul zilnic primit!",
+                "uz": "📅 Kunlik sandıq olindi!",
+                "kk": "📅 Күнделікті сандық алынды!",
+                "tr": "📅 Günlük Sandık Alındı!",
+                "es": "📅 ¡Cofre diario reclamado!",
+                "fr": "📅 Coffre quotidien récupéré !",
+                "de": "📅 Tägliche Truhe erhalten!",
+                "it": "📅 Forziere giornaliero ottenuto!",
+                "uk": "📅 Щоденну скриню отримано!",
+                "pl": "📅 Dzienna skrzynia odebrana!"
+            },
+
+            "weekly_claimed": {
+                "en": "📆 Weekly Mega Claimed!",
+                "ru": "📆 Еженедельный Mega получен!",
+                "ro": "📆 Mega săptămânal primit!",
+                "uz": "📆 Haftalik Mega olindi!",
+                "kk": "📆 Апталық Mega алынды!",
+                "tr": "📆 Haftalık Mega Alındı!",
+                "es": "📆 ¡Mega semanal reclamado!",
+                "fr": "📆 Mega hebdomadaire récupéré !",
+                "de": "📆 Wöchentlicher Mega erhalten!",
+                "it": "📆 Mega settimanale ottenuto!",
+                "uk": "📆 Щотижневий Mega отримано!",
+                "pl": "📆 Tygodniowy Mega odebrany!"
+            },
+
+            "normal_description": {
+                "en": "Open one Chest or open all Chests.",
+                "ru": "Откройте один сундук или все сундуки.",
+                "ro": "Deschide un cufăr sau toate cuferele.",
+                "uz": "Bitta yoki barcha sandiqlarni oching.",
+                "kk": "Бір немесе барлық сандықтарды ашыңыз.",
+                "tr": "Bir sandık veya tüm sandıkları aç.",
+                "es": "Abre un cofre o todos los cofres.",
+                "fr": "Ouvrez un coffre ou tous les coffres.",
+                "de": "Öffne eine oder alle Truhen.",
+                "it": "Apri un forziere o tutti i forzieri.",
+                "uk": "Відкрийте одну або всі скрині.",
+                "pl": "Otwórz jedną lub wszystkie skrzynie."
+            },
+
+            "mega_description": {
+                "en": "Gives 1–10 normal Chests. 5% chance: 20.",
+                "ru": "Даёт 1–10 обычных сундуков. Шанс 5%: 20.",
+                "ro": "Oferă 1–10 cufere normale. Șansă 5%: 20.",
+                "uz": "1–10 oddiy sandıq beradi. 5% imkoniyat: 20.",
+                "kk": "1–10 кәдімгі сандық береді. 5% мүмкіндік: 20.",
+                "tr": "1–10 normal Sandık verir. %5 şans: 20.",
+                "es": "Da 1–10 cofres normales. 5% de probabilidad: 20.",
+                "fr": "Donne 1–10 coffres normaux. 5 % : 20.",
+                "de": "Gibt 1–10 normale Truhen. 5 % Chance: 20.",
+                "it": "Dà 1–10 forzieri normali. 5% di possibilità: 20.",
+                "uk": "Дає 1–10 звичайних скринь. Шанс 5%: 20.",
+                "pl": "Daje 1–10 zwykłych skrzyń. 5% szans: 20."
+            },
+
+            "ultra_description": {
+                "en": "Gives 10–20 normal Chests. 5% chance: 30.",
+                "ru": "Даёт 10–20 обычных сундуков. Шанс 5%: 30.",
+                "ro": "Oferă 10–20 cufere normale. Șansă 5%: 30.",
+                "uz": "10–20 oddiy sandıq beradi. 5% imkoniyat: 30.",
+                "kk": "10–20 кәдімгі сандық береді. 5% мүмкіндік: 30.",
+                "tr": "10–20 normal Sandık verir. %5 şans: 30.",
+                "es": "Da 10–20 cofres normales. 5% de probabilidad: 30.",
+                "fr": "Donne 10–20 coffres normaux. 5 % : 30.",
+                "de": "Gibt 10–20 normale Truhen. 5 % Chance: 30.",
+                "it": "Dà 10–20 forzieri normali. 5% di possibilità: 30.",
+                "uk": "Дає 10–20 звичайних скринь. Шанс 5%: 30.",
+                "pl": "Daje 10–20 zwykłych skrzyń. 5% szans: 30."
+            },
+
+            "normal_amount": {
+                "en": "🎁 Chest × {amount}",
+                "ru": "🎁 Сундук × {amount}",
+                "ro": "🎁 Cufăr × {amount}",
+                "uz": "🎁 Sandıq × {amount}",
+                "kk": "🎁 Сандық × {amount}",
+                "tr": "🎁 Sandık × {amount}",
+                "es": "🎁 Cofre × {amount}",
+                "fr": "🎁 Coffre × {amount}",
+                "de": "🎁 Truhe × {amount}",
+                "it": "🎁 Forziere × {amount}",
+                "uk": "🎁 Скриня × {amount}",
+                "pl": "🎁 Skrzynia × {amount}"
+            },
+
+            "lucky": {
+                "en": "⭐ Lucky reward: {amount} × {reward}",
+                "ru": "⭐ Удачная награда: {amount} × {reward}",
+                "ro": "⭐ Recompensă norocoasă: {amount} × {reward}",
+                "uz": "⭐ Omadli mukofot: {amount} × {reward}",
+                "kk": "⭐ Сәтті сыйлық: {amount} × {reward}",
+                "tr": "⭐ Şanslı ödül: {amount} × {reward}",
+                "es": "⭐ Recompensa afortunada: {amount} × {reward}",
+                "fr": "⭐ Récompense chanceuse : {amount} × {reward}",
+                "de": "⭐ Glücksbelohnung: {amount} × {reward}",
+                "it": "⭐ Ricompensa fortunata: {amount} × {reward}",
+                "uk": "⭐ Щаслива нагорода: {amount} × {reward}",
+                "pl": "⭐ Szczęśliwa nagroda: {amount} × {reward}"
+            },
+
+            "normal_word": {
+                "en": "Chest",
+                "ru": "Сундук",
+                "ro": "Cufăr",
+                "uz": "Sandıq",
+                "kk": "Сандық",
+                "tr": "Sandık",
+                "es": "Cofre",
+                "fr": "Coffre",
+                "de": "Truhe",
+                "it": "Forziere",
+                "uk": "Скриня",
+                "pl": "Skrzynia"
+            },
+
+            "error": {
+                "en": "❌ Something went wrong.",
+                "ru": "❌ Произошла ошибка.",
+                "ro": "❌ Ceva a mers prost.",
+                "uz": "❌ Xatolik yuz berdi.",
+                "kk": "❌ Қате орын алды.",
+                "tr": "❌ Bir şeyler ters gitti.",
+                "es": "❌ Algo salió mal.",
+                "fr": "❌ Une erreur est survenue.",
+                "de": "❌ Etwas ist schiefgelaufen.",
+                "it": "❌ Qualcosa è andato storto.",
+                "uk": "❌ Щось пішло не так.",
+                "pl": "❌ Coś poszło nie tak."
+            },
+
+            "info_text": {
+                "en": (
+                    "**🎁 NORMAL CHEST**\n"
+                    "⚪ Common — 40%\n"
+                    "🟢 Uncommon — 25%\n"
+                    "🔵 Rare — 17%\n"
+                    "🟣 Epic — 10%\n"
+                    "🟠 Heroic — 5%\n"
+                    "🔴 Mythic — 2.2%\n"
+                    "🟡 Legendary — 0.6%\n"
+                    "🌌 Cosmic — 0.15%\n"
+                    "🌠 Galactic — 0.04%\n"
+                    "💎 Ultra — 0.01%\n"
+                    "🔥 Phoenix — 0.001% (2/2 max)\n"
+                    "5% → +1 Mega Chest\n"
+                    "1% → +1 Ultra Chest\n\n"
+                    "**💎 MEGA CHEST**\n"
+                    "Gives 1–10 normal Chests.\n"
+                    "5% → 20 normal Chests.\n\n"
+                    "**⚡ ULTRA CHEST**\n"
+                    "Gives 10–20 normal Chests.\n"
+                    "5% → 30 normal Chests.\n\n"
+                    "**📅 DAILY**\n"
+                    "Available every 24 hours.\n"
+                    "Role reward + 5% Mega + 1% Ultra.\n\n"
+                    "**📆 WEEKLY**\n"
+                    "Available every 7 days.\n"
+                    "1–10 normal Chests, 5% → 20.\n\n"
+                    "**🔥 PHOENIX**\n"
+                    "Highest role. Maximum 2 users.\n"
+                    "Phoenix holders cannot open or claim chests.\n"
+                    "Ultra holders can still open and claim chests.\n\n"
+                    "**🏆 ROLE SYSTEM**\n"
+                    "A higher role replaces a lower role.\n"
+                    "Equal or lower rewards are not given.\n"
+                    "Open All rolls rewards independently for every chest.\n\n"
+                    "**⏰ MENU**\n"
+                    "The menu is active for 5 minutes.\n"
+                    "Use !chests to open a new menu.\n"
+                    "Use !chest info for this information."
+                ),
+
+                "ru": (
+                    "**🎁 ОБЫЧНЫЙ СУНДУК**\n"
+                    "⚪ Обычная — 40%\n"
+                    "🟢 Необычная — 25%\n"
+                    "🔵 Редкая — 17%\n"
+                    "🟣 Эпическая — 10%\n"
+                    "🟠 Героическая — 5%\n"
+                    "🔴 Мифическая — 2.2%\n"
+                    "🟡 Легендарная — 0.6%\n"
+                    "🌌 Космическая — 0.15%\n"
+                    "🌠 Галактическая — 0.04%\n"
+                    "💎 Ultra — 0.01%\n"
+                    "🔥 Phoenix — 0.001% (максимум 2/2)\n"
+                    "5% → +1 Mega Chest\n"
+                    "1% → +1 Ultra Chest\n\n"
+                    "**💎 MEGA CHEST**\n"
+                    "Даёт 1–10 обычных сундуков.\n"
+                    "5% → 20 обычных сундуков.\n\n"
+                    "**⚡ ULTRA CHEST**\n"
+                    "Даёт 10–20 обычных сундуков.\n"
+                    "5% → 30 обычных сундуков.\n\n"
+                    "**📅 DAILY**\n"
+                    "Доступен каждые 24 часа.\n"
+                    "Награда роли + 5% Mega + 1% Ultra.\n\n"
+                    "**📆 WEEKLY**\n"
+                    "Доступен каждые 7 дней.\n"
+                    "1–10 обычных сундуков, 5% → 20.\n\n"
+                    "**🔥 PHOENIX**\n"
+                    "Самая высокая роль. Максимум 2 пользователя.\n"
+                    "Владельцы Phoenix не могут открывать или получать сундуки.\n"
+                    "Владельцы Ultra всё ещё могут открывать и получать сундуки.\n\n"
+                    "**🏆 СИСТЕМА РОЛЕЙ**\n"
+                    "Более высокая роль заменяет более низкую.\n"
+                    "Равная или более низкая награда не выдаётся.\n"
+                    "При «Открыть все» каждый сундук получает отдельный ролл.\n\n"
+                    "**⏰ МЕНЮ**\n"
+                    "Меню действует 5 минут.\n"
+                    "Используйте !chests для нового меню.\n"
+                    "Используйте !chest info для этой информации."
+                ),
+                "ro": (
+                    "**🎁 CUFĂR NORMAL**\n⚪ Comună — 40%\n🟢 Neobișnuită — 25%\n🔵 Rară — 17%\n🟣 Epică — 10%\n🟠 Eroică — 5%\n🔴 Mitică — 2,2%\n🟡 Legendară — 0,6%\n🌌 Cosmică — 0,15%\n🌠 Galactică — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (maximum 2 utilizatori)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nOferă 1–10 cufere normale; 5% → 20.\n\n**⚡ ULTRA CHEST**\nOferă 10–20 cufere normale; 5% → 30.\n\n**📅 DAILY**\nDisponibil la fiecare 24 de ore. Recompensă de rol + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nDisponibil la fiecare 7 zile. 1–10 cufere normale; 5% → 20.\n\n**🔥 PHOENIX**\nCel mai înalt rol; maximum 2 utilizatori. Deținătorii Phoenix nu pot deschide sau revendica cufere. Deținătorii Ultra pot.\n\n**🏆 SISTEMUL DE ROLURI**\nUn rol superior îl înlocuiește pe cel inferior. Recompensele egale sau inferioare nu se acordă. Fiecare cufăr din „Deschide tot” are o extragere separată.\n\n**⏰ MENIU**\nMeniul este activ 5 minute. Folosește !chests pentru un meniu nou și !chest info pentru aceste informații."
+                ),
+                "uz": (
+                    "**🎁 ODDIY SANDIQ**\n⚪ Oddiy — 40%\n🟢 Noodatiy — 25%\n🔵 Noyob — 17%\n🟣 Epik — 10%\n🟠 Qahramonona — 5%\n🔴 Afsonaviy — 2,2%\n🟡 Legendary — 0,6%\n🌌 Kosmik — 0,15%\n🌠 Galaktik — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (ko‘pi bilan 2 foydalanuvchi)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\n1–10 ta oddiy sandiq beradi; 5% → 20.\n\n**⚡ ULTRA CHEST**\n10–20 ta oddiy sandiq beradi; 5% → 30.\n\n**📅 DAILY**\nHar 24 soatda mavjud. Rol mukofoti + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nHar 7 kunda mavjud. 1–10 ta oddiy sandiq; 5% → 20.\n\n**🔥 PHOENIX**\nEng yuqori rol, ko‘pi bilan 2 foydalanuvchi. Phoenix egalari sandiq ocholmaydi yoki ololmaydi. Ultra egalari ochishi mumkin.\n\n**🏆 ROL TIZIMI**\nYuqori rol past rolni almashtiradi. Teng yoki past mukofot berilmaydi. Hammasini ochishda har bir sandiq alohida hisoblanadi.\n\n**⏰ MENYU**\nMenyu 5 daqiqa ishlaydi. Yangi menyu uchun !chests, ma’lumot uchun !chest info yozing."
+                ),
+                "kk": (
+                    "**🎁 ҚАЛЫПТЫ САНДЫҚ**\n⚪ Кәдімгі — 40%\n🟢 Ерекше — 25%\n🔵 Сирек — 17%\n🟣 Эпикалық — 10%\n🟠 Батырлық — 5%\n🔴 Мифтік — 2,2%\n🟡 Аңыздық — 0,6%\n🌌 Ғарыштық — 0,15%\n🌠 Галактикалық — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (ең көбі 2 пайдаланушы)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\n1–10 қалыпты сандық береді; 5% → 20.\n\n**⚡ ULTRA CHEST**\n10–20 қалыпты сандық береді; 5% → 30.\n\n**📅 DAILY**\nӘр 24 сағат сайын қолжетімді. Рөл сыйлығы + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nӘр 7 күн сайын қолжетімді. 1–10 сандық; 5% → 20.\n\n**🔥 PHOENIX**\nЕң жоғары рөл, ең көбі 2 пайдаланушы. Phoenix иелері сандық аша немесе ала алмайды. Ultra иелері аша алады.\n\n**🏆 РӨЛ ЖҮЙЕСІ**\nЖоғары рөл төменгі рөлді алмастырады. Тең немесе төмен сыйлық берілмейді. Барлығын ашқанда әр сандық жеке есептеледі.\n\n**⏰ МӘЗІР**\nМәзір 5 минут жұмыс істейді. Жаңа мәзір үшін !chests, ақпарат үшін !chest info жазыңыз."
+                ),
+                "tr": (
+                    "**🎁 NORMAL SANDIK**\n⚪ Yaygın — 40%\n🟢 Sıradışı — 25%\n🔵 Nadir — 17%\n🟣 Epik — 10%\n🟠 Kahramanlık — 5%\n🔴 Efsanevi — 2,2%\n🟡 Legendary — 0,6%\n🌌 Kozmik — 0,15%\n🌠 Galaktik — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (en fazla 2 kullanıcı)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\n1–10 normal sandık verir; %5 → 20.\n\n**⚡ ULTRA CHEST**\n10–20 normal sandık verir; %5 → 30.\n\n**📅 DAILY**\nHer 24 saatte kullanılabilir. Rol ödülü + %5 Mega + %1 Ultra.\n\n**📆 WEEKLY**\nHer 7 günde kullanılabilir. 1–10 normal sandık; %5 → 20.\n\n**🔥 PHOENIX**\nEn yüksek rol, en fazla 2 kullanıcı. Phoenix sahipleri sandık açamaz veya talep edemez. Ultra sahipleri açabilir.\n\n**🏆 ROL SİSTEMİ**\nYüksek rol düşük rolün yerine geçer. Eşit veya daha düşük ödül verilmez. Tümünü açarken her sandık ayrı hesaplanır.\n\n**⏰ MENÜ**\nMenü 5 dakika etkin kalır. Yeni menü için !chests, bilgi için !chest info yaz."
+                ),
+                "es": (
+                    "**🎁 COFRE NORMAL**\n⚪ Común — 40%\n🟢 Poco común — 25%\n🔵 Raro — 17%\n🟣 Épico — 10%\n🟠 Heroico — 5%\n🔴 Mítico — 2,2%\n🟡 Legendario — 0,6%\n🌌 Cósmico — 0,15%\n🌠 Galáctico — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (máximo 2 usuarios)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nDa 1–10 cofres normales; 5% → 20.\n\n**⚡ ULTRA CHEST**\nDa 10–20 cofres normales; 5% → 30.\n\n**📅 DAILY**\nDisponible cada 24 horas. Recompensa de rol + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nDisponible cada 7 días. 1–10 cofres normales; 5% → 20.\n\n**🔥 PHOENIX**\nEl rol más alto; máximo 2 usuarios. Los usuarios Phoenix no pueden abrir ni reclamar cofres. Los usuarios Ultra sí pueden.\n\n**🏆 SISTEMA DE ROLES**\nUn rol superior reemplaza uno inferior. No se dan recompensas iguales o inferiores. Abrir todos calcula cada cofre por separado.\n\n**⏰ MENÚ**\nEl menú dura 5 minutos. Usa !chests para abrir uno nuevo y !chest info para esta información."
+                ),
+                "fr": (
+                    "**🎁 COFFRE NORMAL**\n⚪ Commun — 40%\n🟢 Peu commun — 25%\n🔵 Rare — 17%\n🟣 Épique — 10%\n🟠 Héroïque — 5%\n🔴 Mythique — 2,2%\n🟡 Légendaire — 0,6%\n🌌 Cosmique — 0,15%\n🌠 Galactique — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (2 utilisateurs maximum)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nDonne 1 à 10 coffres normaux ; 5% → 20.\n\n**⚡ ULTRA CHEST**\nDonne 10 à 20 coffres normaux ; 5% → 30.\n\n**📅 DAILY**\nDisponible toutes les 24 heures. Récompense de rôle + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nDisponible tous les 7 jours. 1 à 10 coffres normaux ; 5% → 20.\n\n**🔥 PHOENIX**\nRôle le plus élevé, 2 utilisateurs maximum. Les détenteurs Phoenix ne peuvent pas ouvrir ou réclamer de coffres. Les détenteurs Ultra le peuvent.\n\n**🏆 SYSTÈME DE RÔLES**\nUn rôle supérieur remplace un rôle inférieur. Les récompenses égales ou inférieures ne sont pas accordées. Chaque coffre est calculé séparément avec « Tout ouvrir ».\n\n**⏰ MENU**\nLe menu dure 5 minutes. Utilisez !chests pour en ouvrir un nouveau et !chest info pour ces informations."
+                ),
+                "de": (
+                    "**🎁 NORMALE TRUHE**\n⚪ Gewöhnlich — 40%\n🟢 Ungewöhnlich — 25%\n🔵 Selten — 17%\n🟣 Episch — 10%\n🟠 Heroisch — 5%\n🔴 Mythisch — 2,2%\n🟡 Legendär — 0,6%\n🌌 Kosmisch — 0,15%\n🌠 Galaktisch — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (maximal 2 Nutzer)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nGibt 1–10 normale Truhen; 5% → 20.\n\n**⚡ ULTRA CHEST**\nGibt 10–20 normale Truhen; 5% → 30.\n\n**📅 DAILY**\nAlle 24 Stunden verfügbar. Rollenbelohnung + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nAlle 7 Tage verfügbar. 1–10 normale Truhen; 5% → 20.\n\n**🔥 PHOENIX**\nHöchste Rolle, maximal 2 Nutzer. Phoenix-Inhaber können keine Truhen öffnen oder beanspruchen. Ultra-Inhaber können es.\n\n**🏆 ROLLENSYSTEM**\nEine höhere Rolle ersetzt eine niedrigere. Gleiche oder niedrigere Belohnungen werden nicht vergeben. Beim Öffnen aller Truhen wird jede einzeln berechnet.\n\n**⏰ MENÜ**\nDas Menü ist 5 Minuten aktiv. Nutze !chests für ein neues Menü und !chest info für diese Informationen."
+                ),
+                "it": (
+                    "**🎁 FORZIERE NORMALE**\n⚪ Comune — 40%\n🟢 Non comune — 25%\n🔵 Raro — 17%\n🟣 Epico — 10%\n🟠 Eroico — 5%\n🔴 Mitico — 2,2%\n🟡 Leggendario — 0,6%\n🌌 Cosmico — 0,15%\n🌠 Galattico — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (massimo 2 utenti)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nDà 1–10 forzieri normali; 5% → 20.\n\n**⚡ ULTRA CHEST**\nDà 10–20 forzieri normali; 5% → 30.\n\n**📅 DAILY**\nDisponibile ogni 24 ore. Ricompensa ruolo + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nDisponibile ogni 7 giorni. 1–10 forzieri normali; 5% → 20.\n\n**🔥 PHOENIX**\nRuolo più alto, massimo 2 utenti. Chi ha Phoenix non può aprire o reclamare forzieri. Chi ha Ultra può farlo.\n\n**🏆 SISTEMA DEI RUOLI**\nUn ruolo più alto sostituisce uno più basso. Le ricompense uguali o inferiori non vengono assegnate. Aprendo tutto, ogni forziere viene calcolato separatamente.\n\n**⏰ MENU**\nIl menu dura 5 minuti. Usa !chests per un nuovo menu e !chest info per queste informazioni."
+                ),
+                "uk": (
+                    "**🎁 ЗВИЧАЙНА СКРИНЯ**\n⚪ Звичайна — 40%\n🟢 Незвичайна — 25%\n🔵 Рідкісна — 17%\n🟣 Епічна — 10%\n🟠 Героїчна — 5%\n🔴 Міфічна — 2,2%\n🟡 Легендарна — 0,6%\n🌌 Космічна — 0,15%\n🌠 Галактична — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (максимум 2 користувачі)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nДає 1–10 звичайних скринь; 5% → 20.\n\n**⚡ ULTRA CHEST**\nДає 10–20 звичайних скринь; 5% → 30.\n\n**📅 DAILY**\nДоступна кожні 24 години. Нагорода ролі + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nДоступна кожні 7 днів. 1–10 звичайних скринь; 5% → 20.\n\n**🔥 PHOENIX**\nНайвища роль, максимум 2 користувачі. Власники Phoenix не можуть відкривати чи отримувати скрині. Власники Ultra можуть.\n\n**🏆 СИСТЕМА РОЛЕЙ**\nВища роль замінює нижчу. Однакові або нижчі нагороди не видаються. Під час відкриття всіх кожна скриня обчислюється окремо.\n\n**⏰ МЕНЮ**\nМеню діє 5 хвилин. Введіть !chests для нового меню та !chest info для цієї інформації."
+                ),
+                "pl": (
+                    "**🎁 ZWYKŁA SKRZYNIA**\n⚪ Zwykła — 40%\n🟢 Niezwykła — 25%\n🔵 Rzadka — 17%\n🟣 Epicka — 10%\n🟠 Heroiczna — 5%\n🔴 Mityczna — 2,2%\n🟡 Legendarna — 0,6%\n🌌 Kosmiczna — 0,15%\n🌠 Galaktyczna — 0,04%\n💎 Ultra — 0,01%\n🔥 Phoenix — 0,001% (maksymalnie 2 użytkowników)\n5% → +1 Mega Chest\n1% → +1 Ultra Chest\n\n**💎 MEGA CHEST**\nDaje 1–10 zwykłych skrzyń; 5% → 20.\n\n**⚡ ULTRA CHEST**\nDaje 10–20 zwykłych skrzyń; 5% → 30.\n\n**📅 DAILY**\nDostępna co 24 godziny. Nagroda roli + 5% Mega + 1% Ultra.\n\n**📆 WEEKLY**\nDostępna co 7 dni. 1–10 zwykłych skrzyń; 5% → 20.\n\n**🔥 PHOENIX**\nNajwyższa rola, maksymalnie 2 użytkowników. Posiadacze Phoenix nie mogą otwierać ani odbierać skrzyń. Posiadacze Ultra mogą.\n\n**🏆 SYSTEM RÓL**\nWyższa rola zastępuje niższą. Równe lub niższe nagrody nie są przyznawane. Przy otwieraniu wszystkich każda skrzynia jest losowana osobno.\n\n**⏰ MENU**\nMenu działa 5 minut. Użyj !chests, aby otworzyć nowe menu, oraz !chest info, aby zobaczyć te informacje."
+                )
+            }
+        }
+
+        value = texts.get(
+            key,
+            {}
+        ).get(
+            lang
+        )
+
+        if value is None:
+            value = texts.get(
+                key,
+                {}
+            ).get(
+                "en",
+                key
+            )
+
+        return value.format(**kwargs)
+
+    # =========================================================
+    # ROLES
+    # =========================================================
+
+    def has_phoenix_role(self, member):
+
+        return any(
+            role.id == PHOENIX_ROLE_ID
+            for role in member.roles
+        )
+
+    def has_ultra_role(self, member):
+
+        return any(
+            role.id == ULTRA_ROLE_ID
+            for role in member.roles
+        )
+
+    def phoenix_count(self, guild):
+
+        role = guild.get_role(
+            PHOENIX_ROLE_ID
+        )
+
+        if role is None:
+            return 0
+
+        return sum(
+            1
+            for member in guild.members
+            if role in member.roles
+        )
+
+    def get_highest_role_index(self, member):
+
+        highest = -1
+
+        for index, reward in enumerate(
+            ROLE_REWARDS
+        ):
+
+            if any(
+                role.id == reward["role_id"]
+                for role in member.roles
+            ):
+
+                highest = index
+
+        return highest
+
+    def roll_role(self):
+
+        number = random.random() * 100.001
+        current = 0
+
+        for reward in ROLE_REWARDS:
+
+            current += reward["chance"]
+
+            if number < current:
+                return reward
+
+        return ROLE_REWARDS[-1]
+
+    async def give_role_if_higher(
+        self,
+        member,
+        reward
+    ):
+
+        if (
+            reward["role_id"] == PHOENIX_ROLE_ID
+            and self.phoenix_count(member.guild) >= PHOENIX_MAX
+        ):
+            return False
+
+        reward_index = ROLE_REWARDS.index(
+            reward
+        )
+
+        current_index = self.get_highest_role_index(
+            member
+        )
+
+        if reward_index <= current_index:
+            return False
+
+        roles_to_remove = []
+
+        for index in range(
+            current_index + 1
+        ):
+
+            if index >= len(
+                ROLE_REWARDS
+            ):
+                break
+
+            role = member.guild.get_role(
+                ROLE_REWARDS[index]["role_id"]
+            )
+
+            if (
+                role is not None
+                and role in member.roles
+            ):
+
+                roles_to_remove.append(
+                    role
+                )
+
+        if roles_to_remove:
+
+            try:
+                await member.remove_roles(
+                    *roles_to_remove,
+                    reason="Chest reward upgrade"
+                )
+            except discord.HTTPException:
+                pass
+
+        new_role = member.guild.get_role(
+            reward["role_id"]
+        )
+
+        if new_role is None:
+            return False
+
+        try:
+
+            await member.add_roles(
+                new_role,
+                reason="Chest reward"
+            )
+
+            return True
+
+        except discord.HTTPException:
+
+            return False
+
+    # =========================================================
+    # COMPONENTS V2 HELPERS
+    # =========================================================
+
+    def color_main(self):
+        return discord.Color.blurple()
+
+    def color_chest(self):
+        return discord.Color.green()
+
+    def color_mega(self):
+        return discord.Color.blue()
+
+    def color_ultra(self):
+        return discord.Color.gold()
+
+    def color_phoenix(self):
+        return discord.Color.from_rgb(255, 80, 30)
+
+    def color_daily(self):
+        return discord.Color.green()
+
+    def color_weekly(self):
+        return discord.Color.blue()
+
+    def color_info(self):
+        return discord.Color.purple()
+
+    def make_container(
+        self,
+        text,
+        color
+    ):
+
+        return discord.ui.Container(
+            discord.ui.TextDisplay(
+                text
+            ),
+            accent_color=color
+        )
+
+    # =========================================================
+    # LANGUAGE SELECT
+    # =========================================================
+
+    class LanguageView(discord.ui.LayoutView):
+
+        def __init__(
+            self,
+            cog,
+            owner_id,
+            info_only=False
+        ):
+
+            # Keep the language selector usable for as long as the message exists.
+            super().__init__(timeout=None)
+
+            self.cog = cog
+            self.owner_id = owner_id
+            self.info_only = info_only
+
+            if self.info_only:
+                # The prefix command posts this selector in the channel.
+                # Keep the prompt English-only as requested.
+                prompt = "Select a language to view the chest information."
+            else:
+                prompt = cog.t(owner_id, "language_prompt")
+
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {prompt}\n\n"
+                    "🇬🇧 English\n"
+                    "🇷🇺 Russian\n"
+                    "🇷🇴 Romanian\n"
+                    "🇺🇿 Uzbek\n"
+                    "🇰🇿 Kazakh\n"
+                    "🇹🇷 Turkish\n"
+                    "🇪🇸 Spanish\n"
+                    "🇫🇷 French\n"
+                    "🇩🇪 German\n"
+                    "🇮🇹 Italian\n"
+                    "🇺🇦 Ukrainian\n"
+                    "🇵🇱 Polish"
+                ),
+                discord.ui.ActionRow(
+                    self.create_select()
+                ),
+                accent_color=discord.Color.blurple()
+            )
+
+            self.add_item(container)
+
+        def create_select(self):
+
+            select = discord.ui.Select(
+                placeholder="Select language",
+                min_values=1,
+                max_values=1,
+                custom_id=(
+                    "chest_info_language_select"
+                    if self.info_only
+                    else "chest_menu_language_select"
+                ),
+                options=[
+                    discord.SelectOption(
+                        label="English",
+                        value="en",
+                        emoji="🇬🇧"
+                    ),
+                    discord.SelectOption(
+                        label="Russian",
+                        value="ru",
+                        emoji="🇷🇺"
+                    ),
+                    discord.SelectOption(
+                        label="Romanian",
+                        value="ro",
+                        emoji="🇷🇴"
+                    ),
+                    discord.SelectOption(
+                        label="Uzbek",
+                        value="uz",
+                        emoji="🇺🇿"
+                    ),
+                    discord.SelectOption(
+                        label="Kazakh",
+                        value="kk",
+                        emoji="🇰🇿"
+                    ),
+                    discord.SelectOption(
+                        label="Turkish",
+                        value="tr",
+                        emoji="🇹🇷"
+                    ),
+                    discord.SelectOption(
+                        label="Spanish",
+                        value="es",
+                        emoji="🇪🇸"
+                    ),
+                    discord.SelectOption(
+                        label="French",
+                        value="fr",
+                        emoji="🇫🇷"
+                    ),
+                    discord.SelectOption(
+                        label="German",
+                        value="de",
+                        emoji="🇩🇪"
+                    ),
+                    discord.SelectOption(
+                        label="Italian",
+                        value="it",
+                        emoji="🇮🇹"
+                    ),
+                    discord.SelectOption(
+                        label="Ukrainian",
+                        value="uk",
+                        emoji="🇺🇦"
+                    ),
+                    discord.SelectOption(
+                        label="Polish",
+                        value="pl",
+                        emoji="🇵🇱"
+                    )
+                ]
+            )
+
+            async def callback(interaction):
+
+                if interaction.user.id != self.owner_id:
+
+                    await interaction.response.send_message(
+                        self.cog.t(
+                            self.owner_id,
+                            "not_owner"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                language = select.values[0]
+
+                if self.info_only:
+                    # Info language is temporary and must not change the chest menu language.
+                    view = self.cog.InfoView(
+                        self.cog,
+                        self.owner_id,
+                        language=language
+                    )
+                    await interaction.response.defer(ephemeral=True)
+                    await interaction.followup.send(
+                        view=view,
+                        ephemeral=True
+                    )
+                else:
+                    user = self.cog.get_user_data(self.owner_id)
+                    user["language"] = language
+                    await self.cog.save_data()
+
+                    # Start/restart the 5-minute chest menu timer.
+                    self.cog.menu_started_at[self.owner_id] = asyncio.get_running_loop().time()
+                    view = self.cog.MainView(
+                        self.cog,
+                        self.owner_id
+                    )
+                    await interaction.response.edit_message(view=view)
+
+            select.callback = callback
+
+            return select
+
+    # =========================================================
+    # MAIN VIEW
+    # =========================================================
+
+    class MainView(discord.ui.LayoutView):
+
+        def __init__(
+            self,
+            cog,
+            owner_id,
+            notice=None
+        ):
+
+            super().__init__(
+                timeout=None
+            )
+
+            self.cog = cog
+            self.owner_id = owner_id
+            self.notice = notice
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
+
+            user = cog.get_user_data(
+                owner_id
+            )
+
+            now = int(
+                time.time()
+            )
+
+            if user["daily_next"] <= now:
+                daily = cog.t(
+                    owner_id,
+                    "daily_available"
+                )
+            else:
+                daily = cog.t(
+                    owner_id,
+                    "daily_next",
+                    timestamp=f"<t:{user['daily_next']}:R>"
+                )
+
+            if user["weekly_next"] <= now:
+                weekly = cog.t(
+                    owner_id,
+                    "weekly_available"
+                )
+            else:
+                weekly = cog.t(
+                    owner_id,
+                    "weekly_next",
+                    timestamp=f"<t:{user['weekly_next']}:R>"
+                )
+
+            total = (
+                user["chests"]
+                + user["mega_chests"]
+                + user["ultra_chests"]
+            )
+
+            text = (
+                f"# {cog.t(owner_id, 'title')}\n\n"
+                f"👤 Chest owner: <@{owner_id}>\n\n"
+                f"{notice + chr(10) + chr(10) if notice else ''}"
+                f"{cog.t(owner_id, 'chest', value=user['chests'])}\n"
+                f"{cog.t(owner_id, 'mega', value=user['mega_chests'])}\n"
+                f"{cog.t(owner_id, 'ultra', value=user['ultra_chests'])}\n\n"
+                f"**{cog.t(owner_id, 'total', value=total)}**\n\n"
+                f"{daily}\n"
+                f"{weekly}"
+            )
+
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(text),
+
+                discord.ui.ActionRow(
+                    self.create_button(
+                        "🎁 Chest",
+                        discord.ButtonStyle.success,
+                        self.chest_callback
+                    ),
+                    self.create_button(
+                        "💎 Mega Chest",
+                        discord.ButtonStyle.primary,
+                        self.mega_callback
+                    ),
+                    self.create_button(
+                        "⚡ Ultra Chest",
+                        discord.ButtonStyle.primary,
+                        self.ultra_callback
+                    )
+                ),
+
+                discord.ui.ActionRow(
+                    self.create_button(
+                        "📦 Open All Chests",
+                        discord.ButtonStyle.success,
+                        self.open_all_callback
+                    ),
+                    self.create_button(
+                        "📊 Statistics",
+                        discord.ButtonStyle.secondary,
+                        self.stats_callback
+                    ),
+                    self.create_button(
+                        "🏆 Leaderboard",
+                        discord.ButtonStyle.secondary,
+                        self.leaderboard_callback
+                    )
+                ),
+
+                discord.ui.ActionRow(
+                    self.create_button(
+                        "📜 Chest History",
+                        discord.ButtonStyle.secondary,
+                        self.history_callback
+                    ),
+                    self.create_button(
+                        "❓ Help",
+                        discord.ButtonStyle.secondary,
+                        self.help_callback
+                    ),
+                    self.create_button(
+                        "📅 Daily",
+                        discord.ButtonStyle.success,
+                        self.daily_callback
+                    ),
+                    self.create_button(
+                        "📆 Weekly",
+                        discord.ButtonStyle.success,
+                        self.weekly_callback
+                    ),
+                    self.create_button(
+                        "🌐 Language",
+                        discord.ButtonStyle.secondary,
+                        self.language_callback
+                    )
+                ),
+
+                discord.ui.ActionRow(
+                    self.create_button("👤 Profile", discord.ButtonStyle.primary, self.profile_callback),
+                    self.create_button("📈 Progress", discord.ButtonStyle.secondary, self.progress_callback),
+                    self.create_button("🏅 Achievements", discord.ButtonStyle.secondary, self.achievements_callback),
+                    self.create_button("🎯 Daily Quest", discord.ButtonStyle.success, self.quest_callback),
+                    self.create_button("📅 Daily Top", discord.ButtonStyle.secondary, self.daily_leaderboard_callback)
+                ),
+
+                accent_color=cog.color_main()
+            )
+
+            self.add_item(container)
+
+        def create_button(
+            self,
+            label,
+            style,
+            callback
+        ):
+
+            button = discord.ui.Button(
+                label=label,
+                style=style
+            )
+
+            async def wrapped(interaction):
+
+                if interaction.user.id != self.owner_id:
+
+                    await interaction.response.send_message(
+                        self.cog.t(
+                            self.owner_id,
+                            "not_owner"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                if self.cog.menu_has_expired(self.owner_id):
+
+                    await interaction.response.send_message(
+                        self.cog.t(
+                            self.owner_id,
+                            "expired"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                await callback(interaction)
+
+            button.callback = wrapped
+
+            return button
+
+        async def profile_callback(self, interaction):
+            await interaction.response.edit_message(view=self.cog.ProfileView(self.cog, self.owner_id))
+
+        async def progress_callback(self, interaction):
+            await interaction.response.edit_message(view=self.cog.ProgressView(self.cog, self.owner_id))
+
+        async def achievements_callback(self, interaction):
+            await interaction.response.edit_message(view=self.cog.AchievementsView(self.cog, self.owner_id))
+
+        async def quest_callback(self, interaction):
+            await interaction.response.edit_message(view=self.cog.QuestView(self.cog, self.owner_id))
+
+        async def daily_leaderboard_callback(self, interaction):
+            await interaction.response.edit_message(view=self.cog.PeriodLeaderboardView(self.cog, self.owner_id, "daily"))
+
+        async def chest_callback(
+            self,
+            interaction
+        ):
+
+            await interaction.response.edit_message(
+                view=self.cog.ChestView(
+                    self.cog,
+                    self.owner_id
+                )
+            )
+
+        async def mega_callback(
+            self,
+            interaction
+        ):
+
+            await interaction.response.edit_message(
+                view=self.cog.MegaView(
+                    self.cog,
+                    self.owner_id
+                )
+            )
+
+        async def ultra_callback(
+            self,
+            interaction
+        ):
+
+            await interaction.response.edit_message(
+                view=self.cog.UltraView(
+                    self.cog,
+                    self.owner_id
+                )
+            )
+
+        async def daily_callback(
+            self,
+            interaction
+        ):
+
+            await self.cog.claim_daily(
+                interaction,
+                self.owner_id
+            )
+
+        async def weekly_callback(
+            self,
+            interaction
+        ):
+
+            await self.cog.claim_weekly(
+                interaction,
+                self.owner_id
+            )
+
+        async def language_callback(
+            self,
+            interaction
+        ):
+            await interaction.response.edit_message(
+                view=self.cog.LanguageView(
+                    self.cog,
+                    self.owner_id,
+                    info_only=False
+                )
+            )
+
+        async def open_all_callback(self, interaction):
+            await self.cog.open_all_chest_types(interaction, self.owner_id)
+
+        async def stats_callback(self, interaction):
+            await interaction.response.edit_message(
+                view=self.cog.StatsView(self.cog, self.owner_id)
+            )
+
+        async def leaderboard_callback(self, interaction):
+            await interaction.response.edit_message(
+                view=self.cog.LeaderboardView(self.cog, self.owner_id)
+            )
+
+        async def history_callback(self, interaction):
+            await interaction.response.edit_message(
+                view=self.cog.HistoryView(self.cog, self.owner_id)
+            )
+
+        async def help_callback(self, interaction):
+            await interaction.response.edit_message(
+                view=self.cog.HelpView(self.cog, self.owner_id)
+            )
+
+        async def info_callback(
+            self,
+            interaction
+        ):
+
+            await interaction.response.edit_message(
+                view=self.cog.InfoView(
+                    self.cog,
+                    self.owner_id
+                )
+            )
+
+    # =========================================================
+    # CHEST VIEW
+    # =========================================================
+
+    class ChestView(discord.ui.LayoutView):
+
+        def __init__(
+            self,
+            cog,
+            owner_id,
+            notice=None
+        ):
+
+            super().__init__(
+                timeout=None
+            )
+
+            self.cog = cog
+            self.owner_id = owner_id
+            self.notice = notice
+
+            self.created_at = (
+                asyncio.get_running_loop().time()
+            )
+
+            user = cog.get_user_data(
+                owner_id
+            )
+
+            open_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_one"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            all_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_all"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            back_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "back"
+                ),
+                style=discord.ButtonStyle.secondary
+            )
+
+            async def open_one(interaction):
+                if interaction.user.id != self.owner_id:
+                    await interaction.response.send_message(self.cog.t(self.owner_id, "not_owner"), ephemeral=True)
+                    return
+                if await self.cog.reject_expired_menu(interaction, self.owner_id):
+                    return
+                await self.cog.open_normal(
+                    interaction,
+                    self.owner_id,
+                    False
+                )
+
+            async def open_all(interaction):
+                if interaction.user.id != self.owner_id:
+                    await interaction.response.send_message(self.cog.t(self.owner_id, "not_owner"), ephemeral=True)
+                    return
+                if await self.cog.reject_expired_menu(interaction, self.owner_id):
+                    return
+                await self.cog.open_normal(
+                    interaction,
+                    self.owner_id,
+                    True
+                )
+
+            async def back(interaction):
+                if interaction.user.id != self.owner_id:
+                    await interaction.response.send_message(self.cog.t(self.owner_id, "not_owner"), ephemeral=True)
+                    return
+                if await self.cog.reject_expired_menu(interaction, self.owner_id):
+                    return
+                await interaction.response.edit_message(
+                    view=self.cog.MainView(
+                        self.cog,
+                        self.owner_id
+                    )
+                )
+
+            open_button.callback = open_one
+            all_button.callback = open_all
+            back_button.callback = back
+
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {cog.t(owner_id, 'normal_chest')}\n\n"
+                    f"👤 Chest owner: <@{owner_id}>\n\n"
+                    f"{notice + chr(10) + chr(10) if notice else ''}"
+                    f"{cog.t(owner_id, 'chest', value=user['chests'])}\n\n"
+                    f"{cog.t(owner_id, 'normal_description')}"
+                ),
+
+                discord.ui.ActionRow(
+                    open_button,
+                    all_button,
+                    back_button
+                ),
+
+                accent_color=cog.color_chest()
+            )
+
+            self.add_item(container)
+
+    # =========================================================
+    # MEGA VIEW
+    # =========================================================
+
+    class MegaView(discord.ui.LayoutView):
+
+        def __init__(
+            self,
+            cog,
+            owner_id,
+            notice=None
+        ):
+
+            super().__init__(
+                timeout=None
+            )
+
+            self.cog = cog
+            self.owner_id = owner_id
+            self.notice = notice
+
+            user = cog.get_user_data(
+                owner_id
+            )
+
+            open_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_one"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            all_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_all"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            back_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "back"
+                ),
+                style=discord.ButtonStyle.secondary
+            )
+
+            async def open_one(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                await cog.open_mega(interaction, owner_id, False)
+
+            async def open_all(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                await cog.open_mega(interaction, owner_id, True)
+
+            async def back(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                if await cog.reject_expired_menu(interaction, owner_id):
+                    return
+                await interaction.response.edit_message(view=cog.MainView(cog, owner_id))
+
+            open_button.callback = open_one
+            all_button.callback = open_all
+            back_button.callback = back
+
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {cog.t(owner_id, 'mega_chest')}\n\n"
+                    f"👤 Chest owner: <@{owner_id}>\n\n"
+                    f"{notice + chr(10) + chr(10) if notice else ''}"
+                    f"{cog.t(owner_id, 'mega', value=user['mega_chests'])}\n\n"
+                    f"{cog.t(owner_id, 'mega_description')}"
+                ),
+
+                discord.ui.ActionRow(
+                    open_button,
+                    all_button,
+                    back_button
+                ),
+
+                accent_color=cog.color_mega()
+            )
+
+            self.add_item(container)
+
+    # =========================================================
+    # ULTRA VIEW
+    # =========================================================
+
+    class UltraView(discord.ui.LayoutView):
+
+        def __init__(
+            self,
+            cog,
+            owner_id,
+            notice=None
+        ):
+
+            super().__init__(
+                timeout=None
+            )
+
+            self.cog = cog
+            self.owner_id = owner_id
+            self.notice = notice
+
+            user = cog.get_user_data(
+                owner_id
+            )
+
+            open_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_one"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            all_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "open_all"
+                ),
+                style=discord.ButtonStyle.success
+            )
+
+            back_button = discord.ui.Button(
+                label=cog.t(
+                    owner_id,
+                    "back"
+                ),
+                style=discord.ButtonStyle.secondary
+            )
+
+            async def open_one(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                await cog.open_ultra(interaction, owner_id, False)
+
+            async def open_all(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                await cog.open_ultra(interaction, owner_id, True)
+
+            async def back(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                    return
+                if await cog.reject_expired_menu(interaction, owner_id):
+                    return
+                await interaction.response.edit_message(view=cog.MainView(cog, owner_id))
+
+            open_button.callback = open_one
+            all_button.callback = open_all
+            back_button.callback = back
+
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {cog.t(owner_id, 'ultra_chest')}\n\n"
+                    f"👤 Chest owner: <@{owner_id}>\n\n"
+                    f"{notice + chr(10) + chr(10) if notice else ''}"
+                    f"{cog.t(owner_id, 'ultra', value=user['ultra_chests'])}\n\n"
+                    f"{cog.t(owner_id, 'ultra_description')}"
+                ),
+
+                discord.ui.ActionRow(
+                    open_button,
+                    all_button,
+                    back_button
+                ),
+
+                accent_color=cog.color_ultra()
+            )
+
+            self.add_item(container)
+
+    # =========================================================
+    # INFO VIEW
+    # =========================================================
+
+    class InfoView(discord.ui.LayoutView):
+
+        def __init__(self, cog, owner_id, language=None):
+            super().__init__(timeout=None)
+            self.cog = cog
+            self.owner_id = owner_id
+            language = language if language in LANGUAGES else cog.language(owner_id)
+
+            info = cog.t(owner_id, "info_text", _language=language)
+            container = discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {cog.t(owner_id, 'info', _language=language)}\n\n{info}"
+                ),
+                accent_color=cog.color_info()
+            )
+            self.add_item(container)
+
+    # =========================================================
+    # EXTRA MENU VIEWS
+    # =========================================================
+
+    class BackMenuView(discord.ui.LayoutView):
+        def __init__(self, cog, owner_id, title, body, color=None):
+            super().__init__(timeout=None)
+            self.cog = cog
+            self.owner_id = owner_id
+            back = discord.ui.Button(
+                label=cog.t(owner_id, "back"),
+                style=discord.ButtonStyle.secondary
+            )
+
+            async def go_back(interaction):
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message(
+                        cog.t(owner_id, "not_owner"), ephemeral=True
+                    )
+                    return
+                if await cog.reject_expired_menu(interaction, owner_id):
+                    return
+                await interaction.response.edit_message(
+                    view=cog.MainView(cog, owner_id)
+                )
+
+            back.callback = go_back
+            self.add_item(discord.ui.Container(
+                discord.ui.TextDisplay(f"# {title}\n\n{body}"),
+                discord.ui.ActionRow(back),
+                accent_color=color or cog.color_info()
+            ))
+
+    class HelpView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            super().__init__(cog, owner_id, "❓ Help", cog.t(owner_id, "info_text"), cog.color_info())
+
+    class StatsView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            total = int(user.get("opened_normal", 0)) + int(user.get("opened_mega", 0)) + int(user.get("opened_ultra", 0))
+            body = (
+                f"👤 User: <@{owner_id}>\n\n"
+                f"🎁 Normal Chests Opened: **{user.get('opened_normal', 0)}**\n"
+                f"💎 Mega Chests Opened: **{user.get('opened_mega', 0)}**\n"
+                f"⚡ Ultra Chests Opened: **{user.get('opened_ultra', 0)}**\n\n"
+                f"📦 Total Chests Opened: **{total}**\n\n"
+                f"🎒 Current Normal Chests: **{user['chests']}**\n"
+                f"💎 Current Mega Chests: **{user['mega_chests']}**\n"
+                f"⚡ Current Ultra Chests: **{user['ultra_chests']}**"
+            )
+            super().__init__(cog, owner_id, "📊 Statistics", body, cog.color_main())
+
+    class LeaderboardView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            rows = []
+            users = cog.data.get("users", {})
+            ranked = sorted(
+                users.items(),
+                key=lambda item: int(item[1].get("opened_normal", 0)) + int(item[1].get("opened_mega", 0)) + int(item[1].get("opened_ultra", 0)),
+                reverse=True
+            )
+            for rank, (uid, data) in enumerate(ranked[:10], start=1):
+                total = int(data.get("opened_normal", 0)) + int(data.get("opened_mega", 0)) + int(data.get("opened_ultra", 0))
+                rows.append(f"**{rank}.** <@{uid}> — **{total}** opened")
+            body = "\n".join(rows) if rows else "No chest openings recorded yet."
+            super().__init__(cog, owner_id, "🏆 Leaderboard", body, cog.color_main())
+
+    class HistoryView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            history = user.get("chest_history", [])[-10:]
+            lines = []
+            for entry in reversed(history):
+                timestamp = int(entry.get("time", time.time()))
+                kind = entry.get("type", "Chest")
+                amount = int(entry.get("amount", 1))
+                details = entry.get("details", "")
+                lines.append(f"<t:{timestamp}:R> — **{amount}× {kind}**" + (f"\n{details}" if details else ""))
+            body = "\n\n".join(lines) if lines else "No chest history yet."
+            super().__init__(cog, owner_id, "📜 Chest History", body, cog.color_chest())
+
+    class ProfileView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            total = cog.opened_total(user)
+            level = cog.current_level(user)
+            quest = cog.ensure_daily_quest(owner_id)
+            body = (
+                f"👤 User: <@{owner_id}>\\n"
+                f"⭐ Level: **{level}**\\n"
+                f"📦 Total opened: **{total}**\\n"
+                f"🎁 Normal: **{user.get('opened_normal', 0)}** | 💎 Mega: **{user.get('opened_mega', 0)}** | ⚡ Ultra: **{user.get('opened_ultra', 0)}**\\n"
+                f"🏅 Achievements: **{len(user.get('achievements', []))}**\\n\\n"
+                f"🎯 Daily Quest: **{quest.get('title', 'Not set')}**\\n"
+                f"📅 Daily Top: use the leaderboard button"
+            )
+            super().__init__(cog, owner_id, "👤 Profile", body, cog.color_main())
+            row = discord.ui.ActionRow()
+            for label, period in [("Daily", "daily"), ("Monthly", "monthly"), ("Yearly", "yearly"), ("All Time", "all")]:
+                button = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
+                async def callback(interaction, p=period):
+                    if interaction.user.id != owner_id:
+                        await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                        return
+                    if await cog.reject_expired_menu(interaction, owner_id):
+                        return
+                    await interaction.response.edit_message(view=cog.PeriodLeaderboardView(cog, owner_id, p))
+                button.callback = callback
+                row.add_item(button)
+            self.children[0].add_item(row)
+
+    class ProgressView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            total = cog.opened_total(user)
+            level = cog.current_level(user)
+            next_level = next((x for x in (5, 10, 25, 50, 100) if x > total), None)
+            if next_level:
+                remaining = next_level - total
+                body = f"⭐ Current Level: **{level}**\\n📦 Opened: **{total}**\\n🎯 Next milestone: **Level {next_level}**\\n➡️ **{remaining}** more openings required."
+            else:
+                body = f"⭐ Maximum milestone reached: **Level 100**\\n📦 Total opened: **{total}**"
+            super().__init__(cog, owner_id, "📈 Progress", body, cog.color_main())
+
+    class AchievementsView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            total = cog.opened_total(user)
+            checks = [
+                ("First Opening", total >= 1),
+                ("Chest Collector", total >= 100),
+                ("Chest Master", total >= 500),
+                ("Mega Hunter", int(user.get("opened_mega", 0)) >= 50),
+                ("Ultra Legend", int(user.get("opened_ultra", 0)) >= 10),
+                ("Level 100", total >= 100),
+            ]
+            lines = [("✅" if done else "🔒") + f" **{name}**" for name, done in checks]
+            user["achievements"] = [name for name, done in checks if done]
+            body = "\\n".join(lines) + f"\\n\\nUnlocked: **{sum(done for _, done in checks)}/{len(checks)}**"
+            super().__init__(cog, owner_id, "🏅 Achievements", body, cog.color_main())
+
+    class QuestView(BackMenuView):
+        def __init__(self, cog, owner_id):
+            user = cog.get_user_data(owner_id)
+            quest = cog.ensure_daily_quest(owner_id)
+            progress = max(0, int(user.get(quest.get("stat", ""), 0)) - int(quest.get("start_value", 0)))
+            target = int(quest.get("target", 1))
+            progress = min(progress, target)
+            status = "✅ Completed — reward claimed!" if quest.get("completed") else f"Progress: **{progress}/{target}**"
+            body = (
+                f"🎯 **{quest.get('title', 'Daily Quest')}**\\n\\n"
+                f"{status}\\n"
+                f"🎁 Reward: **{quest.get('reward', 1)} {quest.get('reward_type', 'chest').title()} Chest(s)**\\n\\n"
+                "A new random quest is generated each day. Complete it to receive the reward."
+            )
+            super().__init__(cog, owner_id, "🎯 Daily Quest", body, cog.color_daily())
+
+    class PeriodLeaderboardView(BackMenuView):
+        def __init__(self, cog, owner_id, period):
+            body = cog.leaderboard_text(period)
+            title = {"daily": "Daily", "monthly": "Monthly", "yearly": "Yearly", "all": "All Time"}.get(period, "Daily")
+            super().__init__(cog, owner_id, f"🏆 {title} Leaderboard", body, cog.color_main())
+            row = discord.ui.ActionRow()
+            for label, p in [("Daily", "daily"), ("Monthly", "monthly"), ("Yearly", "yearly"), ("All Time", "all")]:
+                button = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
+                async def callback(interaction, selected=p):
+                    if interaction.user.id != owner_id:
+                        await interaction.response.send_message(cog.t(owner_id, "not_owner"), ephemeral=True)
+                        return
+                    if await cog.reject_expired_menu(interaction, owner_id):
+                        return
+                    await interaction.response.edit_message(view=cog.PeriodLeaderboardView(cog, owner_id, selected))
+                button.callback = callback
+                row.add_item(button)
+            self.children[0].add_item(row)
+
+    # =========================================================
+    # PHOENIX CHECK
+    # =========================================================
+
+    async def phoenix_block(
+        self,
+        interaction,
+        user_id
+    ):
+
+        if self.has_phoenix_role(
+            interaction.user
+        ):
+
+            if not interaction.response.is_done():
+
+                await interaction.response.send_message(
+                    self.t(
+                        user_id,
+                        "phoenix_block"
+                    ),
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "phoenix_block"
+                    ),
+                    ephemeral=True
+                )
+
+            return True
+
+        return False
+
+    # =========================================================
+    # NORMAL CHEST
+    # =========================================================
+
+    async def open_normal(
+        self,
+        interaction,
+        user_id,
+        open_all
+    ):
+
+        if interaction.user.id != user_id:
+            await interaction.response.send_message(self.t(user_id, "not_owner"), ephemeral=True)
+            return
+
+        if await self.phoenix_block(
+            interaction,
+            user_id
+        ):
+            return
+
+        await interaction.response.defer()
+
+        try:
+
+            async with self.open_lock:
+
+                member = interaction.user
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                if user["chests"] <= 0:
+
+                    await interaction.followup.send(
+                        self.t(
+                            user_id,
+                            "no_chests"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                if open_all:
+
+                    count = int(
+                        user["chests"]
+                    )
+
+                    user["chests"] = 0
+
+                    await self.save_data()
+
+                    result = await self.open_normal_all(
+                        member,
+                        count
+                    )
+
+                    # Replace the existing public menu with the results.
+                    # Do not send a separate ephemeral response.
+                    await interaction.edit_original_response(
+                        view=result
+                    )
+
+                    return
+
+                user["chests"] -= 1
+                user["opened_normal"] = int(user.get("opened_normal", 0)) + 1
+                await self.grant_level_rewards(user_id)
+                await self.update_daily_quest(user_id)
+
+                reward = self.roll_role()
+
+                if (
+                    reward["role_id"] == PHOENIX_ROLE_ID
+                    and self.phoenix_count(member.guild) >= PHOENIX_MAX
+                ):
+
+                    reward = ROLE_REWARDS[-2]
+
+                mega_bonus = (
+                    random.random() < 0.05
+                )
+
+                ultra_bonus = (
+                    random.random() < 0.01
+                )
+
+                if mega_bonus:
+                    user["mega_chests"] += 1
+
+                if ultra_bonus:
+                    user["ultra_chests"] += 1
+
+                self.record_chest_history(
+                    user_id, "Normal Chest", 1,
+                    f"Reward: {reward['name'].get(self.language(user_id), reward['name'].get('en', 'Reward'))}"
+                )
+                await self.save_data()
+
+                role_given = await self.give_role_if_higher(
+                    member,
+                    reward
+                )
+
+                lang = self.language(
+                    user_id
+                )
+
+                reward_name = reward["name"][lang]
+
+                description = (
+                    f"{self.t(user_id, 'reward')}\n"
+                    f"{reward['emoji']} **{reward_name}**"
+                )
+
+                if not role_given:
+
+                    description += (
+                        f"\n\n{self.t(user_id, 'role_not_given')}"
+                    )
+
+                if mega_bonus or ultra_bonus:
+
+                    description += (
+                        f"\n\n{self.t(user_id, 'bonus')}"
+                    )
+
+                    if mega_bonus:
+
+                        description += (
+                            f"\n💎 {self.t(user_id, 'mega_bonus')}"
+                        )
+
+                    if ultra_bonus:
+
+                        description += (
+                            f"\n⚡ {self.t(user_id, 'ultra_bonus')}"
+                        )
+
+                description += (
+                    f"\n\n"
+                    f"{self.t(user_id, 'remaining_chest', value=user['chests'])}"
+                )
+
+                await interaction.edit_original_response(
+                    view=self.ChestView(
+                        self,
+                        user_id,
+                        notice=(
+                            f"# {self.t(user_id, 'chest_opened')}\n\n"
+                            f"{description}"
+                        )
+                    )
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Normal chest error: {repr(e)}"
+            )
+
+            try:
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "error"
+                    ),
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+    # =========================================================
+    # NORMAL OPEN ALL
+    # =========================================================
+
+    async def open_normal_all(
+        self,
+        member,
+        count
+    ):
+
+        count = int(count)
+
+        probabilities = np.array(
+            [
+                reward["chance"]
+                for reward in ROLE_REWARDS
+            ],
+            dtype=np.float64
+        )
+
+        probabilities /= probabilities.sum()
+
+        role_counts = np.random.multinomial(
+            count,
+            probabilities
+        )
+
+        mega_count = int(
+            np.random.binomial(
+                count,
+                0.05
+            )
+        )
+
+        ultra_count = int(
+            np.random.binomial(
+                count,
+                0.01
+            )
+        )
+
+        user = self.get_user_data(
+            member.id
+        )
+
+        user["mega_chests"] += mega_count
+        user["ultra_chests"] += ultra_count
+        user["opened_normal"] = int(user.get("opened_normal", 0)) + count
+        self.record_chest_history(member.id, "Normal Chest", count, "Opened all normal chests")
+        await self.grant_level_rewards(member.id)
+        await self.update_daily_quest(member.id)
+
+        await self.save_data()
+
+        highest_index = -1
+
+        for index, amount in enumerate(
+            role_counts
+        ):
+
+            if int(amount) > 0:
+
+                if (
+                    index == len(ROLE_REWARDS) - 1
+                    and self.phoenix_count(member.guild) >= PHOENIX_MAX
+                ):
+                    continue
+
+                highest_index = index
+
+        if highest_index >= 0:
+
+            await self.give_role_if_higher(
+                member,
+                ROLE_REWARDS[highest_index]
+            )
+
+        lines = [
+            self.t(
+                member.id,
+                "normal_amount",
+                amount=count
+            ),
+            ""
+        ]
+
+        lang = self.language(
+            member.id
+        )
+
+        for index, amount in enumerate(
+            role_counts
+        ):
+
+            amount = int(amount)
+
+            if amount <= 0:
+                continue
+
+            reward = ROLE_REWARDS[index]
+
+            if (
+                reward["role_id"] == PHOENIX_ROLE_ID
+                and self.phoenix_count(member.guild) >= PHOENIX_MAX
+            ):
+                continue
+
+            reward_name = reward["name"][lang]
+
+            lines.append(
+                f"{reward['emoji']} "
+                f"{reward_name} × {amount}"
+            )
+
+        if mega_count:
+
+            lines.append(
+                f"\n💎 "
+                f"{self.t(member.id, 'mega_bonus')}: "
+                f"{mega_count}"
+            )
+
+        if ultra_count:
+
+            lines.append(
+                f"⚡ "
+                f"{self.t(member.id, 'ultra_bonus')}: "
+                f"{ultra_count}"
+            )
+
+        view = discord.ui.LayoutView(timeout=None)
+        back_button = discord.ui.Button(
+            label=self.t(member.id, "back"),
+            style=discord.ButtonStyle.secondary
+        )
+
+        async def go_back(interaction):
+            if await self.reject_expired_menu(interaction, member.id):
+                return
+            await interaction.response.edit_message(
+                view=self.MainView(self, member.id)
+            )
+
+        back_button.callback = go_back
+        view.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"# {self.t(member.id, 'opened_all')}\n\n" + "\n".join(lines)
+                ),
+                discord.ui.ActionRow(back_button),
+                accent_color=self.color_chest()
+            )
+        )
+        return view
+
+    class OpenAllResultView(discord.ui.LayoutView):
+        """Results screen for Mega/Ultra Open All; intentionally only has Back."""
+
+        def __init__(self, cog, owner_id, text, color):
+            super().__init__(timeout=None)
+            self.cog = cog
+            self.owner_id = owner_id
+
+            back_button = discord.ui.Button(
+                label=cog.t(owner_id, "back"),
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"chest_open_all_back_{owner_id}"
+            )
+
+            async def go_back(interaction):
+                if interaction.user.id != self.owner_id:
+                    await interaction.response.send_message(
+                        self.cog.t(self.owner_id, "not_owner"),
+                        ephemeral=True
+                    )
+                    return
+                if await self.cog.reject_expired_menu(interaction, self.owner_id):
+                    return
+                await interaction.response.edit_message(
+                    view=self.cog.MainView(self.cog, self.owner_id)
+                )
+
+            back_button.callback = go_back
+            self.add_item(discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"👤 Chest owner: <@{owner_id}>\n\n{text}"
+                ),
+                discord.ui.ActionRow(back_button),
+                accent_color=color
+            ))
+
+    # =========================================================
+    # MEGA OPEN
+    # =========================================================
+
+    async def open_mega(
+        self,
+        interaction,
+        user_id,
+        open_all
+    ):
+
+        if interaction.user.id != user_id:
+            await interaction.response.send_message(self.t(user_id, "not_owner"), ephemeral=True)
+            return
+
+        if await self.reject_expired_menu(interaction, user_id):
+            return
+
+        if await self.phoenix_block(
+            interaction,
+            user_id
+        ):
+            return
+
+        await interaction.response.defer()
+
+        try:
+
+            async with self.open_lock:
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                if user["mega_chests"] <= 0:
+
+                    await interaction.followup.send(
+                        self.t(
+                            user_id,
+                            "no_chests"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                if open_all:
+
+                    count = int(
+                        user["mega_chests"]
+                    )
+
+                    user["mega_chests"] = 0
+                    user["opened_mega"] = int(user.get("opened_mega", 0)) + count
+                    await self.grant_level_rewards(user_id)
+                    await self.update_daily_quest(user_id)
+
+                    lucky = int(
+                        np.random.binomial(
+                            count,
+                            0.05
+                        )
+                    )
+
+                    normal_count = count - lucky
+
+                    total_normal = 0
+
+                    if normal_count:
+
+                        total_normal = int(
+                            np.random.randint(
+                                1,
+                                11,
+                                size=normal_count
+                            ).sum()
+                        )
+
+                    total_normal += lucky * 20
+
+                    user["chests"] += total_normal
+                    self.record_chest_history(user_id, "Mega Chest", count, f"Reward: +{total_normal} normal chests")
+
+                    await self.save_data()
+
+                    description = (
+                        f"{self.t(user_id, 'mega', value=count)}\n\n"
+                        f"{self.t(user_id, 'normal_amount', amount=total_normal)}"
+                    )
+
+                    if lucky:
+
+                        description += (
+                            f"\n\n"
+                            f"{self.t(user_id, 'lucky', amount=lucky, reward=20)}"
+                        )
+
+                    await interaction.edit_original_response(
+                        view=self.OpenAllResultView(
+                            self,
+                            user_id,
+                            f"# {self.t(user_id, 'opened_all')}\n\n{description}",
+                            self.color_mega()
+                        )
+                    )
+
+                    return
+
+                user["mega_chests"] -= 1
+                user["opened_mega"] = int(user.get("opened_mega", 0)) + 1
+                await self.grant_level_rewards(user_id)
+                await self.update_daily_quest(user_id)
+
+                if random.random() < 0.05:
+                    reward = 20
+                else:
+                    reward = random.randint(
+                        1,
+                        10
+                    )
+
+                user["chests"] += reward
+                self.record_chest_history(user_id, "Mega Chest", 1, f"Reward: +{reward} normal chests")
+
+                await self.save_data()
+
+                await interaction.edit_original_response(
+                    view=self.MegaView(
+                        self,
+                        user_id,
+                        notice=(
+                            f"# {self.t(user_id, 'mega_opened')}\n\n"
+                            f"🎁 **+{reward} {self.t(user_id, 'normal_word')}**\n\n"
+                            f"{self.t(user_id, 'remaining_mega', value=user['mega_chests'])}"
+                        )
+                    )
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Mega chest error: {repr(e)}"
+            )
+
+            try:
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "error"
+                    ),
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+    # =========================================================
+    # ULTRA OPEN
+    # =========================================================
+
+    async def open_ultra(
+        self,
+        interaction,
+        user_id,
+        open_all
+    ):
+
+        if interaction.user.id != user_id:
+            await interaction.response.send_message(self.t(user_id, "not_owner"), ephemeral=True)
+            return
+
+        if await self.reject_expired_menu(interaction, user_id):
+            return
+
+        if await self.phoenix_block(
+            interaction,
+            user_id
+        ):
+            return
+
+        await interaction.response.defer()
+
+        try:
+
+            async with self.open_lock:
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                if user["ultra_chests"] <= 0:
+
+                    await interaction.followup.send(
+                        self.t(
+                            user_id,
+                            "no_chests"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                if open_all:
+
+                    count = int(
+                        user["ultra_chests"]
+                    )
+
+                    user["ultra_chests"] = 0
+                    user["opened_ultra"] = int(user.get("opened_ultra", 0)) + count
+                    await self.grant_level_rewards(user_id)
+                    await self.update_daily_quest(user_id)
+
+                    lucky = int(
+                        np.random.binomial(
+                            count,
+                            0.05
+                        )
+                    )
+
+                    normal_count = count - lucky
+
+                    total_normal = 0
+
+                    if normal_count:
+
+                        total_normal = int(
+                            np.random.randint(
+                                10,
+                                21,
+                                size=normal_count
+                            ).sum()
+                        )
+
+                    total_normal += lucky * 30
+
+                    user["chests"] += total_normal
+                    self.record_chest_history(user_id, "Ultra Chest", count, f"Reward: +{total_normal} normal chests")
+
+                    await self.save_data()
+
+                    description = (
+                        f"{self.t(user_id, 'ultra', value=count)}\n\n"
+                        f"{self.t(user_id, 'normal_amount', amount=total_normal)}"
+                    )
+
+                    if lucky:
+
+                        description += (
+                            f"\n\n"
+                            f"{self.t(user_id, 'lucky', amount=lucky, reward=30)}"
+                        )
+
+                    await interaction.edit_original_response(
+                        view=self.OpenAllResultView(
+                            self,
+                            user_id,
+                            f"# {self.t(user_id, 'opened_all')}\n\n{description}",
+                            self.color_ultra()
+                        )
+                    )
+
+                    return
+
+                user["ultra_chests"] -= 1
+                user["opened_ultra"] = int(user.get("opened_ultra", 0)) + 1
+                await self.grant_level_rewards(user_id)
+                await self.update_daily_quest(user_id)
+
+                if random.random() < 0.05:
+                    reward = 30
+                else:
+                    reward = random.randint(
+                        10,
+                        20
+                    )
+
+                user["chests"] += reward
+                self.record_chest_history(user_id, "Ultra Chest", 1, f"Reward: +{reward} normal chests")
+
+                await self.save_data()
+
+                await interaction.edit_original_response(
+                    view=self.UltraView(
+                        self,
+                        user_id,
+                        notice=(
+                            f"# {self.t(user_id, 'ultra_opened')}\n\n"
+                            f"🎁 **+{reward} {self.t(user_id, 'normal_word')}**\n\n"
+                            f"{self.t(user_id, 'remaining_ultra', value=user['ultra_chests'])}"
+                        )
+                    )
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Ultra chest error: {repr(e)}"
+            )
+
+            try:
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "error"
+                    ),
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+    # =========================================================
+    # OPEN ALL CHEST TYPES TOGETHER
+    # =========================================================
+
+    async def open_all_chest_types(self, interaction, user_id):
+        if interaction.user.id != user_id:
+            await interaction.response.send_message(self.t(user_id, "not_owner"), ephemeral=True)
+            return
+
+        if await self.reject_expired_menu(interaction, user_id):
+            return
+        if await self.phoenix_block(interaction, user_id):
+            return
+
+        await interaction.response.defer()
+        try:
+            async with self.open_lock:
+                user = self.get_user_data(user_id)
+                normal_count = int(user.get("chests", 0))
+                mega_count = int(user.get("mega_chests", 0))
+                ultra_count = int(user.get("ultra_chests", 0))
+
+                if normal_count + mega_count + ultra_count <= 0:
+                    await interaction.followup.send(self.t(user_id, "no_chests"), ephemeral=True)
+                    return
+
+                # Consume the inventory snapshot atomically.
+                user["chests"] = 0
+                user["mega_chests"] = 0
+                user["ultra_chests"] = 0
+
+                # Mega chests generate normal chests; Ultra chests generate more.
+                mega_lucky = int(np.random.binomial(mega_count, 0.05)) if mega_count else 0
+                mega_regular = mega_count - mega_lucky
+                mega_reward = int(np.random.randint(1, 11, size=mega_regular).sum()) if mega_regular else 0
+                mega_reward += mega_lucky * 20
+
+                ultra_lucky = int(np.random.binomial(ultra_count, 0.05)) if ultra_count else 0
+                ultra_regular = ultra_count - ultra_lucky
+                ultra_reward = int(np.random.randint(10, 21, size=ultra_regular).sum()) if ultra_regular else 0
+                ultra_reward += ultra_lucky * 30
+
+                # Only the normal chests already owned are opened in this batch.
+                # Mega/Ultra-generated normal chests remain in the inventory.
+                roles = np.array([r["chance"] for r in ROLE_REWARDS], dtype=np.float64)
+                roles /= roles.sum()
+                role_counts = np.random.multinomial(normal_count, roles) if normal_count else np.zeros(len(ROLE_REWARDS), dtype=int)
+
+                mega_bonus = int(np.random.binomial(normal_count, 0.05)) if normal_count else 0
+                ultra_bonus = int(np.random.binomial(normal_count, 0.01)) if normal_count else 0
+                user["mega_chests"] += mega_bonus
+                user["ultra_chests"] += ultra_bonus
+                user["chests"] += mega_reward + ultra_reward
+
+                user["opened_normal"] = int(user.get("opened_normal", 0)) + normal_count
+                user["opened_mega"] = int(user.get("opened_mega", 0)) + mega_count
+                user["opened_ultra"] = int(user.get("opened_ultra", 0)) + ultra_count
+                await self.grant_level_rewards(user_id)
+                await self.update_daily_quest(user_id)
+
+                # Grant only the highest eligible role from the normal-chest batch.
+                highest_index = -1
+                for idx, amount in enumerate(role_counts):
+                    if int(amount) > 0:
+                        if idx == len(ROLE_REWARDS) - 1 and self.phoenix_count(interaction.guild) >= PHOENIX_MAX:
+                            continue
+                        highest_index = idx
+                if highest_index >= 0:
+                    await self.give_role_if_higher(interaction.user, ROLE_REWARDS[highest_index])
+
+                reward_lines = []
+                lang = self.language(user_id)
+                for idx, amount in enumerate(role_counts):
+                    amount = int(amount)
+                    if amount <= 0:
+                        continue
+                    reward = ROLE_REWARDS[idx]
+                    if reward["role_id"] == PHOENIX_ROLE_ID and self.phoenix_count(interaction.guild) >= PHOENIX_MAX:
+                        continue
+                    reward_lines.append(f"{reward['emoji']} {reward['name'].get(lang, reward['name'].get('en', 'Reward'))} × **{amount}**")
+
+                if mega_bonus:
+                    reward_lines.append(f"💎 Mega bonus chests: **+{mega_bonus}**")
+                if ultra_bonus:
+                    reward_lines.append(f"⚡ Ultra bonus chests: **+{ultra_bonus}**")
+
+                summary = (
+                    f"## 📊 Summary\n"
+                    f"🎁 Normal chests opened: **{normal_count}**\n"
+                    f"💎 Mega chests opened: **{mega_count}** → **+{mega_reward}** normal chests\n"
+                    f"⚡ Ultra chests opened: **{ultra_count}** → **+{ultra_reward}** normal chests\n\n"
+                    f"## 🏆 Normal Chest Rewards\n"
+                    + ("\n".join(reward_lines) if reward_lines else "No normal-chest role rewards this time.")
+                    + f"\n\n## 🎒 Remaining Inventory\n"
+                    f"🎁 Normal: **{user['chests']}**\n"
+                    f"💎 Mega: **{user['mega_chests']}**\n"
+                    f"⚡ Ultra: **{user['ultra_chests']}**"
+                )
+                self.record_chest_history(
+                    user_id, "All Chest Types", 1,
+                    f"Opened {normal_count} normal, {mega_count} Mega, {ultra_count} Ultra; gained {mega_reward + ultra_reward} normal chests"
+                )
+                await self.save_data()
+                await interaction.edit_original_response(
+                    view=self.OpenAllResultView(self, user_id, f"# 📦 Open All Chests\n\n{summary}", self.color_main())
+                )
+        except Exception as e:
+            print(f"❌ Open all chest types error: {repr(e)}")
+            try:
+                await interaction.followup.send(self.t(user_id, "error"), ephemeral=True)
+            except Exception:
+                pass
+
+    # =========================================================
+    # DAILY
+    # =========================================================
+
+    async def claim_daily(
+        self,
+        interaction,
+        user_id
+    ):
+
+        if await self.phoenix_block(
+            interaction,
+            user_id
+        ):
+            return
+
+        await interaction.response.defer()
+
+        try:
+
+            async with self.open_lock:
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                now = int(
+                    time.time()
+                )
+
+                if user["daily_next"] > now:
+
+                    await interaction.followup.send(
+                        self.t(
+                            user_id,
+                            "daily_unavailable",
+                            timestamp=f"<t:{user['daily_next']}:R>"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                user["daily_next"] = (
+                    now + DAILY_COOLDOWN
+                )
+
+                reward = self.roll_role()
+
+                if (
+                    reward["role_id"] == PHOENIX_ROLE_ID
+                    and self.phoenix_count(interaction.guild) >= PHOENIX_MAX
+                ):
+                    reward = ROLE_REWARDS[-2]
+
+                mega_bonus = (
+                    random.random() < 0.05
+                )
+
+                ultra_bonus = (
+                    random.random() < 0.01
+                )
+
+                if mega_bonus:
+                    user["mega_chests"] += 1
+
+                if ultra_bonus:
+                    user["ultra_chests"] += 1
+
+                await self.save_data()
+
+                role_given = await self.give_role_if_higher(
+                    interaction.user,
+                    reward
+                )
+
+                lang = self.language(
+                    user_id
+                )
+
+                reward_name = reward["name"][lang]
+
+                description = (
+                    f"{self.t(user_id, 'reward')}\n"
+                    f"{reward['emoji']} **{reward_name}**"
+                )
+
+                if not role_given:
+
+                    description += (
+                        f"\n\n{self.t(user_id, 'role_not_given')}"
+                    )
+
+                if mega_bonus:
+
+                    description += (
+                        f"\n\n💎 {self.t(user_id, 'mega_bonus')}"
+                    )
+
+                if ultra_bonus:
+
+                    description += (
+                        f"\n⚡ {self.t(user_id, 'ultra_bonus')}"
+                    )
+
+                description += (
+                    f"\n\n"
+                    f"<t:{user['daily_next']}:R>"
+                )
+
+                await interaction.edit_original_response(
+                    view=self.MainView(
+                        self,
+                        user_id,
+                        notice=(
+                            f"# {self.t(user_id, 'daily_claimed')}\n\n"
+                            f"{description}"
+                        )
+                    )
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Daily error: {repr(e)}"
+            )
+
+            try:
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "error"
+                    ),
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+    # =========================================================
+    # WEEKLY
+    # =========================================================
+
+    async def claim_weekly(
+        self,
+        interaction,
+        user_id
+    ):
+
+        if await self.phoenix_block(
+            interaction,
+            user_id
+        ):
+            return
+
+        await interaction.response.defer()
+
+        try:
+
+            async with self.open_lock:
+
+                user = self.get_user_data(
+                    user_id
+                )
+
+                now = int(
+                    time.time()
+                )
+
+                if user["weekly_next"] > now:
+
+                    await interaction.followup.send(
+                        self.t(
+                            user_id,
+                            "weekly_unavailable",
+                            timestamp=f"<t:{user['weekly_next']}:R>"
+                        ),
+                        ephemeral=True
+                    )
+
+                    return
+
+                user["weekly_next"] = (
+                    now + WEEKLY_COOLDOWN
+                )
+
+                if random.random() < 0.05:
+                    reward = 20
+                else:
+                    reward = random.randint(
+                        1,
+                        10
+                    )
+
+                user["chests"] += reward
+
+                await self.save_data()
+
+                await interaction.edit_original_response(
+                    view=self.MainView(
+                        self,
+                        user_id,
+                        notice=(
+                            f"# {self.t(user_id, 'weekly_claimed')}\n\n"
+                            f"🎁 **+{reward} {self.t(user_id, 'normal_word')}**\n\n"
+                            f"<t:{user['weekly_next']}:R>"
+                        )
+                    )
+                )
+
+        except Exception as e:
+
+            print(
+                f"❌ Weekly error: {repr(e)}"
+            )
+
+            try:
+                await interaction.followup.send(
+                    self.t(
+                        user_id,
+                        "error"
+                    ),
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+    # =========================================================
+    # ADMIN CHESTS
+    # =========================================================
+
+    # =========================================================
+    # PREFIX COMMANDS RESTORED
+    # =========================================================
+
+    @commands.command(name="chests")
+    @commands.guild_only()
+    async def chests_command(self, ctx):
+        """Open the chest menu."""
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+        user_id = ctx.author.id
+        self.menu_started_at[user_id] = asyncio.get_running_loop().time()
+        user = self.get_user_data(user_id)
+        if not user.get("language"):
+            view = self.LanguageView(self, user_id)
+        else:
+            view = self.MainView(self, user_id)
+        await ctx.send(view=view)
+
+    @commands.group(
+        name="chest",
+        invoke_without_command=True
+    )
+    @commands.guild_only()
+    async def chest_group(self, ctx):
+        """Chest subcommands."""
+        # !chest alone intentionally does nothing; use !chest info.
+        return
+
+    @chest_group.command(name="info")
+    async def chest_info_command(self, ctx):
+        """Show a language selector; only the bot owner can use this command."""
+        if ctx.author.id != OWNER_ID:
+            return
+
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+        user_id = ctx.author.id
+        view = self.LanguageView(self, user_id, info_only=True)
+        await ctx.send(view=view)
+
+    @commands.group(
+        name="admin",
+        invoke_without_command=True
+    )
+    async def admin(
+        self,
+        ctx
+    ):
+
+        if ctx.author.id != OWNER_ID:
+            return
+
+        await ctx.send(
+            "❌ Unknown admin command.",
+            delete_after=5
+        )
+
+    @admin.command(
+        name="chests"
+    )
+    async def admin_chests(
+        self,
+        ctx
+    ):
+
+        if ctx.author.id != OWNER_ID:
+            return
+
+        embed = discord.Embed(
+            title="🎁 Chest Administration",
+            description=(
+                "Click the button below to add "
+                "chests to a user."
+            ),
+            color=discord.Color.blurple()
+        )
+
+        await ctx.send(
+            embed=embed,
+            view=self.AdminChestsView(self)
+        )
+
+        try:
+            await ctx.message.delete()
+
+        except (
+            discord.Forbidden,
+            discord.HTTPException
+        ):
+            pass
+
+    class AdminChestModal(
+        discord.ui.Modal,
+        title="Add Chests"
+    ):
+
+        user = discord.ui.TextInput(
+            label="User",
+            placeholder="User ID or @mention",
+            required=True
+        )
+
+        quantity = discord.ui.TextInput(
+            label="Quantity",
+            placeholder="Example: 10",
+            required=True
+        )
+
+        chest = discord.ui.TextInput(
+            label="Chest",
+            placeholder="chest / mega / ultra",
+            required=True
+        )
+
+        def __init__(self, cog):
+
+            super().__init__()
+
+            self.cog = cog
+
+        async def on_submit(
+            self,
+            interaction
+        ):
+
+            if interaction.user.id != OWNER_ID:
+
+                await interaction.response.send_message(
+                    "❌ You do not have permission to use this.",
+                    ephemeral=True
+                )
+
+                return
+
+            raw_user = self.user.value.strip()
+
+            raw_user = (
+                raw_user
+                .replace("<@", "")
+                .replace("!", "")
+                .replace(">", "")
+            )
+
+            try:
+
+                user_id = int(
+                    raw_user
+                )
+
+            except ValueError:
+
+                await interaction.response.send_message(
+                    "❌ Invalid user ID or mention.",
+                    ephemeral=True
+                )
+
+                return
+
+            try:
+
+                amount = int(
+                    self.quantity.value.strip()
+                )
+
+                if amount <= 0:
+                    raise ValueError
+
+            except ValueError:
+
+                await interaction.response.send_message(
+                    "❌ Quantity must be a positive number.",
+                    ephemeral=True
+                )
+
+                return
+
+            chest_type = (
+                self.chest.value
+                .strip()
+                .lower()
+            )
+
+            aliases = {
+                "chest": "chest",
+                "normal": "chest",
+                "сундук": "chest",
+                "обычный": "chest",
+                "mega": "mega",
+                "мега": "mega",
+                "мега-сундук": "mega",
+                "ultra": "ultra",
+                "ультра": "ultra",
+                "ультра-сундук": "ultra",
+            }
+            chest_type = aliases.get(chest_type)
+            if chest_type is None:
+                await interaction.response.send_message(
+                    "❌ Chest must be chest, mega, or ultra.",
+                    ephemeral=True
+                )
+                return
+
+            added = await self.cog.add_chests(user_id, amount, chest_type)
+            if not added:
+                await interaction.response.send_message(
+                    "❌ Could not add chests. Check the quantity and chest type.",
+                    ephemeral=True
+                )
+                return
+
+            await interaction.response.send_message(
+                f"✅ Added **{amount}** `{chest_type}` chest(s) to <@{user_id}>.",
+                ephemeral=True
+            )
+
+    class AdminChestsView(discord.ui.View):
+        def __init__(self, cog):
+            super().__init__(timeout=None)
+            self.cog = cog
+
+        @discord.ui.button(
+            label="Add Chests",
+            style=discord.ButtonStyle.green,
+            emoji="🎁",
+            custom_id="admin_chests_add"
+        )
+        async def add_chests_button(self, interaction, button):
+            if interaction.user.id != OWNER_ID:
+                await interaction.response.send_message(
+                    "❌ You do not have permission to use this.",
+                    ephemeral=True
+                )
+                return
+            await interaction.response.send_modal(
+                self.cog.AdminChestModal(self.cog)
+            )
+
+
+def start_chest_reward_api(bot, cog):
+    """Register the authenticated reward endpoint on main.py's existing Flask app."""
+    secret = os.environ.get("CHEST_API_KEY", "")
+    if not secret:
+        print("⚠️ CHEST_API_KEY is missing; reward API is disabled.")
+        return
+
+    # main.py must assign its already-running Flask app to bot.web_app
+    # before loading this extension. Never start a second Flask server here.
+    app = getattr(bot, "web_app", None)
+    if app is None:
+        print("❌ Chest reward API disabled: existing Flask app was not attached to bot.web_app.")
+        return
+
+    if not hasattr(cog, "api_transaction_lock"):
+        cog.api_transaction_lock = asyncio.Lock()
+
+    async def apply_reward(payload):
+        transaction_id = str(payload["transaction_id"])
+        async with cog.api_transaction_lock:
+            processed = cog.data.setdefault("api_transactions", [])
+            if transaction_id in processed:
+                return {"ok": True, "duplicate": True}
+
+            success = await cog.add_chests(
+                int(payload["user_id"]),
+                int(payload["amount"]),
+                str(payload["chest_type"])
+            )
+            if not success:
+                return {"ok": False, "error": "reward_rejected"}
+
+            processed.append(transaction_id)
+            await cog.save_data()
+            return {"ok": True, "duplicate": False}
+
+    @app.post("/api/chests/add")
+    def add_chests_endpoint():
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {secret}":
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            user_id = int(payload["user_id"])
+            amount = int(payload["amount"])
+            chest_type = str(payload["chest_type"])
+            transaction_id = str(payload["transaction_id"]).strip()
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid_payload"}), 400
+
+        if (
+            user_id <= 0
+            or not 1 <= amount <= 10000
+            or chest_type not in ("chest", "ultra")
+            or not transaction_id
+            or len(transaction_id) > 200
+        ):
+            return jsonify({"ok": False, "error": "invalid_payload"}), 400
+
+        try:
+            result = asyncio.run_coroutine_threadsafe(
+                apply_reward({
+                    "user_id": user_id,
+                    "amount": amount,
+                    "chest_type": chest_type,
+                    "transaction_id": transaction_id,
+                }),
+                bot.loop
+            ).result(timeout=20)
+            return jsonify(result), 200 if result.get("ok") else 400
+        except Exception as exc:
+            print(f"Chest reward API error: {exc}")
+            return jsonify({"ok": False, "error": "internal_error"}), 500
+
+    print("✅ Chest reward API route registered on the existing Flask app.")
+
+
+async def setup(bot):
+    cog = Chests(bot)
+    await bot.add_cog(cog)
+    start_chest_reward_api(bot, cog)
+    bot.add_view(cog.AdminChestsView(cog))
+
+    # Re-register the persistent public selector used by !chest info.
+    # Its custom_id is stable, so the select keeps working after a restart.
+    bot.add_view(cog.LanguageView(cog, OWNER_ID, info_only=True))
+
+    print("✅ Chests cog loaded!")
