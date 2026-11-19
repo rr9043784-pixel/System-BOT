@@ -28,7 +28,7 @@ class BotVoiceView(discord.ui.View):
         self.cog = cog
         self.owner_id = owner_id
         self.guild = guild
-        self.selected_channel: Optional[discord.VoiceChannel] = None
+        self.selected_channel = None
         self.duration_key: Optional[str] = None
         self.message = None
 
@@ -38,7 +38,7 @@ class BotVoiceView(discord.ui.View):
         # interacting owner can access them; the bot still needs View Channel
         # and Connect permissions to join.
         self.channel_select = discord.ui.ChannelSelect(
-            channel_types=[discord.ChannelType.voice],
+            channel_types=[discord.ChannelType.voice, discord.ChannelType.stage_voice],
             placeholder="Select a voice channel",
             min_values=1,
             max_values=1,
@@ -114,9 +114,11 @@ class BotVoiceView(discord.ui.View):
 
     async def channel_selected(self, interaction: discord.Interaction):
         channel = self.channel_select.values[0]
-        if not isinstance(channel, discord.VoiceChannel):
+        # ChannelSelect may resolve a regular voice channel or a Stage channel.
+        # Both support a voice connection; private status does not change the type.
+        if not hasattr(channel, "connect") or not hasattr(channel, "permissions_for"):
             await interaction.response.send_message(
-                "❌ Please select a standard voice channel.", ephemeral=True
+                "❌ Please select a voice or stage channel.", ephemeral=True
             )
             return
         if self.guild.voice_client and self.guild.voice_client.is_connected():
