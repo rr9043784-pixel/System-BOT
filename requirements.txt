@@ -3,3 +3,4 @@ Flask
 numpy
 aiohttp
 pillow
+PyNaCl>=1.5.0
