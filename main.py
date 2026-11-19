@@ -161,22 +161,15 @@ bot.web_app = app
 # =========================================================
 
 async def set_bot_presence():
+    """Restore the presence saved by status_bot.py."""
     try:
-        await bot.change_presence(
-            status=discord.Status.idle,
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                name=(
-                    "👻 Monitors the order on the server 👻⠀ "
-                    "➜➜ 🎮『𝗟𝗘𝗚𝗘𝗡𝗗𝗦』🇷🇺🇬🇧"
-                ),
-            ),
-        )
+        from status_bot import apply_saved_presence
 
-        logging.info("Presence set: Idle / Watching")
+        await apply_saved_presence(bot)
+        logging.info("Bot presence restored from status_data.json")
 
     except Exception:
-        logging.exception("Failed to set bot presence")
+        logging.exception("Failed to restore saved bot presence")
 
 
 # =========================================================
@@ -408,6 +401,7 @@ async def update_stats_for_guild(guild: discord.Guild):
 
 @tasks.loop(minutes=1)
 async def update_stats_message():
+    # Reapply the configured presence without overwriting user settings.
     await set_bot_presence()
 
     guild_id = stats_data.get("guild_id")
