@@ -34,9 +34,6 @@ class BotVoiceView(discord.ui.View):
 
         connected = bool(guild.voice_client and guild.voice_client.is_connected())
 
-        # Voice-only selector. Private channels can be selected when the
-        # interacting owner can access them; the bot still needs View Channel
-        # and Connect permissions to join.
         self.channel_select = discord.ui.ChannelSelect(
             channel_types=[discord.ChannelType.voice, discord.ChannelType.stage_voice],
             placeholder="Select a voice channel",
@@ -60,15 +57,21 @@ class BotVoiceView(discord.ui.View):
         self.add_item(self.duration_select)
 
         self.join_button = discord.ui.Button(
-            label="Join Voice", emoji="🔊",
-            style=discord.ButtonStyle.success, row=2, disabled=True,
+            label="Join Voice",
+            emoji="🔊",
+            style=discord.ButtonStyle.success,
+            row=2,
+            disabled=True,
         )
         self.join_button.callback = self.join_voice
         self.add_item(self.join_button)
 
         self.leave_button = discord.ui.Button(
-            label="Leave Voice", emoji="🔇",
-            style=discord.ButtonStyle.danger, row=2, disabled=not connected,
+            label="Leave Voice",
+            emoji="🔇",
+            style=discord.ButtonStyle.danger,
+            row=2,
+            disabled=not connected,
         )
         self.leave_button.callback = self.leave_voice
         self.add_item(self.leave_button)
@@ -79,7 +82,8 @@ class BotVoiceView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
-                "❌ This control panel belongs to the bot owner.", ephemeral=True
+                "❌ This control panel belongs to the bot owner.",
+                ephemeral=True,
             )
             return False
         return True
@@ -87,17 +91,24 @@ class BotVoiceView(discord.ui.View):
     def build_embed(self) -> discord.Embed:
         vc = self.guild.voice_client
         connected = bool(vc and vc.is_connected())
+
         if connected:
-            channel_text, status = vc.channel.mention, "🟢 Connected"
+            channel_text = vc.channel.mention
+            status = "🟢 Connected"
             expiry = self.cog.expirations.get(self.guild.id)
-            duration_text = "Infinite" if expiry is None else (
-                f"<t:{int(expiry)}:R>" if expiry else "Not set"
+            duration_text = (
+                "Infinite"
+                if expiry is None and self.guild.id in self.cog.expirations
+                else (f"<t:{int(expiry)}:R>" if expiry else "Not set")
             )
         elif self.selected_channel:
-            channel_text, status = self.selected_channel.mention, "🟡 Channel selected"
+            channel_text = self.selected_channel.mention
+            status = "🟡 Channel selected"
             duration_text = self.duration_key or "Not selected"
         else:
-            channel_text, status, duration_text = "Not selected", "⚪ Waiting for channel", "Not selected"
+            channel_text = "Not selected"
+            status = "⚪ Waiting for channel"
+            duration_text = "Not selected"
 
         embed = discord.Embed(
             title="🔊 Bot Voice Control",
@@ -113,19 +124,60 @@ class BotVoiceView(discord.ui.View):
         return embed
 
     async def channel_selected(self, interaction: discord.Interaction):
-        channel = self.channel_select.values[0]
-        # ChannelSelect may resolve a regular voice channel or a Stage channel.
-        # Both support a voice connection; private status does not change the type.
-        if not hasattr(channel, "connect") or not hasattr(channel, "permissions_for"):
+        # ChannelSelect can return an AppCommandChannel wrapper rather than a
+        # cached VoiceChannel instance. Resolve its ID to the real guild channel.
+        selected = self.channel_select.values[0]
+        selected_id = getattr(selected, "id", None)
+
+        if selected_id is None:
             await interaction.response.send_message(
-                "❌ Please select a voice or stage channel.", ephemeral=True
+                "❌ Discord did not provide a valid channel. Please try again.",
+                ephemeral=True,
             )
             return
+
+        channel = self.guild.get_channel(int(selected_id))
+        if channel is None:
+            try:
+                channel = await self.guild.fetch_channel(int(selected_id))
+            except discord.Forbidden:
+                await interaction.response.send_message(
+                    "❌ The bot cannot access that private channel. Give it "
+                    "**View Channel** permission, then try again.",
+                    ephemeral=True,
+                )
+                return
+            except discord.NotFound:
+                await interaction.response.send_message(
+                    "❌ That channel could not be found. Please select it again.",
+                    ephemeral=True,
+                )
+                return
+            except discord.HTTPException:
+                logging.exception("Could not resolve selected voice channel")
+                await interaction.response.send_message(
+                    "❌ Discord could not load that channel. Please try again.",
+                    ephemeral=True,
+                )
+                return
+
+        if getattr(channel, "type", None) not in (
+            discord.ChannelType.voice,
+            discord.ChannelType.stage_voice,
+        ):
+            await interaction.response.send_message(
+                "❌ Please select a voice or stage channel.",
+                ephemeral=True,
+            )
+            return
+
         if self.guild.voice_client and self.guild.voice_client.is_connected():
             await interaction.response.send_message(
-                "❌ The bot is already connected to a voice channel.", ephemeral=True
+                "❌ The bot is already connected to a voice channel.",
+                ephemeral=True,
             )
             return
+
         self.selected_channel = channel
         self.channel_select.disabled = True
         self.duration_select.disabled = False
@@ -140,21 +192,31 @@ class BotVoiceView(discord.ui.View):
     async def join_voice(self, interaction: discord.Interaction):
         if self.selected_channel is None or self.duration_key is None:
             await interaction.response.send_message(
-                "❌ Select a voice channel and duration first.", ephemeral=True
+                "❌ Select a voice channel and duration first.",
+                ephemeral=True,
             )
             return
+
         if self.guild.voice_client and self.guild.voice_client.is_connected():
             await interaction.response.send_message(
-                "❌ The bot is already connected to a voice channel.", ephemeral=True
+                "❌ The bot is already connected to a voice channel.",
+                ephemeral=True,
             )
             return
-        bot_member = self.guild.me
-        channel_permissions = self.selected_channel.permissions_for(bot_member)
 
+        bot_member = self.guild.me
+        if bot_member is None:
+            await interaction.response.send_message(
+                "❌ Could not identify the bot member in this server.",
+                ephemeral=True,
+            )
+            return
+
+        channel_permissions = self.selected_channel.permissions_for(bot_member)
         if not channel_permissions.view_channel or not channel_permissions.connect:
             await interaction.response.send_message(
                 "❌ I need **View Channel** and **Connect** permissions in that "
-                "voice channel. This also applies to private voice channels.",
+                "voice channel. For a private channel, allow the bot explicitly.",
                 ephemeral=True,
             )
             return
@@ -165,19 +227,23 @@ class BotVoiceView(discord.ui.View):
             seconds = DURATIONS[self.duration_key]
             expiry = time.time() + seconds if seconds is not None else None
             self.cog.set_expiration(self.guild.id, expiry)
+
             self.channel_select.disabled = True
             self.duration_select.disabled = True
             self.join_button.disabled = True
             self.leave_button.disabled = False
             await interaction.edit_original_response(embed=self.build_embed(), view=self)
+
         except discord.Forbidden:
             await interaction.followup.send(
-                "❌ I don't have permission to join that voice channel.", ephemeral=True
+                "❌ I don't have permission to join that voice channel.",
+                ephemeral=True,
             )
         except (discord.ClientException, discord.HTTPException):
             logging.exception("Failed to join voice channel")
             await interaction.followup.send(
-                "❌ Failed to join the voice channel.", ephemeral=True
+                "❌ Failed to join the voice channel.",
+                ephemeral=True,
             )
 
     async def leave_voice(self, interaction: discord.Interaction):
@@ -186,21 +252,25 @@ class BotVoiceView(discord.ui.View):
             self.leave_button.disabled = True
             await interaction.response.edit_message(embed=self.build_embed(), view=self)
             return
+
         await interaction.response.defer()
         try:
             await vc.disconnect(force=True)
             self.cog.cancel_expiration(self.guild.id)
+
             self.channel_select.disabled = False
             self.duration_select.disabled = True
             self.join_button.disabled = True
             self.leave_button.disabled = True
             self.selected_channel = None
             self.duration_key = None
+
             await interaction.edit_original_response(embed=self.build_embed(), view=self)
         except discord.HTTPException:
             logging.exception("Failed to leave voice channel")
             await interaction.followup.send(
-                "❌ Failed to leave the voice channel.", ephemeral=True
+                "❌ Failed to leave the voice channel.",
+                ephemeral=True,
             )
 
     async def on_timeout(self):
@@ -249,23 +319,29 @@ class BotVoice(commands.Cog):
             self.expirations.pop(guild_id, None)
 
     @app_commands.command(
-        name="botvoice", description="Open the bot voice control panel"
+        name="botvoice",
+        description="Open the bot voice control panel",
     )
     async def botvoice(self, interaction: discord.Interaction):
-        # Strict owner-only access; all other users are denied.
         if interaction.user.id != OWNER_ID:
             await interaction.response.send_message(
-                "❌ You do not have permission to use this command.", ephemeral=True
+                "❌ You do not have permission to use this command.",
+                ephemeral=True,
             )
             return
+
         if interaction.guild is None:
             await interaction.response.send_message(
-                "❌ This command can only be used in a server.", ephemeral=True
+                "❌ This command can only be used in a server.",
+                ephemeral=True,
             )
             return
+
         view = BotVoiceView(self, interaction.user.id, interaction.guild)
         await interaction.response.send_message(
-            embed=view.build_embed(), view=view, ephemeral=True
+            embed=view.build_embed(),
+            view=view,
+            ephemeral=True,
         )
         try:
             view.message = await interaction.original_response()
