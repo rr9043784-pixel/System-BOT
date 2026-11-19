@@ -8,11 +8,12 @@ Add this file as gameprofiles.py and load it as an extension:
 Required:
     pip install -U "discord.py>=2.6" aiohttp pillow
 
-Optional Railway variable for Brawl Stars:
-    BRAWL_STARS_API_TOKEN = your official Supercell API token
+Railway variables:
+    SUPERCELL_API_TOKEN = official Supercell API token (Brawl Stars / Clash Royale / Clash of Clans)
+    STEAM_API_KEY = Steam Web API key
 
-Roblox and Minecraft profile lookups use public endpoints.
-Brawl Stars player statistics require a valid official API token.
+Roblox/Minecraft public lookups do not require API keys. Some private Roblox
+account details (Voice Chat and Robux balance) are not exposed by public APIs.
 """
 
 from __future__ import annotations
@@ -44,15 +45,25 @@ except ImportError:
 ROBLOX_EMOJI = "<:Roblox_icon:1567966255095484677>"
 MINECRAFT_EMOJI = "<:Minecraft_icon:1567966252880896060>"
 BRAWL_EMOJI = "<:Brawl_Stars_icon:1567966256945172642>"
+STEAM_EMOJI = "<:Steam_icon:1573047356482388078>"
+CLASH_ROYALE_EMOJI = "<:Clash_Royale_icon:1573047354532036778>"
+CLASH_CLANS_EMOJI = "<:Clash_of_Clans_icon:1573047351709270246>"
 
-BRAWL_STARS_API_TOKEN = os.getenv("BRAWL_STARS_API_TOKEN", "").strip()
+SUPERCELL_API_TOKEN = os.getenv("SUPERCELL_API_TOKEN", "").strip()
+# Backward compatibility with the original variable name.
+if not SUPERCELL_API_TOKEN:
+    SUPERCELL_API_TOKEN = os.getenv("BRAWL_STARS_API_TOKEN", "").strip()
+STEAM_API_KEY = os.getenv("STEAM_API_KEY", "").strip()
 VIEW_TIMEOUT = 300  # 5 minutes
-PAGE_SIZE = 3
+PAGE_SIZE = 6
 
 GAME_LIST = [
     ("roblox", "Roblox", ROBLOX_EMOJI),
     ("minecraft", "Minecraft", MINECRAFT_EMOJI),
     ("brawlstars", "Brawl Stars", BRAWL_EMOJI),
+    ("clashroyale", "Clash Royale", CLASH_ROYALE_EMOJI),
+    ("clashofclans", "Clash of Clans", CLASH_CLANS_EMOJI),
+    ("steam", "Steam", STEAM_EMOJI),
 ]
 
 DEFAULT_ACCENT = discord.Colour(0x5865F2)
@@ -279,7 +290,11 @@ async def get_roblox_profile(username: str) -> dict:
             ("Display Name", profile.get("displayName", profile.get("name", username))),
             ("User ID", str(user_id)),
             ("Created", format_date(profile.get("created"))),
-            ("Description", (profile.get("description") or "No description provided.")[:900]),
+            ("Description", (profile.get("description") or "No description provided.")[:700]),
+            ("Account Status", "Banned" if profile.get("isBanned") is True else ("Not banned" if profile.get("isBanned") is False else "Unknown")),
+            ("Verified Badge", "Yes" if user.get("hasVerifiedBadge") is True else "No"),
+            ("Voice Chat", "Not publicly available"),
+            ("Robux Balance", "Private — not available through public API"),
         ],
     }
 
@@ -319,7 +334,7 @@ async def get_minecraft_profile(username: str) -> dict:
 
 
 async def get_brawlstars_profile(player_tag: str) -> dict:
-    if not BRAWL_STARS_API_TOKEN:
+    if not SUPERCELL_API_TOKEN:
         raise RuntimeError(
             "Brawl Stars profile lookup is not configured yet. "
             "Add the official Supercell API token to Railway as "
@@ -330,7 +345,7 @@ async def get_brawlstars_profile(player_tag: str) -> dict:
     if not re.fullmatch(r"[A-Z0-9]{3,15}", tag):
         raise ValueError("Enter a valid Brawl Stars player tag (with or without #).")
 
-    headers = {"Authorization": f"Bearer {BRAWL_STARS_API_TOKEN}"}
+    headers = {"Authorization": f"Bearer {SUPERCELL_API_TOKEN}"}
     player = await fetch_json(f"https://api.brawlstars.com/v1/players/%23{tag}", headers=headers)
 
     icon_id = (player.get("icon") or {}).get("id")
@@ -365,6 +380,122 @@ async def get_brawlstars_profile(player_tag: str) -> dict:
     }
 
 
+
+async def get_supercell_profile(game_key: str, player_tag: str) -> dict:
+    tag = clean_tag(player_tag)
+    if not re.fullmatch(r"[A-Z0-9]{3,15}", tag):
+        raise ValueError("Enter a valid player tag (with or without #).")
+    if not SUPERCELL_API_TOKEN:
+        raise RuntimeError("Add SUPERCELL_API_TOKEN to Railway Variables and redeploy.")
+    headers = {"Authorization": f"Bearer {SUPERCELL_API_TOKEN}"}
+    if game_key == "clashroyale":
+        data = await fetch_json(f"https://api.clashroyale.com/v1/players/%23{tag}", headers=headers)
+        clan = data.get("clan") or {}
+        fields = [
+            ("Player Tag", f"#{data.get('tag', tag)}"),
+            ("Level", str(data.get("expLevel", "Unknown"))),
+            ("Trophies", f"{data.get('trophies', 0):,}"),
+            ("Best Trophies", f"{data.get('bestTrophies', 0):,}"),
+            ("Wins", f"{data.get('wins', 0):,}"),
+            ("Losses", f"{data.get('losses', 0):,}"),
+            ("Battle Count", f"{data.get('battleCount', 0):,}"),
+            ("Three Crown Wins", f"{data.get('threeCrownWins', 0):,}"),
+            ("Clan", clan.get("name", "No clan")),
+        ]
+        game_name, url = "Clash Royale", f"https://royaleapi.com/player/{tag}"
+        icon = (data.get("clan") or {}).get("badgeId")
+        avatar = None
+    else:
+        data = await fetch_json(f"https://api.clashofclans.com/v1/players/%23{tag}", headers=headers)
+        clan = data.get("clan") or {}
+        league = data.get("league") or {}
+        townhall = data.get("townHallLevel", "Unknown")
+        fields = [
+            ("Player Tag", f"#{data.get('tag', tag)}"),
+            ("Town Hall", str(townhall)),
+            ("Experience Level", str(data.get("expLevel", "Unknown"))),
+            ("Trophies", f"{data.get('trophies', 0):,}"),
+            ("Best Trophies", f"{data.get('bestTrophies', 0):,}"),
+            ("War Stars", f"{data.get('warStars', 0):,}"),
+            ("Attack Wins", f"{data.get('attackWins', 0):,}"),
+            ("Defense Wins", f"{data.get('defenseWins', 0):,}"),
+            ("League", league.get("name", "Unranked")),
+            ("Clan", clan.get("name", "No clan")),
+        ]
+        game_name, url = "Clash of Clans", f"https://www.clashofstats.com/players/{tag}/summary"
+        avatar = None
+    return {
+        "game": game_name, "username": data.get("name", tag),
+        "display_name": data.get("name", tag), "id": f"#{data.get('tag', tag)}",
+        "description": f"{game_name} player profile.", "created": "Not publicly available",
+        "url": url, "avatar": avatar, "image_bytes": b"", "accent": DEFAULT_ACCENT,
+        "fields": fields,
+    }
+
+
+async def get_steam_profile(value: str) -> dict:
+    value = value.strip()
+    if not STEAM_API_KEY:
+        raise RuntimeError("Add STEAM_API_KEY to Railway Variables and redeploy.")
+    if not value:
+        raise ValueError("Enter a Steam vanity URL name or 17-digit SteamID64.")
+    if re.fullmatch(r"\d{17}", value):
+        steam_id = value
+    else:
+        resolved = await fetch_json(
+            "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
+            f"?key={STEAM_API_KEY}&vanityurl={value}"
+        )
+        response = resolved.get("response", {})
+        if response.get("success") != 1:
+            raise LookupError("Steam profile was not found. Enter a public vanity name or SteamID64.")
+        steam_id = str(response["steamid"])
+
+    summary = await fetch_json(
+        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+        f"?key={STEAM_API_KEY}&steamids={steam_id}"
+    )
+    players = summary.get("response", {}).get("players", [])
+    if not players:
+        raise LookupError("Steam profile was not found.")
+    player = players[0]
+    bans_result = await fetch_json(
+        "https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/"
+        f"?key={STEAM_API_KEY}&steamids={steam_id}"
+    )
+    ban_data = (bans_result.get("players") or [{}])[0]
+    level_result = await fetch_json(
+        "https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/"
+        f"?key={STEAM_API_KEY}&steamid={steam_id}"
+    )
+    level = (level_result.get("response") or {}).get("player_level", "Unavailable")
+    avatar = player.get("avatarfull")
+    image_bytes = await fetch_bytes(avatar) if avatar else b""
+    fields = [
+        ("Steam ID", steam_id),
+        ("Real Name", player.get("realname") or "Not provided"),
+        ("Country", player.get("loccountrycode") or "Not provided"),
+        ("Account Created", format_date(
+            datetime.fromtimestamp(player["timecreated"], timezone.utc).isoformat()
+        ) if player.get("timecreated") else "Private / unavailable"),
+        ("Visibility", {1: "Private", 3: "Public"}.get(player.get("communityvisibilitystate"), "Unknown")),
+        ("VAC Banned", "Yes" if ban_data.get("VACBanned") else "No"),
+        ("Game Bans", str(ban_data.get("NumberOfGameBans", 0))),
+        ("Community Banned", "Yes" if ban_data.get("CommunityBanned") else "No"),
+        ("Economy Ban", str(ban_data.get("EconomyBan", "None"))),
+        ("Steam Level", str(level)),
+    ]
+    return {
+        "game": "Steam", "username": player.get("personaname", value),
+        "display_name": player.get("personaname", value), "id": steam_id,
+        "description": "Steam community profile.", "created": fields[3][1],
+        "url": player.get("profileurl", f"https://steamcommunity.com/profiles/{steam_id}"),
+        "avatar": avatar, "image_bytes": image_bytes,
+        "accent": color_from_image(image_bytes) if image_bytes else DEFAULT_ACCENT,
+        "fields": fields,
+    }
+
+
 # ───────────────────────────── Components V2 views ──────────────────
 
 def game_emoji(name: str) -> str:
@@ -372,6 +503,9 @@ def game_emoji(name: str) -> str:
         "Roblox": ROBLOX_EMOJI,
         "Minecraft": MINECRAFT_EMOJI,
         "Brawl Stars": BRAWL_EMOJI,
+        "Clash Royale": CLASH_ROYALE_EMOJI,
+        "Clash of Clans": CLASH_CLANS_EMOJI,
+        "Steam": STEAM_EMOJI,
     }.get(name, "🎮")
 
 
@@ -386,11 +520,17 @@ class GameProfileModal(discord.ui.Modal):
             "roblox": "Roblox username",
             "minecraft": "Minecraft username",
             "brawlstars": "Brawl Stars player tag",
+            "clashroyale": "Clash Royale player tag",
+            "clashofclans": "Clash of Clans player tag",
+            "steam": "Steam vanity name or SteamID64",
         }[game_key]
         placeholder = {
             "roblox": "Enter Roblox username",
             "minecraft": "Enter Minecraft username",
             "brawlstars": "Enter player tag (e.g. #ABC123)",
+            "clashroyale": "Enter player tag (e.g. #ABC123)",
+            "clashofclans": "Enter player tag (e.g. #ABC123)",
+            "steam": "Enter vanity name or 17-digit SteamID64",
         }[game_key]
 
         self.username = discord.ui.TextInput(
@@ -448,9 +588,15 @@ class GameProfileModal(discord.ui.Modal):
             if self.game_key == "minecraft":
                 profile = await get_minecraft_profile(username)
                 note = "Minecraft profile found, but ownership cannot currently be verified automatically."
-            else:
+            elif self.game_key == "brawlstars":
                 profile = await get_brawlstars_profile(username)
                 note = "Brawl Stars profile found, but the public API does not prove account ownership."
+            elif self.game_key in ("clashroyale", "clashofclans"):
+                profile = await get_supercell_profile(self.game_key, username)
+                note = "Profile found, but this API does not prove account ownership."
+            else:
+                profile = await get_steam_profile(username)
+                note = "Steam profile found, but this API does not prove account ownership."
             self.parent_view.profile = profile
             self.parent_view.accent = profile["accent"]
             await self.parent_view.show_unverified(note)
@@ -511,7 +657,10 @@ class GameProfilesView(discord.ui.LayoutView):
             discord.ui.TextDisplay(
                 f"{ROBLOX_EMOJI} **Roblox**\n"
                 f"{MINECRAFT_EMOJI} **Minecraft**\n"
-                f"{BRAWL_EMOJI} **Brawl Stars**"
+                f"{BRAWL_EMOJI} **Brawl Stars**\n"
+                f"{CLASH_ROYALE_EMOJI} **Clash Royale**\n"
+                f"{CLASH_CLANS_EMOJI} **Clash of Clans**\n"
+                f"{STEAM_EMOJI} **Steam**"
             ),
             discord.ui.Separator(),
             discord.ui.TextDisplay(
@@ -552,8 +701,12 @@ class GameProfilesView(discord.ui.LayoutView):
                     profile = await get_roblox_profile(username)
                 elif key == "minecraft":
                     profile = await get_minecraft_profile(username)
-                else:
+                elif key == "brawlstars":
                     profile = await get_brawlstars_profile(username)
+                elif key in ("clashroyale", "clashofclans"):
+                    profile = await get_supercell_profile(key, username)
+                else:
+                    profile = await get_steam_profile(username)
 
                 self.profile = profile
                 self.accent = profile["accent"]
@@ -762,7 +915,7 @@ class GameProfiles(commands.Cog):
 
     @app_commands.command(
         name="gameprofiles",
-        description="Open the interactive Roblox, Minecraft and Brawl Stars profile menu."
+        description="Open the interactive game profiles menu."
     )
     async def gameprofiles(self, interaction: discord.Interaction):
         view = GameProfilesView(interaction.user.id)
