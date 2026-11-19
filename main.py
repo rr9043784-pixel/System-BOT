@@ -37,6 +37,7 @@ EXTENSIONS = [
     "generates",
     "gameprofiles",
     "announcement_site",
+    "status_bot",
 ]
 
 logging.basicConfig(
