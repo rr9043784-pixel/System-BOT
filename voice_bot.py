@@ -1,4 +1,5 @@
 import asyncio
+import importlib.util
 import logging
 import time
 from typing import Optional
@@ -8,8 +9,10 @@ from discord import app_commands
 from discord.ext import commands
 
 OWNER_ID = 1176149190192152626
-CHANNELS_PER_PAGE = 25
-CONNECT_TIMEOUT = 25
+
+# 23 channel choices + up to 2 navigation choices = Discord's 25-option limit.
+CHANNELS_PER_PAGE = 23
+CONNECT_TIMEOUT = 30
 
 DURATIONS = {
     "5 minutes": 300,
@@ -23,10 +26,19 @@ DURATIONS = {
     "Infinite": None,
 }
 
+log = logging.getLogger(__name__)
+
+
+def voice_dependency_status() -> tuple[bool, str]:
+    """Return whether PyNaCl is importable, with a useful diagnostic."""
+    try:
+        import nacl  # noqa: F401
+        return True, "PyNaCl is available."
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
 
 class BotVoiceView(discord.ui.LayoutView):
-    """Components V2 control panel for the bot's voice connection."""
-
     def __init__(
         self,
         cog: "BotVoice",
@@ -46,7 +58,6 @@ class BotVoiceView(discord.ui.LayoutView):
         self.selected_channel_id = selected_channel_id
         self.duration_key = duration_key
         self.notice = notice
-        self.message = None
         self._build_layout()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -59,6 +70,8 @@ class BotVoiceView(discord.ui.LayoutView):
         return True
 
     def _bot_member(self):
+        if self.cog.bot.user is None:
+            return None
         return self.guild.me or self.guild.get_member(self.cog.bot.user.id)
 
     def _available_channels(self):
@@ -74,8 +87,8 @@ class BotVoiceView(discord.ui.LayoutView):
             ):
                 continue
 
-            permissions = channel.permissions_for(member)
-            if permissions.view_channel and permissions.connect:
+            perms = channel.permissions_for(member)
+            if perms.view_channel and perms.connect:
                 channels.append(channel)
 
         return sorted(
@@ -87,27 +100,24 @@ class BotVoiceView(discord.ui.LayoutView):
             ),
         )
 
-    def _connected_voice_client(self):
-        voice_client = self.guild.voice_client
-        if voice_client and voice_client.is_connected():
-            return voice_client
-        return None
+    def _voice_client(self):
+        vc = self.guild.voice_client
+        return vc if vc and vc.is_connected() else None
 
     def _status_text(self) -> str:
-        voice_client = self._connected_voice_client()
-        if voice_client:
+        vc = self._voice_client()
+        if vc:
             expiry = self.cog.expirations.get(self.guild.id, "missing")
             if expiry is None:
-                duration = "Infinite"
+                timer_text = "Infinite"
             elif expiry == "missing":
-                duration = "Timer not available"
+                timer_text = "Timer unavailable"
             else:
-                duration = f"<t:{int(expiry)}:R>"
-
+                timer_text = f"<t:{int(expiry)}:R>"
             return (
                 "🟢 **Status:** Connected\n"
-                f"🔊 **Channel:** {voice_client.channel.mention}\n"
-                f"⏱️ **Disconnect:** {duration}"
+                f"🔊 **Channel:** {vc.channel.mention}\n"
+                f"⏱️ **Disconnect:** {timer_text}"
             )
 
         channel = (
@@ -115,136 +125,131 @@ class BotVoiceView(discord.ui.LayoutView):
             if self.selected_channel_id
             else None
         )
-        channel_text = channel.mention if channel else "Not selected"
-        duration_text = self.duration_key or "Not selected"
-
         return (
             "⚪ **Status:** Disconnected\n"
-            f"🔊 **Channel:** {channel_text}\n"
-            f"⏱️ **Duration:** {duration_text}"
+            f"🔊 **Channel:** {channel.mention if channel else 'Not selected'}\n"
+            f"⏱️ **Duration:** {self.duration_key or 'Not selected'}"
         )
 
     def _build_layout(self):
         self.clear_items()
+        vc = self._voice_client()
+        connected = vc is not None
 
-        connected = self._connected_voice_client() is not None
-        channels = self._available_channels()
-        total_pages = max(1, (len(channels) + CHANNELS_PER_PAGE - 1) // CHANNELS_PER_PAGE)
-        self.page = min(self.page, total_pages - 1)
-
-        start = self.page * CHANNELS_PER_PAGE
-        page_channels = channels[start:start + CHANNELS_PER_PAGE]
-
-        text = (
-            "# 🔊 Bot Voice Control\n"
-            "Manage the bot's voice connection.\n\n"
-            f"{self._status_text()}\n\n"
-            f"📄 **Channel page:** {self.page + 1}/{total_pages}"
-        )
-        if self.notice:
-            text += f"\n\n{self.notice}"
-
-        container_items = [
-            discord.ui.TextDisplay(text),
+        body = [
+            discord.ui.TextDisplay("# 🔊 Bot Voice Control"),
+            discord.ui.TextDisplay(
+                "Manage the bot's voice connection.\n\n"
+                f"{self._status_text()}"
+            ),
             discord.ui.Separator(),
         ]
 
-        # If already connected, this new panel exposes only the Leave button.
+        if self.notice:
+            body.append(discord.ui.TextDisplay(self.notice))
+            body.append(discord.ui.Separator())
+
         if connected:
-            leave_button = discord.ui.Button(
+            leave = discord.ui.Button(
                 label="Leave Voice",
                 emoji="🔇",
                 style=discord.ButtonStyle.danger,
             )
-            leave_button.callback = self.leave_voice
-            container_items.append(discord.ui.ActionRow(leave_button))
+            leave.callback = self.leave_voice
+            body.append(discord.ui.ActionRow(leave))
             self.add_item(
-                discord.ui.Container(
-                    *container_items,
-                    accent_colour=discord.Colour.blurple(),
-                )
+                discord.ui.Container(*body, accent_colour=discord.Colour.blurple())
             )
             return
 
-        if page_channels:
-            options = []
-            for channel in page_channels:
-                category = channel.category.name if channel.category else "No category"
-                options.append(
-                    discord.SelectOption(
-                        label=channel.name[:100],
-                        value=str(channel.id),
-                        description=f"{category} • {channel.type.name.replace('_', ' ').title()}"[:100],
-                        default=(channel.id == self.selected_channel_id),
-                    )
-                )
+        channels = self._available_channels()
+        page_count = max(1, (len(channels) + CHANNELS_PER_PAGE - 1) // CHANNELS_PER_PAGE)
+        self.page = min(self.page, page_count - 1)
 
-            channel_select = discord.ui.Select(
-                placeholder="Choose a voice channel",
+        # The navigation entries are actual options in the channel dropdown.
+        start = self.page * CHANNELS_PER_PAGE
+        page_channels = channels[start:start + CHANNELS_PER_PAGE]
+        options = []
+
+        if self.page > 0:
+            options.append(
+                discord.SelectOption(
+                    label="⬅️ Previous Page",
+                    value="__previous_page__",
+                    description=f"Go to page {self.page}",
+                )
+            )
+
+        for channel in page_channels:
+            category = channel.category.name if channel.category else "No category"
+            options.append(
+                discord.SelectOption(
+                    label=channel.name[:100],
+                    value=str(channel.id),
+                    description=f"{category} • {channel.type.name.replace('_', ' ').title()}"[:100],
+                    default=(channel.id == self.selected_channel_id),
+                )
+            )
+
+        if self.page < page_count - 1:
+            options.append(
+                discord.SelectOption(
+                    label="➡️ Next Page",
+                    value="__next_page__",
+                    description=f"Go to page {self.page + 2}",
+                )
+            )
+
+        if options:
+            channel_menu = discord.ui.Select(
+                placeholder=f"Choose a voice channel • Page {self.page + 1}/{page_count}",
                 min_values=1,
                 max_values=1,
                 options=options,
                 disabled=self.selected_channel_id is not None,
             )
-            channel_select.callback = self.channel_selected
-            container_items.append(discord.ui.ActionRow(channel_select))
+            channel_menu.callback = self.channel_selected
+            body.append(discord.ui.ActionRow(channel_menu))
         else:
-            container_items.append(
+            body.append(
                 discord.ui.TextDisplay(
                     "⚠️ No voice channels are visible to the bot. "
-                    "Give the bot **View Channel** and **Connect** permissions."
+                    "Grant **View Channel** and **Connect** permissions."
                 )
             )
 
-        previous_button = discord.ui.Button(
-            label="Previous Page",
-            emoji="⬅️",
-            style=discord.ButtonStyle.secondary,
-            disabled=(self.page <= 0 or self.selected_channel_id is not None),
-        )
-        previous_button.callback = self.previous_page
-
-        next_button = discord.ui.Button(
-            label="Next Page",
-            emoji="➡️",
-            style=discord.ButtonStyle.secondary,
-            disabled=(
-                self.page >= total_pages - 1
-                or self.selected_channel_id is not None
+        # Keep the duration menu visible at all times; unlock it after channel selection.
+        duration_menu = discord.ui.Select(
+            placeholder=(
+                f"Duration: {self.duration_key}"
+                if self.duration_key
+                else "Select connection duration"
             ),
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    default=(name == self.duration_key),
+                )
+                for name in DURATIONS
+            ],
+            disabled=self.selected_channel_id is None,
         )
-        next_button.callback = self.next_page
-
-        container_items.append(
-            discord.ui.ActionRow(previous_button, next_button)
-        )
+        duration_menu.callback = self.duration_selected
+        body.append(discord.ui.ActionRow(duration_menu))
 
         if self.selected_channel_id is not None:
-            change_button = discord.ui.Button(
+            change = discord.ui.Button(
                 label="Change Channel",
                 emoji="🔄",
-                style=discord.ButtonStyle.primary,
+                style=discord.ButtonStyle.secondary,
             )
-            change_button.callback = self.change_channel
-            container_items.append(discord.ui.ActionRow(change_button))
+            change.callback = self.change_channel
+            body.append(discord.ui.ActionRow(change))
 
-            duration_select = discord.ui.Select(
-                placeholder="Select connection duration",
-                min_values=1,
-                max_values=1,
-                options=[
-                    discord.SelectOption(
-                        label=name,
-                        value=name,
-                        default=(name == self.duration_key),
-                    )
-                    for name in DURATIONS
-                ],
-            )
-            duration_select.callback = self.duration_selected
-            container_items.append(discord.ui.ActionRow(duration_select))
-
-        join_button = discord.ui.Button(
+        join = discord.ui.Button(
             label="Join Voice",
             emoji="🔊",
             style=discord.ButtonStyle.success,
@@ -253,17 +258,14 @@ class BotVoiceView(discord.ui.LayoutView):
                 or self.duration_key is None
             ),
         )
-        join_button.callback = self.join_voice
-        container_items.append(discord.ui.ActionRow(join_button))
+        join.callback = self.join_voice
+        body.append(discord.ui.ActionRow(join))
 
         self.add_item(
-            discord.ui.Container(
-                *container_items,
-                accent_colour=discord.Colour.blurple(),
-            )
+            discord.ui.Container(*body, accent_colour=discord.Colour.blurple())
         )
 
-    async def _refresh(self, interaction: discord.Interaction):
+    async def _replace_view(self, interaction: discord.Interaction, *, notice=None):
         new_view = BotVoiceView(
             self.cog,
             self.owner_id,
@@ -271,14 +273,34 @@ class BotVoiceView(discord.ui.LayoutView):
             page=self.page,
             selected_channel_id=self.selected_channel_id,
             duration_key=self.duration_key,
-            notice=self.notice,
+            notice=notice,
         )
         await interaction.response.edit_message(view=new_view)
 
     async def channel_selected(self, interaction: discord.Interaction):
-        channel_id = int(interaction.data["values"][0])
-        channel = self.guild.get_channel(channel_id)
+        value = interaction.data["values"][0]
 
+        if value == "__previous_page__":
+            self.page = max(0, self.page - 1)
+            await self._replace_view(interaction)
+            return
+        if value == "__next_page__":
+            channels = self._available_channels()
+            pages = max(1, (len(channels) + CHANNELS_PER_PAGE - 1) // CHANNELS_PER_PAGE)
+            self.page = min(pages - 1, self.page + 1)
+            await self._replace_view(interaction)
+            return
+
+        try:
+            channel_id = int(value)
+        except (TypeError, ValueError):
+            await interaction.response.send_message(
+                "❌ Invalid channel selection. Please try again.",
+                ephemeral=True,
+            )
+            return
+
+        channel = self.guild.get_channel(channel_id)
         if channel is None:
             try:
                 channel = await self.guild.fetch_channel(channel_id)
@@ -301,48 +323,36 @@ class BotVoiceView(discord.ui.LayoutView):
             discord.ChannelType.stage_voice,
         ):
             await interaction.response.send_message(
-                "❌ Please choose a voice or stage channel.",
+                "❌ Please select a voice or stage channel.",
                 ephemeral=True,
             )
             return
 
         member = self._bot_member()
-        permissions = channel.permissions_for(member) if member else None
-        if not permissions or not permissions.view_channel or not permissions.connect:
+        perms = channel.permissions_for(member) if member else None
+        if not perms or not perms.view_channel or not perms.connect:
             await interaction.response.send_message(
                 "❌ The bot needs **View Channel** and **Connect** permissions "
-                "in this channel.",
+                "in that channel.",
                 ephemeral=True,
             )
             return
 
         self.selected_channel_id = channel.id
         self.duration_key = None
-        self.notice = None
-        await self._refresh(interaction)
+        await self._replace_view(interaction)
 
-    async def previous_page(self, interaction: discord.Interaction):
-        self.page = max(0, self.page - 1)
-        self.notice = None
-        await self._refresh(interaction)
-
-    async def next_page(self, interaction: discord.Interaction):
-        channels = self._available_channels()
-        total_pages = max(1, (len(channels) + CHANNELS_PER_PAGE - 1) // CHANNELS_PER_PAGE)
-        self.page = min(total_pages - 1, self.page + 1)
-        self.notice = None
-        await self._refresh(interaction)
+    async def duration_selected(self, interaction: discord.Interaction):
+        self.duration_key = interaction.data["values"][0]
+        await self._replace_view(interaction)
 
     async def change_channel(self, interaction: discord.Interaction):
         self.selected_channel_id = None
         self.duration_key = None
-        self.notice = "Choose another voice channel from the list."
-        await self._refresh(interaction)
-
-    async def duration_selected(self, interaction: discord.Interaction):
-        self.duration_key = interaction.data["values"][0]
-        self.notice = None
-        await self._refresh(interaction)
+        await self._replace_view(
+            interaction,
+            notice="Choose a different voice channel from the channel menu.",
+        )
 
     async def join_voice(self, interaction: discord.Interaction):
         if self.selected_channel_id is None or self.duration_key is None:
@@ -352,7 +362,7 @@ class BotVoiceView(discord.ui.LayoutView):
             )
             return
 
-        if self._connected_voice_client():
+        if self._voice_client():
             await interaction.response.send_message(
                 "❌ The bot is already connected to a voice channel.",
                 ephemeral=True,
@@ -368,8 +378,8 @@ class BotVoiceView(discord.ui.LayoutView):
             return
 
         member = self._bot_member()
-        permissions = channel.permissions_for(member) if member else None
-        if not permissions or not permissions.view_channel or not permissions.connect:
+        perms = channel.permissions_for(member) if member else None
+        if not perms or not perms.view_channel or not perms.connect:
             await interaction.response.send_message(
                 "❌ The bot needs **View Channel** and **Connect** permissions "
                 "in the selected channel.",
@@ -377,8 +387,18 @@ class BotVoiceView(discord.ui.LayoutView):
             )
             return
 
-        await interaction.response.defer()
+        has_nacl, nacl_detail = voice_dependency_status()
+        if not has_nacl:
+            log.error("PyNaCl import failed: %s", nacl_detail)
+            await interaction.response.send_message(
+                "❌ Voice support is not installed correctly on the host.\n"
+                "Railway must install `discord.py[voice]` and `PyNaCl`.\n"
+                f"**Diagnostic:** `{nacl_detail[:250]}`",
+                ephemeral=True,
+            )
+            return
 
+        await interaction.response.defer()
         try:
             await asyncio.wait_for(
                 channel.connect(timeout=20.0, reconnect=False),
@@ -400,56 +420,44 @@ class BotVoiceView(discord.ui.LayoutView):
             await interaction.edit_original_response(view=updated)
 
         except asyncio.TimeoutError:
-            logging.exception("Timed out while connecting to voice channel")
+            log.exception("Voice connection timed out")
             await interaction.followup.send(
-                "❌ Discord voice connection timed out. Check the bot's "
-                "permissions and try again.",
+                "❌ Discord voice connection timed out. Check the channel "
+                "permissions and Railway logs.",
                 ephemeral=True,
             )
         except discord.Forbidden:
-            logging.exception("Discord denied the voice connection")
+            log.exception("Discord denied voice connection")
             await interaction.followup.send(
                 "❌ Discord denied the connection. Check **View Channel** "
-                "and **Connect** permissions for the bot.",
+                "and **Connect** permissions.",
                 ephemeral=True,
             )
         except discord.ClientException as error:
-            logging.exception("Discord voice client error")
+            log.exception("Discord voice client error")
             await interaction.followup.send(
                 f"❌ Voice client error: `{str(error)[:300]}`",
                 ephemeral=True,
             )
-        except RuntimeError as error:
-            logging.exception("Runtime error while connecting to voice")
-            if "nacl" in str(error).lower() or "voice" in str(error).lower():
-                message = (
-                    "❌ Voice support is unavailable. Make sure `PyNaCl>=1.5.0` "
-                    "is in requirements.txt and Railway completed a fresh deploy."
-                )
-            else:
-                message = f"❌ Connection error: `{str(error)[:300]}`"
-            await interaction.followup.send(message, ephemeral=True)
         except Exception as error:
-            logging.exception("Unexpected error while joining voice")
+            log.exception("Unexpected error joining voice")
             await interaction.followup.send(
-                f"❌ Unexpected connection error: `{type(error).__name__}: "
-                f"{str(error)[:250]}`. Check Railway logs for details.",
+                f"❌ Connection failed: `{type(error).__name__}: "
+                f"{str(error)[:250]}`. Check Railway logs.",
                 ephemeral=True,
             )
 
     async def leave_voice(self, interaction: discord.Interaction):
-        voice_client = self._connected_voice_client()
-        if voice_client is None:
+        vc = self._voice_client()
+        if vc is None:
             self.cog.cancel_expiration(self.guild.id)
-            self.notice = "The bot is already disconnected."
-            await self._refresh(interaction)
+            await self._replace_view(interaction, notice="The bot is already disconnected.")
             return
 
         await interaction.response.defer()
         try:
-            await voice_client.disconnect(force=True)
+            await vc.disconnect(force=True)
             self.cog.cancel_expiration(self.guild.id)
-
             updated = BotVoiceView(
                 self.cog,
                 self.owner_id,
@@ -458,7 +466,7 @@ class BotVoiceView(discord.ui.LayoutView):
             )
             await interaction.edit_original_response(view=updated)
         except Exception as error:
-            logging.exception("Failed to leave voice channel")
+            log.exception("Failed to disconnect from voice")
             await interaction.followup.send(
                 f"❌ Could not leave the voice channel: `{type(error).__name__}`.",
                 ephemeral=True,
@@ -494,11 +502,11 @@ class BotVoice(commands.Cog):
             guild = self.bot.get_guild(guild_id)
             if guild and guild.voice_client and guild.voice_client.is_connected():
                 await guild.voice_client.disconnect(force=True)
-                logging.info("Bot voice duration expired in guild %s", guild_id)
+                log.info("Voice duration expired in guild %s", guild_id)
         except asyncio.CancelledError:
             pass
         except Exception:
-            logging.exception("Automatic voice disconnect failed")
+            log.exception("Automatic voice disconnect failed")
         finally:
             self.expiry_tasks.pop(guild_id, None)
             self.expirations.pop(guild_id, None)
@@ -523,14 +531,7 @@ class BotVoice(commands.Cog):
             return
 
         view = BotVoiceView(self, interaction.user.id, interaction.guild)
-        await interaction.response.send_message(
-            view=view,
-            ephemeral=True,
-        )
-        try:
-            view.message = await interaction.original_response()
-        except discord.HTTPException:
-            pass
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     def cog_unload(self):
         for task in self.expiry_tasks.values():
