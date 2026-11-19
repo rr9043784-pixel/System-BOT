@@ -1,6 +1,6 @@
-discord.py>=2.6.0,<3.0.0
+discord.py[voice]>=2.6.0,<3.0.0
+PyNaCl>=1.5.0
 Flask
 numpy
 aiohttp
 pillow
-PyNaCl>=1.5.0
