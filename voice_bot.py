@@ -34,6 +34,9 @@ class BotVoiceView(discord.ui.View):
 
         connected = bool(guild.voice_client and guild.voice_client.is_connected())
 
+        # Voice-only selector. Private channels can be selected when the
+        # interacting owner can access them; the bot still needs View Channel
+        # and Connect permissions to join.
         self.channel_select = discord.ui.ChannelSelect(
             channel_types=[discord.ChannelType.voice],
             placeholder="Select a voice channel",
@@ -143,9 +146,14 @@ class BotVoiceView(discord.ui.View):
                 "❌ The bot is already connected to a voice channel.", ephemeral=True
             )
             return
-        if not self.selected_channel.permissions_for(self.guild.me).connect:
+        bot_member = self.guild.me
+        channel_permissions = self.selected_channel.permissions_for(bot_member)
+
+        if not channel_permissions.view_channel or not channel_permissions.connect:
             await interaction.response.send_message(
-                "❌ I need the **Connect** permission in that voice channel.", ephemeral=True
+                "❌ I need **View Channel** and **Connect** permissions in that "
+                "voice channel. This also applies to private voice channels.",
+                ephemeral=True,
             )
             return
 
@@ -242,6 +250,7 @@ class BotVoice(commands.Cog):
         name="botvoice", description="Open the bot voice control panel"
     )
     async def botvoice(self, interaction: discord.Interaction):
+        # Strict owner-only access; all other users are denied.
         if interaction.user.id != OWNER_ID:
             await interaction.response.send_message(
                 "❌ You do not have permission to use this command.", ephemeral=True
