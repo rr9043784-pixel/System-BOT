@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -22,7 +21,6 @@ from discord.ext import commands, tasks
 # =========================================================
 
 OWNER_ID = 1176149190192152626
-
 LOG_CHANNEL_ID = 1523192981170159677
 
 DATA_DIR = "/data"
@@ -47,14 +45,13 @@ log = logging.getLogger("SystemBOT.AutoMod")
 
 
 # =========================================================
-# STORAGE AND MIGRATION
+# STORAGE
 # =========================================================
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
 
 def migrate_file(filename):
-    """Copy old files into the persistent Railway volume once."""
     destination = os.path.join(DATA_DIR, filename)
 
     if os.path.exists(destination):
@@ -65,18 +62,18 @@ def migrate_file(filename):
     if os.path.exists(old_path):
         try:
             shutil.copy2(old_path, destination)
-            log.info("Migrated %s to persistent storage", filename)
-        except Exception as error:
-            log.error("Migration failed for %s: %s", filename, error)
+            log.info("Migrated %s to /data", filename)
+        except Exception:
+            log.exception("Migration failed: %s", filename)
 
 
-for old_file in (
+for filename in (
     "bad_words.json",
     "automod_warnings.json",
     "automod_settings.json",
-    "automod_history.json"
+    "automod_history.json",
 ):
-    migrate_file(old_file)
+    migrate_file(filename)
 
 
 def load_json(path, default):
@@ -85,9 +82,12 @@ def load_json(path, default):
 
     try:
         with open(path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except Exception as error:
-        log.error("JSON load error %s: %s", path, error)
+            data = json.load(file)
+
+        return data
+
+    except Exception:
+        log.exception("Failed to load JSON: %s", path)
         return default
 
 
@@ -96,18 +96,42 @@ def save_json(path, data):
 
     try:
         with open(temporary, "w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=4)
+            json.dump(
+                data,
+                file,
+                ensure_ascii=False,
+                indent=4
+            )
 
         os.replace(temporary, path)
 
-    except Exception as error:
-        log.error("JSON save error %s: %s", path, error)
+    except Exception:
+        log.exception("Failed to save JSON: %s", path)
 
 
-bad_words = load_json(BAD_WORDS_FILE, {"updated": 0, "words": []})
+bad_words = load_json(
+    BAD_WORDS_FILE,
+    {"updated": 0, "words": []}
+)
+
 warnings_data = load_json(WARNINGS_FILE, {})
 settings_data = load_json(SETTINGS_FILE, {})
 history_data = load_json(HISTORY_FILE, {})
+
+if not isinstance(bad_words, dict):
+    bad_words = {"updated": 0, "words": []}
+
+if not isinstance(bad_words.get("words"), list):
+    bad_words["words"] = []
+
+if not isinstance(warnings_data, dict):
+    warnings_data = {}
+
+if not isinstance(settings_data, dict):
+    settings_data = {}
+
+if not isinstance(history_data, dict):
+    history_data = {}
 
 
 # =========================================================
@@ -120,14 +144,14 @@ DEFAULT_SETTINGS = {
     "links": True,
     "spam": True,
     "duplicates": True,
-    "bypass_protection": True
+    "bypass_protection": True,
 }
 
 
 def get_settings(guild_id):
     key = str(guild_id)
 
-    if key not in settings_data:
+    if not isinstance(settings_data.get(key), dict):
         settings_data[key] = DEFAULT_SETTINGS.copy()
 
     for name, value in DEFAULT_SETTINGS.items():
@@ -145,11 +169,25 @@ def save_settings():
 # =========================================================
 
 CONFUSABLES = str.maketrans({
-    "a": "а", "b": "в", "c": "с", "e": "е",
-    "h": "н", "k": "к", "m": "м", "o": "о",
-    "p": "р", "t": "т", "x": "х", "y": "у",
-    "@": "а", "0": "о", "3": "з", "4": "ч",
-    "6": "б", "8": "в", "$": "с"
+    "a": "а",
+    "b": "в",
+    "c": "с",
+    "e": "е",
+    "h": "н",
+    "k": "к",
+    "m": "м",
+    "o": "о",
+    "p": "р",
+    "t": "т",
+    "x": "х",
+    "y": "у",
+    "@": "а",
+    "0": "о",
+    "3": "з",
+    "4": "ч",
+    "6": "б",
+    "8": "в",
+    "$": "с",
 })
 
 
@@ -157,18 +195,22 @@ def normalize_text(text):
     if not text:
         return ""
 
-    text = unicodedata.normalize("NFKC", text)
+    text = unicodedata.normalize("NFKC", str(text))
     text = text.lower().translate(CONFUSABLES)
 
     text = "".join(
-        char for char in unicodedata.normalize("NFD", text)
+        char
+        for char in unicodedata.normalize("NFD", text)
         if unicodedata.category(char) != "Mn"
     )
 
-    return "".join(char for char in text if char.isalnum())
+    return "".join(
+        char for char in text
+        if char.isalnum()
+    )
 
 
-def contains_bad_word(text):
+def contains_bad_word(text, bypass_protection=True):
     normalized = normalize_text(text)
 
     if not normalized:
@@ -183,8 +225,9 @@ def contains_bad_word(text):
         if normalized == word:
             return True
 
-        if len(word) >= 4 and word in normalized:
-            return True
+        if bypass_protection and len(word) >= 4:
+            if word in normalized:
+                return True
 
     return False
 
@@ -205,27 +248,42 @@ def download_wiktionary_words():
             "cmlimit": "500",
             "cmtype": "page",
             "format": "json",
-            "formatversion": "2"
+            "formatversion": "2",
         }
 
         if continuation:
             params["cmcontinue"] = continuation
 
-        url = WIKTIONARY_API + "?" + urllib.parse.urlencode(params)
+        url = (
+            WIKTIONARY_API
+            + "?"
+            + urllib.parse.urlencode(params)
+        )
 
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": "SystemBOT-AutoMod/1.0"}
+            headers={
+                "User-Agent": "SystemBOT-AutoMod/1.0"
+            },
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except Exception as error:
-            log.error("Wiktionary error: %s", error)
+            with urllib.request.urlopen(
+                request,
+                timeout=30
+            ) as response:
+                data = json.loads(
+                    response.read().decode("utf-8")
+                )
+
+        except Exception:
+            log.exception("Wiktionary download failed")
             break
 
-        for page in data.get("query", {}).get("categorymembers", []):
+        for page in data.get(
+            "query", {}
+        ).get("categorymembers", []):
+
             title = page.get("title", "")
 
             if title.startswith("Категория:"):
@@ -251,8 +309,12 @@ def download_wiktionary_words():
     if result:
         save_json(
             BAD_WORDS_FILE,
-            {"updated": int(time.time()), "words": result}
+            {
+                "updated": int(time.time()),
+                "words": result,
+            },
         )
+
         return result
 
     return bad_words.get("words", [])
@@ -261,7 +323,9 @@ def download_wiktionary_words():
 def update_words():
     global bad_words
 
-    if time.time() - bad_words.get("updated", 0) < WORD_UPDATE_INTERVAL:
+    updated = bad_words.get("updated", 0)
+
+    if time.time() - updated < WORD_UPDATE_INTERVAL:
         return
 
     words = download_wiktionary_words()
@@ -269,8 +333,9 @@ def update_words():
     if words:
         bad_words = {
             "updated": int(time.time()),
-            "words": words
+            "words": words,
         }
+
         save_json(BAD_WORDS_FILE, bad_words)
 
 
@@ -285,13 +350,16 @@ LINK_PATTERNS = [
     re.compile(r"discord(?:app)?\.com/invite/\S+", re.I),
     re.compile(
         r"\b[a-z0-9-]+\.(?:com|net|org|io|gg|me|ru|xyz|dev|app|site|online)\b",
-        re.I
-    )
+        re.I,
+    ),
 ]
 
 
 def contains_link(text):
-    return any(pattern.search(text) for pattern in LINK_PATTERNS)
+    return any(
+        pattern.search(text)
+        for pattern in LINK_PATTERNS
+    )
 
 
 # =========================================================
@@ -302,7 +370,11 @@ message_history = {}
 
 
 def is_spam(message, duplicate_enabled=True):
-    key = (message.guild.id, message.author.id)
+    key = (
+        message.guild.id,
+        message.author.id,
+    )
+
     now = time.time()
 
     history = message_history.setdefault(key, [])
@@ -322,7 +394,10 @@ def is_spam(message, duplicate_enabled=True):
             for item in history[-DUPLICATE_MESSAGES:]
         ]
 
-        if recent[0] and all(text == recent[0] for text in recent):
+        if recent[0] and all(
+            text == recent[0]
+            for text in recent
+        ):
             return True, "Duplicate messages"
 
     return False, None
@@ -333,17 +408,21 @@ def is_spam(message, duplicate_enabled=True):
 # =========================================================
 
 def get_warnings(guild_id, user_id):
-    guild_data = warnings_data.setdefault(str(guild_id), {})
+    guild_data = warnings_data.setdefault(
+        str(guild_id),
+        {}
+    )
+
     value = guild_data.get(str(user_id), [])
 
-    # Migrate previous integer warning counters.
+    # Migrate old integer counters.
     if isinstance(value, int):
         value = [
             {
                 "id": index + 1,
                 "reason": "Imported previous warning",
                 "moderator": "AutoMod",
-                "timestamp": int(time.time())
+                "timestamp": int(time.time()),
             }
             for index in range(max(0, value))
         ]
@@ -368,10 +447,11 @@ def add_warning(guild_id, user_id, reason, moderator):
         "id": int(time.time() * 1000),
         "reason": reason,
         "moderator": str(moderator),
-        "timestamp": int(time.time())
+        "timestamp": int(time.time()),
     }
 
     records.append(record)
+
     warnings_data[str(guild_id)][str(user_id)] = records
     save_json(WARNINGS_FILE, warnings_data)
 
@@ -385,6 +465,7 @@ def remove_warning(guild_id, user_id):
         return None
 
     removed = records.pop()
+
     warnings_data[str(guild_id)][str(user_id)] = records
     save_json(WARNINGS_FILE, warnings_data)
 
@@ -395,7 +476,14 @@ def remove_warning(guild_id, user_id):
 # MODERATION HISTORY
 # =========================================================
 
-def add_history(guild, member, moderator, action, reason, extra=None):
+def add_history(
+    guild,
+    member,
+    moderator,
+    action,
+    reason,
+    extra=None,
+):
     record = {
         "member_id": member.id,
         "member": str(member),
@@ -403,17 +491,21 @@ def add_history(guild, member, moderator, action, reason, extra=None):
         "action": action,
         "reason": reason,
         "extra": extra or {},
-        "timestamp": int(time.time())
+        "timestamp": int(time.time()),
     }
 
-    history_data.setdefault(str(guild.id), []).append(record)
+    history_data.setdefault(
+        str(guild.id),
+        []
+    ).append(record)
 
     save_json(HISTORY_FILE, history_data)
+
     return record
 
 
 # =========================================================
-# LOGS
+# MODERATION LOGS
 # =========================================================
 
 async def send_log(
@@ -423,15 +515,21 @@ async def send_log(
     action,
     reason,
     source="Manual Moderation",
-    extra=None
+    extra=None,
 ):
     channel = guild.get_channel(LOG_CHANNEL_ID)
 
     if channel is None:
         try:
-            channel = await guild.fetch_channel(LOG_CHANNEL_ID)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            log.error("Moderation log channel unavailable")
+            channel = await guild.fetch_channel(
+                LOG_CHANNEL_ID
+            )
+        except (
+            discord.NotFound,
+            discord.Forbidden,
+            discord.HTTPException,
+        ):
+            log.exception("Moderation log channel unavailable")
             return
 
     count = warning_count(guild.id, member.id)
@@ -439,110 +537,177 @@ async def send_log(
     embed = discord.Embed(
         title="🛡️ Moderation Log",
         color=discord.Color.red(),
-        timestamp=discord.utils.utcnow()
+        timestamp=discord.utils.utcnow(),
     )
 
     embed.add_field(
         name="👤 Member",
-        value=f"{member.mention}\n`{member}`\nID: `{member.id}`",
-        inline=False
+        value=(
+            f"{member.mention}\n"
+            f"`{member}`\n"
+            f"ID: `{member.id}`"
+        ),
+        inline=False,
     )
+
+    moderator_name = str(moderator)
+    moderator_id = getattr(moderator, "id", None)
+
+    if moderator_id:
+        moderator_name += f"\nID: `{moderator_id}`"
 
     embed.add_field(
         name="🛡️ Moderator",
-        value=f"{moderator}\nID: `{moderator.id}`",
-        inline=True
+        value=moderator_name[:1024],
+        inline=True,
     )
 
-    embed.add_field(name="⚖️ Action", value=action, inline=True)
-    embed.add_field(name="📊 Warnings", value=str(count), inline=True)
+    embed.add_field(
+        name="⚖️ Action",
+        value=str(action)[:1024],
+        inline=True,
+    )
+
+    embed.add_field(
+        name="📊 Warnings",
+        value=str(count),
+        inline=True,
+    )
 
     embed.add_field(
         name="📝 Reason",
-        value=reason[:1024],
-        inline=False
+        value=str(reason)[:1024],
+        inline=False,
     )
 
-    embed.add_field(name="📌 Source", value=source, inline=True)
+    embed.add_field(
+        name="📌 Source",
+        value=source,
+        inline=True,
+    )
 
     if extra:
         for name, value in extra.items():
             embed.add_field(
                 name=str(name)[:256],
                 value=str(value)[:1024],
-                inline=True
+                inline=True,
             )
 
-    embed.set_footer(text=f"System-BOT • {guild.name}")
+    embed.set_footer(
+        text=f"System-BOT • {guild.name}"
+    )
 
     try:
         await channel.send(embed=embed)
-    except discord.HTTPException as error:
-        log.error("Log send failed: %s", error)
+    except discord.HTTPException:
+        log.exception("Failed to send moderation log")
 
 
 # =========================================================
-# PRIVATE NOTICE TO VIOLATOR
+# PRIVATE NOTICE TO MEMBER
 # =========================================================
 
-async def notify_member(member, guild, violation, punishment, count):
+async def notify_member(
+    member,
+    guild,
+    violation,
+    punishment,
+    count,
+):
     try:
         embed = discord.Embed(
             title="🛡️ AutoMod Notification",
             color=discord.Color.orange(),
-            timestamp=discord.utils.utcnow()
+            timestamp=discord.utils.utcnow(),
         )
 
-        embed.add_field(name="Server", value=guild.name, inline=False)
-        embed.add_field(name="Violation", value=violation, inline=False)
-        embed.add_field(name="Punishment", value=punishment, inline=False)
-        embed.add_field(name="Warning Count", value=str(count), inline=False)
+        embed.add_field(
+            name="Server",
+            value=guild.name,
+            inline=False,
+        )
 
-        embed.set_footer(text="Please follow the server rules.")
+        embed.add_field(
+            name="Violation",
+            value=str(violation)[:1024],
+            inline=False,
+        )
 
+        embed.add_field(
+            name="Punishment",
+            value=str(punishment)[:1024],
+            inline=False,
+        )
+
+        embed.add_field(
+            name="Warning Count",
+            value=str(count),
+            inline=False,
+        )
+
+        embed.set_footer(
+            text="Please follow the server rules."
+        )
+
+        # This DM goes only to the violating member.
         await member.send(embed=embed)
 
     except (discord.Forbidden, discord.HTTPException):
-        log.info("Could not DM violating member %s", member.id)
+        log.info(
+            "Could not DM violating member %s",
+            member.id,
+        )
 
 
 # =========================================================
 # AUTOMATIC PUNISHMENT
 # =========================================================
 
-async def automatic_punishment(member, violation):
+async def automatic_punishment(
+    member,
+    violation,
+    channel=None,
+):
     guild = member.guild
 
     record = add_warning(
         guild.id,
         member.id,
         violation,
-        "AutoMod"
+        "AutoMod",
     )
 
-    count = warning_count(guild.id, member.id)
+    count = warning_count(
+        guild.id,
+        member.id,
+    )
 
     punishment = "Warning"
 
     try:
         if count == 2:
             punishment = "Timeout for 1 hour"
+
             await member.timeout(
                 timedelta(hours=1),
-                reason=violation
+                reason=violation,
             )
 
         elif count == 3:
             punishment = "Timeout for 1 day"
+
             await member.timeout(
                 timedelta(days=1),
-                reason=violation
+                reason=violation,
             )
 
         elif count == 4:
             punishment = "Kick"
 
-            await member.kick(reason=violation)
+            await member.kick(
+                reason=violation
+            )
 
         elif count >= 5:
             punishment = "Ban"
@@ -550,32 +715,56 @@ async def automatic_punishment(member, violation):
             await guild.ban(
                 member,
                 reason=violation,
-                delete_message_seconds=0
+                delete_message_seconds=0,
             )
 
-    except (discord.Forbidden, discord.HTTPException) as error:
-        log.error("Automatic punishment failed: %s", error)
-        punishment += " (Action failed — check bot permissions)"
+    except (
+        discord.Forbidden,
+        discord.HTTPException,
+    ):
+        log.exception("Automatic punishment failed")
+
+        punishment += (
+            " (Action failed — check bot permissions)"
+        )
 
     await notify_member(
         member,
         guild,
         violation,
         punishment,
-        count
+        count,
+    )
+
+    moderator = guild.me or member
+
+    extra = {
+        "Violation count": count,
+        "Warning ID": record["id"],
+    }
+
+    if channel is not None:
+        extra["Channel"] = (
+            f"#{channel.name} (`{channel.id}`)"
+        )
+
+    add_history(
+        guild,
+        member,
+        "AutoMod",
+        punishment,
+        violation,
+        extra,
     )
 
     await send_log(
         guild,
         member,
-        guild.me,
+        moderator,
         punishment,
         violation,
         source="Automatic AutoMod",
-        extra={
-            "Violation count": count,
-            "Warning ID": record["id"]
-        }
+        extra=extra,
     )
 
     return punishment
@@ -590,38 +779,59 @@ def make_container(*items):
 
 
 class PanelButton(discord.ui.Button):
-    def __init__(self, label, action, style=discord.ButtonStyle.secondary, emoji=None):
+
+    def __init__(
+        self,
+        label,
+        action,
+        style=discord.ButtonStyle.secondary,
+        emoji=None,
+        disabled=False,
+    ):
         super().__init__(
             label=label,
             style=style,
-            emoji=emoji
+            emoji=emoji,
+            disabled=disabled,
         )
+
         self.action = action
 
     async def callback(self, interaction):
-        await self.view.handle_action(interaction, self.action)
+        await self.view.handle_action(
+            interaction,
+            self.action,
+        )
 
 
 class MemberSelect(discord.ui.Select):
+
     def __init__(self, members):
-        options = [
-            discord.SelectOption(
-                label=str(member)[:100],
-                value=str(member.id),
-                description=f"ID: {member.id}"
+        options = []
+
+        for member in members[:25]:
+            options.append(
+                discord.SelectOption(
+                    label=str(
+                        member.display_name or member
+                    )[:100],
+                    value=str(member.id),
+                    description=f"ID: {member.id}",
+                )
             )
-            for member in members[:25]
-        ]
 
         super().__init__(
             placeholder="Select a member...",
             min_values=1,
             max_values=1,
-            options=options
+            options=options,
         )
 
     async def callback(self, interaction):
-        await self.view.select_member(interaction, int(self.values[0]))
+        await self.view.select_member(
+            interaction,
+            int(self.values[0]),
+        )
 
 
 # =========================================================
@@ -637,65 +847,86 @@ def is_owner(interaction):
 # =========================================================
 
 class MemberPickerView(discord.ui.LayoutView):
+
     def __init__(self, guild, members):
         super().__init__(timeout=300)
 
         self.guild = guild
+
         self.members = sorted(
             members,
-            key=lambda member: member.display_name.lower()
+            key=lambda member: (
+                member.display_name or str(member)
+            ).lower(),
         )
 
         self.page = 0
         self.per_page = 25
+
         self.build()
 
     def build(self):
         self.clear_items()
 
         start = self.page * self.per_page
-        current = self.members[start:start + self.per_page]
+
+        current = self.members[
+            start:start + self.per_page
+        ]
 
         total_pages = max(
             1,
-            (len(self.members) + self.per_page - 1) // self.per_page
+            (
+                len(self.members)
+                + self.per_page - 1
+            ) // self.per_page,
         )
 
         container = make_container(
             discord.ui.TextDisplay(
                 "# 🛡️ Member Management\n"
-                "Select a server member to open their private moderation panel."
+                "Select a server member to open "
+                "their private moderation panel."
             ),
             discord.ui.Separator(),
             discord.ui.TextDisplay(
                 f"**Members:** {len(self.members)}\n"
                 f"**Page:** {self.page + 1}/{total_pages}"
-            )
+            ),
         )
 
         if current:
             container.add_item(
-                discord.ui.ActionRow(MemberSelect(current))
+                discord.ui.ActionRow(
+                    MemberSelect(current)
+                )
             )
         else:
             container.add_item(
-                discord.ui.TextDisplay("No members found.")
+                discord.ui.TextDisplay(
+                    "No members found."
+                )
             )
 
         previous = PanelButton(
             "Previous Page",
             "previous",
-            discord.ButtonStyle.secondary
+            disabled=self.page <= 0,
         )
 
         next_button = PanelButton(
             "Next Page",
             "next",
-            discord.ButtonStyle.secondary
+            disabled=(
+                self.page >= total_pages - 1
+            ),
         )
 
         container.add_item(
-            discord.ui.ActionRow(previous, next_button)
+            discord.ui.ActionRow(
+                previous,
+                next_button,
+            )
         )
 
         self.add_item(container)
@@ -704,39 +935,67 @@ class MemberPickerView(discord.ui.LayoutView):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot use this panel.",
-                ephemeral=True
+                ephemeral=True,
             )
             return False
 
         return True
 
-    async def select_member(self, interaction, member_id):
+    async def select_member(
+        self,
+        interaction,
+        member_id,
+    ):
         member = self.guild.get_member(member_id)
 
         if member is None:
-            await interaction.response.send_message(
-                "Member is no longer available.",
-                ephemeral=True
-            )
-            return
+            try:
+                member = await self.guild.fetch_member(
+                    member_id
+                )
+            except (
+                discord.NotFound,
+                discord.HTTPException,
+            ):
+                await interaction.response.send_message(
+                    "Member is no longer available.",
+                    ephemeral=True,
+                )
+                return
 
         await interaction.response.edit_message(
             view=MemberPanelView(member)
         )
 
-    async def handle_action(self, interaction, action):
+    async def handle_action(
+        self,
+        interaction,
+        action,
+    ):
         if action == "previous":
-            self.page = max(0, self.page - 1)
+            self.page = max(
+                0,
+                self.page - 1,
+            )
 
         elif action == "next":
             maximum = max(
                 0,
-                (len(self.members) - 1) // self.per_page
+                (
+                    len(self.members) - 1
+                ) // self.per_page,
             )
-            self.page = min(maximum, self.page + 1)
+
+            self.page = min(
+                maximum,
+                self.page + 1,
+            )
 
         self.build()
-        await interaction.response.edit_message(view=self)
+
+        await interaction.response.edit_message(
+            view=self
+        )
 
 
 # =========================================================
@@ -744,8 +1003,11 @@ class MemberPickerView(discord.ui.LayoutView):
 # =========================================================
 
 class ReasonModal(discord.ui.Modal):
+
     def __init__(self, member, action):
-        super().__init__(title=f"{action} — Reason")
+        super().__init__(
+            title=f"{action} — Reason"
+        )
 
         self.member = member
         self.action = action
@@ -756,7 +1018,7 @@ class ReasonModal(discord.ui.Modal):
             required=True,
             min_length=2,
             max_length=500,
-            style=discord.TextStyle.paragraph
+            style=discord.TextStyle.paragraph,
         )
 
         self.add_item(self.reason)
@@ -765,62 +1027,79 @@ class ReasonModal(discord.ui.Modal):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot use this action.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
-        await interaction.response.defer(ephemeral=True)
+        reason = str(
+            self.reason.value
+        ).strip()
+
+        if len(reason) < 2:
+            await interaction.response.send_message(
+                "A valid reason is required.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
         member = self.member
         guild = member.guild
-        reason = str(self.reason.value).strip()
-
-        if not reason:
-            await interaction.followup.send(
-                "A reason is required.",
-                ephemeral=True
-            )
-            return
+        action = self.action
 
         try:
-            action = self.action
-
             if action == "Warn Add":
-                add_warning(guild.id, member.id, reason, interaction.user)
+                add_warning(
+                    guild.id,
+                    member.id,
+                    reason,
+                    interaction.user,
+                )
 
             elif action == "Warn Remove":
-                removed = remove_warning(guild.id, member.id)
+                removed = remove_warning(
+                    guild.id,
+                    member.id,
+                )
 
                 if removed is None:
                     await interaction.followup.send(
                         "This member has no warnings.",
-                        ephemeral=True
+                        ephemeral=True,
                     )
                     return
 
             elif action == "Mute":
                 await member.timeout(
                     timedelta(hours=1),
-                    reason=reason
+                    reason=reason,
                 )
 
             elif action == "Unmute":
-                await member.timeout(None, reason=reason)
+                await member.timeout(
+                    None,
+                    reason=reason,
+                )
 
             elif action == "Kick":
-                await member.kick(reason=reason)
+                await member.kick(
+                    reason=reason
+                )
 
             elif action == "Ban":
                 await guild.ban(
                     member,
                     reason=reason,
-                    delete_message_seconds=0
+                    delete_message_seconds=0,
                 )
 
             else:
                 await interaction.followup.send(
                     "Unknown action.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 return
 
@@ -829,7 +1108,7 @@ class ReasonModal(discord.ui.Modal):
                 member,
                 interaction.user,
                 action,
-                reason
+                reason,
             )
 
             await send_log(
@@ -837,33 +1116,48 @@ class ReasonModal(discord.ui.Modal):
                 member,
                 interaction.user,
                 action,
-                reason
+                reason,
+                source="Manual Moderation",
             )
 
             await interaction.followup.send(
-                f"✅ **{action}** completed for {member}.",
-                ephemeral=True
+                f"✅ **{action}** completed for "
+                f"**{member}**.",
+                ephemeral=True,
             )
 
-            if action in ("Warn Add", "Mute", "Ban", "Kick"):
+            if action in (
+                "Warn Add",
+                "Mute",
+                "Ban",
+                "Kick",
+            ):
                 await notify_member(
                     member,
                     guild,
                     reason,
                     action,
-                    warning_count(guild.id, member.id)
+                    warning_count(
+                        guild.id,
+                        member.id,
+                    ),
                 )
 
         except discord.Forbidden:
             await interaction.followup.send(
-                "❌ Missing permissions or role hierarchy prevents this action.",
-                ephemeral=True
+                "❌ Missing permissions or role "
+                "hierarchy prevents this action.",
+                ephemeral=True,
             )
 
-        except discord.HTTPException as error:
+        except discord.HTTPException:
+            log.exception(
+                "Manual moderation action failed"
+            )
+
             await interaction.followup.send(
-                f"❌ Discord error: {error}",
-                ephemeral=True
+                "❌ Discord could not complete this action.",
+                ephemeral=True,
             )
 
 
@@ -872,8 +1166,11 @@ class ReasonModal(discord.ui.Modal):
 # =========================================================
 
 class UnbanModal(discord.ui.Modal):
+
     def __init__(self, guild):
-        super().__init__(title="Unban Member")
+        super().__init__(
+            title="Unban Member"
+        )
 
         self.guild = guild
 
@@ -881,14 +1178,15 @@ class UnbanModal(discord.ui.Modal):
             label="User ID",
             placeholder="Enter Discord user ID",
             required=True,
-            max_length=25
+            max_length=25,
         )
 
         self.reason = discord.ui.TextInput(
             label="Reason (required)",
             placeholder="Enter the reason...",
             required=True,
-            max_length=500
+            min_length=2,
+            max_length=500,
         )
 
         self.add_item(self.user_id)
@@ -898,83 +1196,145 @@ class UnbanModal(discord.ui.Modal):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot use this action.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
         try:
-            user_id = int(str(self.user_id.value))
+            user_id = int(
+                str(self.user_id.value).strip()
+            )
+
+            if user_id <= 0:
+                raise ValueError
+
         except ValueError:
             await interaction.response.send_message(
                 "Invalid user ID.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
-        reason = str(self.reason.value).strip()
+        reason = str(
+            self.reason.value
+        ).strip()
 
-        if not reason:
+        if len(reason) < 2:
             await interaction.response.send_message(
-                "A reason is required.",
-                ephemeral=True
+                "A valid reason is required.",
+                ephemeral=True,
             )
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
         try:
-            user = await self.guild.fetch_ban(discord.Object(id=user_id))
-            await self.guild.unban(user.user, reason=reason)
+            ban_entry = await self.guild.fetch_ban(
+                discord.Object(id=user_id)
+            )
+
+            user = ban_entry.user
+
+            await self.guild.unban(
+                user,
+                reason=reason,
+            )
 
             record = {
                 "member_id": user_id,
-                "member": str(user.user),
+                "member": str(user),
                 "moderator": str(interaction.user),
                 "action": "Unban",
                 "reason": reason,
-                "timestamp": int(time.time())
+                "timestamp": int(time.time()),
             }
 
-            history_data.setdefault(str(self.guild.id), []).append(record)
-            save_json(HISTORY_FILE, history_data)
+            history_data.setdefault(
+                str(self.guild.id),
+                [],
+            ).append(record)
+
+            save_json(
+                HISTORY_FILE,
+                history_data,
+            )
 
             embed = discord.Embed(
                 title="🛡️ Moderation Log",
                 color=discord.Color.green(),
-                timestamp=discord.utils.utcnow()
+                timestamp=discord.utils.utcnow(),
             )
 
-            embed.add_field(name="Member", value=f"{user.user} (`{user_id}`)", inline=False)
-            embed.add_field(name="Moderator", value=str(interaction.user), inline=True)
-            embed.add_field(name="Action", value="Unban", inline=True)
-            embed.add_field(name="Reason", value=reason, inline=False)
+            embed.add_field(
+                name="Member",
+                value=f"{user} (`{user_id}`)",
+                inline=False,
+            )
 
-            channel = self.guild.get_channel(LOG_CHANNEL_ID)
+            embed.add_field(
+                name="Moderator",
+                value=str(interaction.user),
+                inline=True,
+            )
 
-            if channel:
+            embed.add_field(
+                name="Action",
+                value="Unban",
+                inline=True,
+            )
+
+            embed.add_field(
+                name="Reason",
+                value=reason[:1024],
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Source",
+                value="Manual Moderation",
+                inline=True,
+            )
+
+            channel = self.guild.get_channel(
+                LOG_CHANNEL_ID
+            )
+
+            if channel is None:
+                try:
+                    channel = await self.guild.fetch_channel(
+                        LOG_CHANNEL_ID
+                    )
+                except discord.HTTPException:
+                    channel = None
+
+            if channel is not None:
                 await channel.send(embed=embed)
 
             await interaction.followup.send(
-                f"✅ Unbanned `{user_id}`.",
-                ephemeral=True
+                f"✅ Unbanned **{user}** (`{user_id}`).",
+                ephemeral=True,
             )
 
         except discord.NotFound:
             await interaction.followup.send(
                 "This user is not banned.",
-                ephemeral=True
+                ephemeral=True,
             )
 
         except discord.Forbidden:
             await interaction.followup.send(
                 "Missing Ban Members permission.",
-                ephemeral=True
+                ephemeral=True,
             )
 
-        except discord.HTTPException as error:
+        except discord.HTTPException:
+            log.exception("Unban failed")
+
             await interaction.followup.send(
-                f"Discord error: {error}",
-                ephemeral=True
+                "Discord could not complete the unban.",
+                ephemeral=True,
             )
 
 
@@ -983,6 +1343,7 @@ class UnbanModal(discord.ui.Modal):
 # =========================================================
 
 class MemberPanelView(discord.ui.LayoutView):
+
     def __init__(self, member):
         super().__init__(timeout=300)
 
@@ -995,10 +1356,27 @@ class MemberPanelView(discord.ui.LayoutView):
         member = self.member
         guild = member.guild
 
-        warnings = get_warnings(guild.id, member.id)
+        warnings = get_warnings(
+            guild.id,
+            member.id,
+        )
+
         count = len(warnings)
 
-        status = "Timed out" if member.is_timed_out() else "Active"
+        status = (
+            "Timed out"
+            if member.is_timed_out()
+            else "Active"
+        )
+
+        joined = (
+            discord.utils.format_dt(
+                member.joined_at,
+                "D",
+            )
+            if member.joined_at
+            else "Unknown"
+        )
 
         container = make_container(
             discord.ui.TextDisplay(
@@ -1009,49 +1387,90 @@ class MemberPanelView(discord.ui.LayoutView):
             discord.ui.TextDisplay(
                 f"## 👤 {member}\n"
                 f"**User ID:** `{member.id}`\n"
-                f"**Account:** {discord.utils.format_dt(member.created_at, 'D')}\n"
-                f"**Joined:** {discord.utils.format_dt(member.joined_at, 'D') if member.joined_at else 'Unknown'}\n"
+                f"**Account:** "
+                f"{discord.utils.format_dt(member.created_at, 'D')}\n"
+                f"**Joined:** {joined}\n"
                 f"**Status:** {status}"
             ),
             discord.ui.Separator(),
             discord.ui.TextDisplay(
-                f"## 📊 Moderation Information\n"
+                "## 📊 Moderation Information\n"
                 f"**Warnings:** `{count}`\n"
                 f"**Roles:** `{max(0, len(member.roles) - 1)}`\n"
                 f"**Highest role:** {member.top_role.mention}"
             ),
             discord.ui.Separator(),
-            discord.ui.TextDisplay("## ⚖️ Moderation Actions")
+            discord.ui.TextDisplay(
+                "## ⚖️ Moderation Actions"
+            ),
         )
 
         container.add_item(
             discord.ui.ActionRow(
-                PanelButton("Warn Add", "Warn Add", discord.ButtonStyle.primary),
-                PanelButton("Warn Remove", "Warn Remove"),
-                PanelButton("Warning User", "Warning User")
+                PanelButton(
+                    "Warn Add",
+                    "Warn Add",
+                    discord.ButtonStyle.primary,
+                ),
+                PanelButton(
+                    "Warn Remove",
+                    "Warn Remove",
+                ),
+                PanelButton(
+                    "Warning User",
+                    "Warning User",
+                ),
             )
         )
 
         container.add_item(
             discord.ui.ActionRow(
-                PanelButton("Warning List", "Warning List"),
-                PanelButton("Mute", "Mute", discord.ButtonStyle.danger),
-                PanelButton("Unmute", "Unmute", discord.ButtonStyle.success)
+                PanelButton(
+                    "Warning List",
+                    "Warning List",
+                ),
+                PanelButton(
+                    "Mute",
+                    "Mute",
+                    discord.ButtonStyle.danger,
+                ),
+                PanelButton(
+                    "Unmute",
+                    "Unmute",
+                    discord.ButtonStyle.success,
+                ),
             )
         )
 
         container.add_item(
             discord.ui.ActionRow(
-                PanelButton("Kick", "Kick", discord.ButtonStyle.danger),
-                PanelButton("Ban", "Ban", discord.ButtonStyle.danger),
-                PanelButton("Unban", "Unban")
+                PanelButton(
+                    "Kick",
+                    "Kick",
+                    discord.ButtonStyle.danger,
+                ),
+                PanelButton(
+                    "Ban",
+                    "Ban",
+                    discord.ButtonStyle.danger,
+                ),
+                PanelButton(
+                    "Unban",
+                    "Unban",
+                ),
             )
         )
 
         container.add_item(
             discord.ui.ActionRow(
-                PanelButton("AutoMod Settings", "settings"),
-                PanelButton("Refresh", "refresh")
+                PanelButton(
+                    "AutoMod Settings",
+                    "settings",
+                ),
+                PanelButton(
+                    "Refresh",
+                    "refresh",
+                ),
             )
         )
 
@@ -1061,57 +1480,94 @@ class MemberPanelView(discord.ui.LayoutView):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot use this panel.",
-                ephemeral=True
+                ephemeral=True,
             )
             return False
 
         return True
 
-    async def handle_action(self, interaction, action):
+    async def handle_action(
+        self,
+        interaction,
+        action,
+    ):
         if action == "refresh":
             self.build()
-            await interaction.response.edit_message(view=self)
+
+            await interaction.response.edit_message(
+                view=self
+            )
             return
 
         if action == "settings":
             await interaction.response.edit_message(
-                view=AutoModSettingsView(self.member.guild)
+                view=AutoModSettingsView(
+                    self.member.guild,
+                    self.member,
+                )
             )
             return
 
         if action == "Warning User":
-            count = warning_count(self.member.guild.id, self.member.id)
+            count = warning_count(
+                self.member.guild.id,
+                self.member.id,
+            )
 
             await interaction.response.send_message(
-                f"**{self.member}** currently has **{count}** warning(s).",
-                ephemeral=True
+                f"**{self.member}** currently has "
+                f"**{count}** warning(s).",
+                ephemeral=True,
             )
             return
 
         if action == "Warning List":
             records = get_warnings(
                 self.member.guild.id,
-                self.member.id
+                self.member.id,
             )
 
             if not records:
                 description = "No warnings found."
             else:
-                description = "\n".join(
-                    f"**{index}.** {record.get('reason', 'No reason')}\n"
-                    f"Moderator: {record.get('moderator', 'Unknown')}"
-                    for index, record in enumerate(records[-15:], 1)
-                )
+                lines = []
+
+                for index, record in enumerate(
+                    records[-15:],
+                    1,
+                ):
+                    timestamp = record.get(
+                        "timestamp",
+                        0,
+                    )
+
+                    reason = record.get(
+                        "reason",
+                        "No reason",
+                    )
+
+                    moderator = record.get(
+                        "moderator",
+                        "Unknown",
+                    )
+
+                    lines.append(
+                        f"**{index}.** {reason[:250]}\n"
+                        f"Moderator: {moderator}\n"
+                        f"Date: <t:{timestamp}:f>"
+                    )
+
+                description = "\n\n".join(lines)
 
             embed = discord.Embed(
                 title="📋 Warning History",
                 description=description[:4000],
-                color=discord.Color.orange()
+                color=discord.Color.orange(),
             )
 
             await interaction.response.send_message(
                 embed=embed,
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -1122,7 +1578,10 @@ class MemberPanelView(discord.ui.LayoutView):
             return
 
         await interaction.response.send_modal(
-            ReasonModal(self.member, action)
+            ReasonModal(
+                self.member,
+                action,
+            )
         )
 
 
@@ -1131,40 +1590,56 @@ class MemberPanelView(discord.ui.LayoutView):
 # =========================================================
 
 class SettingButton(discord.ui.Button):
+
     def __init__(self, label, setting):
         super().__init__(
             label=label,
-            style=discord.ButtonStyle.secondary
+            style=discord.ButtonStyle.secondary,
         )
+
         self.setting = setting
 
     async def callback(self, interaction):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot change AutoMod settings.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
-        settings = get_settings(self.view.guild.id)
-        settings[self.setting] = not settings[self.setting]
+        settings = get_settings(
+            self.view.guild.id
+        )
+
+        settings[self.setting] = not settings[
+            self.setting
+        ]
+
         save_settings()
 
         self.view.build()
 
-        await interaction.response.edit_message(view=self.view)
+        await interaction.response.edit_message(
+            view=self.view
+        )
 
 
 class AutoModSettingsView(discord.ui.LayoutView):
-    def __init__(self, guild):
+
+    def __init__(self, guild, member=None):
         super().__init__(timeout=300)
+
         self.guild = guild
+        self.member = member
+
         self.build()
 
     def build(self):
         self.clear_items()
 
-        settings = get_settings(self.guild.id)
+        settings = get_settings(
+            self.guild.id
+        )
 
         labels = {
             "enabled": "AutoMod",
@@ -1172,7 +1647,7 @@ class AutoModSettingsView(discord.ui.LayoutView):
             "links": "Link Filter",
             "spam": "Anti-Spam",
             "duplicates": "Duplicate Messages",
-            "bypass_protection": "Bypass Protection"
+            "bypass_protection": "Bypass Protection",
         }
 
         container = make_container(
@@ -1180,11 +1655,15 @@ class AutoModSettingsView(discord.ui.LayoutView):
                 "# ⚙️ AutoMod Settings\n"
                 "Select a setting to enable or disable it."
             ),
-            discord.ui.Separator()
+            discord.ui.Separator(),
         )
 
         for key, label in labels.items():
-            status = "🟢 Enabled" if settings[key] else "🔴 Disabled"
+            status = (
+                "🟢 Enabled"
+                if settings[key]
+                else "🔴 Disabled"
+            )
 
             container.add_item(
                 discord.ui.TextDisplay(
@@ -1204,7 +1683,15 @@ class AutoModSettingsView(discord.ui.LayoutView):
 
         container.add_item(
             discord.ui.ActionRow(
-                PanelButton("Back to Member", "back")
+                PanelButton(
+                    "Back to Member",
+                    "back_member",
+                    disabled=self.member is None,
+                ),
+                PanelButton(
+                    "Back to Member List",
+                    "back_list",
+                ),
             )
         )
 
@@ -1214,32 +1701,42 @@ class AutoModSettingsView(discord.ui.LayoutView):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "You cannot use this panel.",
-                ephemeral=True
+                ephemeral=True,
             )
             return False
 
         return True
 
-    async def handle_action(self, interaction, action):
-        if action == "back":
+    async def handle_action(
+        self,
+        interaction,
+        action,
+    ):
+        if action == "back_member" and self.member:
+            await interaction.response.edit_message(
+                view=MemberPanelView(self.member)
+            )
+
+        elif action == "back_list":
+            members = list(self.guild.members)
+
             await interaction.response.edit_message(
                 view=MemberPickerView(
                     self.guild,
-                    list(self.guild.members)
+                    members,
                 )
             )
 
 
 # =========================================================
-# AUTMOD COG
+# AUTOMOD COG + /edit member
 # =========================================================
 
-class AutoMod(commands.Cog):
-
-    edit = app_commands.Group(
-        name="edit",
-        description="Owner-only member management"
-    )
+class AutoMod(
+    commands.GroupCog,
+    group_name="edit",
+    group_description="Owner-only member management",
+):
 
     def __init__(self, bot):
         self.bot = bot
@@ -1249,39 +1746,67 @@ class AutoMod(commands.Cog):
         self.update_words_loop.cancel()
 
     # -----------------------------------------------------
-    # OWNER COMMAND: /edit member
+    # /edit member
     # -----------------------------------------------------
 
-    @edit.command(
+    @app_commands.command(
         name="member",
-        description="Open the private member moderation panel"
+        description="Open the private member moderation panel",
     )
-    async def edit_member(self, interaction: discord.Interaction):
-
+    async def edit_member(
+        self,
+        interaction: discord.Interaction,
+    ):
         if not is_owner(interaction):
             await interaction.response.send_message(
                 "❌ This command is owner-only.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
         if interaction.guild is None:
             await interaction.response.send_message(
                 "Use this command inside a server.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
         try:
-            members = [member async for member in interaction.guild.fetch_members(limit=None)]
+            members = [
+                member
+                async for member in (
+                    interaction.guild.fetch_members(
+                        limit=None
+                    )
+                )
+            ]
+
         except discord.HTTPException:
-            members = list(interaction.guild.members)
+            log.exception(
+                "Could not fetch all server members"
+            )
+
+            members = list(
+                interaction.guild.members
+            )
+
+        # Exclude bots from the member selector.
+        members = [
+            member
+            for member in members
+            if not member.bot
+        ]
 
         await interaction.followup.send(
-            view=MemberPickerView(interaction.guild, members),
-            ephemeral=True
+            view=MemberPickerView(
+                interaction.guild,
+                members,
+            ),
+            ephemeral=True,
         )
 
     # -----------------------------------------------------
@@ -1290,7 +1815,6 @@ class AutoMod(commands.Cog):
 
     @commands.command(name="commands")
     async def commands_system(self, ctx, system=None):
-
         if not system or system.lower() != "system":
             return
 
@@ -1299,13 +1823,15 @@ class AutoMod(commands.Cog):
 
         embed = discord.Embed(
             title="🛡️ System-BOT Commands",
-            color=discord.Color.blurple()
+            color=discord.Color.blurple(),
         )
 
         embed.add_field(
             name="AutoMod",
-            value="`/edit member` — Open member management panel",
-            inline=False
+            value=(
+                "`/edit member` — Open member management panel"
+            ),
+            inline=False,
         )
 
         embed.add_field(
@@ -1319,7 +1845,20 @@ class AutoMod(commands.Cog):
                 "Kick\n"
                 "Ban / Unban"
             ),
-            inline=False
+            inline=False,
+        )
+
+        embed.add_field(
+            name="AutoMod Settings",
+            value=(
+                "Enable / Disable AutoMod\n"
+                "Bad Words Filter\n"
+                "Link Filter\n"
+                "Anti-Spam\n"
+                "Duplicate Messages\n"
+                "Bypass Protection"
+            ),
+            inline=False,
         )
 
         await ctx.send(embed=embed)
@@ -1331,9 +1870,13 @@ class AutoMod(commands.Cog):
     @tasks.loop(seconds=WORD_UPDATE_INTERVAL)
     async def update_words_loop(self):
         try:
-            await asyncio.to_thread(update_words)
+            await asyncio.to_thread(
+                update_words
+            )
         except Exception:
-            log.exception("Word update failed")
+            log.exception(
+                "Word update failed"
+            )
 
     @update_words_loop.before_loop
     async def before_words_loop(self):
@@ -1345,14 +1888,18 @@ class AutoMod(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        if message.author.bot:
+            return
 
-        if message.author.bot or message.guild is None:
+        if message.guild is None:
             return
 
         if message.author.guild_permissions.administrator:
             return
 
-        settings = get_settings(message.guild.id)
+        settings = get_settings(
+            message.guild.id
+        )
 
         if not settings["enabled"]:
             return
@@ -1364,32 +1911,54 @@ class AutoMod(commands.Cog):
 
         violation = None
 
-        if settings["links"] and contains_link(content):
+        if (
+            settings["links"]
+            and contains_link(content)
+        ):
             violation = "Sending links is not allowed."
 
-        elif settings["bad_words"] and contains_bad_word(content):
+        elif (
+            settings["bad_words"]
+            and contains_bad_word(
+                content,
+                bypass_protection=settings[
+                    "bypass_protection"
+                ],
+            )
+        ):
             violation = "Forbidden language."
 
         else:
             spam, spam_reason = is_spam(
                 message,
-                duplicate_enabled=settings["duplicates"]
+                duplicate_enabled=settings[
+                    "duplicates"
+                ],
             )
 
             if settings["spam"] and spam:
-                violation = spam_reason or "Spam"
+                violation = (
+                    spam_reason or "Spam"
+                )
 
         if not violation:
             return
 
         try:
             await message.delete()
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
+        except (
+            discord.NotFound,
+            discord.Forbidden,
+            discord.HTTPException,
+        ):
+            log.exception(
+                "Could not delete violating message"
+            )
 
         await automatic_punishment(
             message.author,
-            violation
+            violation,
+            channel=message.channel,
         )
 
 
@@ -1398,12 +1967,19 @@ class AutoMod(commands.Cog):
 # =========================================================
 
 async def setup(bot):
-
     try:
-        await asyncio.to_thread(update_words)
+        await asyncio.to_thread(
+            update_words
+        )
     except Exception:
-        log.exception("Initial word update failed")
+        log.exception(
+            "Initial word update failed"
+        )
 
-    await bot.add_cog(AutoMod(bot))
+    await bot.add_cog(
+        AutoMod(bot)
+    )
 
-    log.info("AutoMod loaded successfully")
+    log.info(
+        "AutoMod loaded successfully"
+    )
