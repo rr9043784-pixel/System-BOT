@@ -1,7 +1,9 @@
+
 import os
 import json
 import logging
 from threading import Thread
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
@@ -55,7 +57,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Tournament Bot is online!"
+    return "System-BOT is online!"
 
 
 @app.route("/health")
@@ -115,6 +117,7 @@ def save_stats_data(data):
 
 stats_data = load_stats_data()
 
+
 # =========================================================
 # DISCORD BOT
 # =========================================================
@@ -157,6 +160,7 @@ bot = TournamentBot(
 
 bot.web_app = app
 
+
 # =========================================================
 # BOT PRESENCE
 # =========================================================
@@ -174,111 +178,432 @@ async def set_bot_presence():
 
 
 # =========================================================
-# STATISTICS TEXT
+# STATISTICS HELPERS
 # =========================================================
 
-def build_stats_text(guild: discord.Guild) -> str:
+def format_number(number):
+    return f"{number:,}"
+
+
+def get_enum_name(value):
+    if value is None:
+        return "Unknown"
+
+    return getattr(value, "name", str(value)).replace("_", " ").title()
+
+
+def get_member_statistics(guild):
     members = guild.members
 
-    total_members = len(members)
-    humans = sum(not member.bot for member in members)
-    bots_count = sum(member.bot for member in members)
+    humans = [member for member in members if not member.bot]
+    bots = [member for member in members if member.bot]
 
     online = sum(
-        not member.bot and member.status == discord.Status.online
-        for member in members
+        member.status == discord.Status.online
+        for member in humans
     )
 
     idle = sum(
-        not member.bot and member.status == discord.Status.idle
-        for member in members
+        member.status == discord.Status.idle
+        for member in humans
     )
 
     dnd = sum(
-        not member.bot and member.status == discord.Status.dnd
-        for member in members
+        member.status == discord.Status.dnd
+        for member in humans
     )
 
     offline = sum(
-        not member.bot and member.status == discord.Status.offline
-        for member in members
+        member.status in (
+            discord.Status.offline,
+            discord.Status.invisible,
+        )
+        for member in humans
     )
 
     streaming = sum(
-        not member.bot
-        and any(
+        any(
             isinstance(activity, discord.Streaming)
             for activity in member.activities
         )
-        for member in members
+        for member in humans
     )
 
-    text_channels = sum(
-        isinstance(channel, discord.TextChannel)
-        for channel in guild.channels
+    return {
+        "cached": len(members),
+        "total": guild.member_count or len(members),
+        "humans": len(humans),
+        "bots": len(bots),
+        "online": online,
+        "idle": idle,
+        "dnd": dnd,
+        "offline": offline,
+        "streaming": streaming,
+    }
+
+
+def get_channel_statistics(guild):
+    channels = guild.channels
+
+    text_channels = [
+        channel for channel in channels
+        if isinstance(channel, discord.TextChannel)
+        and not channel.is_news()
+    ]
+
+    announcement_channels = [
+        channel for channel in channels
+        if isinstance(channel, discord.TextChannel)
+        and channel.is_news()
+    ]
+
+    voice_channels = [
+        channel for channel in channels
+        if isinstance(channel, discord.VoiceChannel)
+    ]
+
+    stage_channels = [
+        channel for channel in channels
+        if isinstance(channel, discord.StageChannel)
+    ]
+
+    categories = [
+        channel for channel in channels
+        if isinstance(channel, discord.CategoryChannel)
+    ]
+
+    forum_channels = [
+        channel for channel in channels
+        if isinstance(channel, discord.ForumChannel)
+    ]
+
+    threads = guild.threads
+
+    return {
+        "text": len(text_channels),
+        "announcements": len(announcement_channels),
+        "voice": len(voice_channels),
+        "stage": len(stage_channels),
+        "categories": len(categories),
+        "forums": len(forum_channels),
+        "threads": len(threads),
+        "total": len(channels),
+    }
+
+
+def get_role_statistics(guild):
+    roles = guild.roles
+
+    normal_roles = [
+        role for role in roles
+        if not role.is_default() and not role.managed
+    ]
+
+    managed_roles = [
+        role for role in roles
+        if role.managed
+    ]
+
+    members_with_roles = sum(
+        len(member.roles) > 1
+        for member in guild.members
     )
 
-    voice_channels = sum(
-        isinstance(channel, discord.VoiceChannel)
-        for channel in guild.channels
-    )
+    return {
+        "total": max(len(roles) - 1, 0),
+        "normal": len(normal_roles),
+        "managed": len(managed_roles),
+        "members_with_roles": members_with_roles,
+    }
 
-    categories = sum(
-        isinstance(channel, discord.CategoryChannel)
-        for channel in guild.channels
-    )
 
-    roles = max(len(guild.roles) - 1, 0)
+def get_emoji_statistics(guild):
+    emojis = guild.emojis
 
+    animated = sum(emoji.animated for emoji in emojis)
+    static = len(emojis) - animated
+
+    return {
+        "total": len(emojis),
+        "animated": animated,
+        "static": static,
+        "stickers": len(guild.stickers),
+    }
+
+
+def get_boost_statistics(guild):
     boosts = guild.premium_subscription_count or 0
-    boost_level = getattr(guild, "premium_tier", 0)
+    tier = guild.premium_tier
 
-    try:
-        boost_level_number = int(
-            getattr(boost_level, "value", boost_level)
-        )
-    except (TypeError, ValueError):
-        boost_level_number = 0
-
-    boost_levels = {
+    levels = {
         0: "No Level",
         1: "Level 1",
         2: "Level 2",
         3: "Level 3",
     }
 
-    boost_level_text = boost_levels.get(
-        boost_level_number,
-        f"Level {boost_level_number}",
-    )
+    return {
+        "count": boosts,
+        "tier": levels.get(tier, f"Level {tier}"),
+        "boosters": sum(
+            member.premium_since is not None
+            for member in guild.members
+        ),
+    }
+
+
+def get_server_age(guild):
+    now = datetime.now(timezone.utc)
+    created = guild.created_at
+
+    days = max((now - created).days, 0)
+    years, remaining_days = divmod(days, 365)
+
+    if years:
+        return f"{years} years, {remaining_days} days"
+
+    return f"{days} days"
+
+
+def get_server_security(guild):
+    return {
+        "verification": get_enum_name(guild.verification_level),
+        "content_filter": get_enum_name(guild.explicit_content_filter),
+        "notifications": get_enum_name(guild.default_notifications),
+        "mfa": get_enum_name(guild.mfa_level),
+        "afk_timeout": f"{guild.afk_timeout // 60} minutes",
+    }
+
+
+# =========================================================
+# COMPONENTS V2 STATISTICS
+# =========================================================
+
+def build_stats_view(guild: discord.Guild):
+    members = get_member_statistics(guild)
+    channels = get_channel_statistics(guild)
+    roles = get_role_statistics(guild)
+    emojis = get_emoji_statistics(guild)
+    boosts = get_boost_statistics(guild)
+    security = get_server_security(guild)
 
     created = f"<t:{int(guild.created_at.timestamp())}:F>"
-    updated = f"<t:{int(discord.utils.utcnow().timestamp())}:R>"
+    created_relative = f"<t:{int(guild.created_at.timestamp())}:R>"
+    updated = f"<t:{int(discord.utils.utcnow().timestamp())}:F>"
 
-    return (
-        "📊 **BOT Statistics**\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👥 **Members:** {total_members:,}\n"
-        f"👤 Humans: {humans:,}\n"
-        f"🤖 Bots: {bots_count:,}\n\n"
-        "⬇️ **Status**\n"
-        f"{ONLINE_PC_STATUS} Online: {online:,}\n"
-        f"{IDLE_STATUS} Idle: {idle:,}\n"
-        f"{DND_STATUS} Do Not Disturb: {dnd:,}\n"
-        f"{STREAMING_STATUS} Streaming: {streaming:,}\n"
-        f"{OFFLINE_STATUS} Offline: {offline:,}\n\n"
-        "📁 **Channels**\n"
-        f"Text: {text_channels:,}\n"
-        f"Voice: {voice_channels:,}\n"
-        f"Categories: {categories:,}\n\n"
-        f"🎭 **Roles:** {roles:,}\n\n"
-        "🚀 **Server Boosts**\n"
-        f"Boosts: {boosts:,}\n"
-        f"Level: {boost_level_text}\n\n"
-        f"📅 **Server Created:** {created}\n"
-        f"🔄 **Updated:** {updated}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━"
+    owner = guild.owner.mention if guild.owner else f"<@{guild.owner_id}>"
+
+    icon_text = (
+        f"[Server Icon]({guild.icon.url})"
+        if guild.icon else "No icon"
     )
+
+    banner_text = (
+        f"[Server Banner]({guild.banner.url})"
+        if guild.banner else "No banner"
+    )
+
+    features = [
+        feature.replace("_", " ").title()
+        for feature in guild.features
+    ]
+
+    features_text = (
+        ", ".join(features[:10])
+        if features else "No special features"
+    )
+
+    if len(features) > 10:
+        features_text += f" and {len(features) - 10} more"
+
+    boost_progress = (
+        "Enabled"
+        if guild.premium_progress_bar_enabled
+        else "Disabled"
+    )
+
+    system_channel = (
+        guild.system_channel.mention
+        if guild.system_channel else "Not configured"
+    )
+
+    rules_channel = (
+        guild.rules_channel.mention
+        if guild.rules_channel else "Not configured"
+    )
+
+    updates_channel = (
+        guild.public_updates_channel.mention
+        if guild.public_updates_channel else "Not configured"
+    )
+
+    afk_channel = (
+        guild.afk_channel.mention
+        if guild.afk_channel else "Not configured"
+    )
+
+    member_info = (
+        f"**Total Members:** {format_number(members['total'])}\n"
+        f"**Humans:** {format_number(members['humans'])}\n"
+        f"**Bots:** {format_number(members['bots'])}\n"
+        f"**Cached Members:** {format_number(members['cached'])}\n"
+        f"**Members with Roles:** {format_number(roles['members_with_roles'])}"
+    )
+
+    status_info = (
+        f"{ONLINE_PC_STATUS} **Online:** {format_number(members['online'])}\n"
+        f"{IDLE_STATUS} **Idle:** {format_number(members['idle'])}\n"
+        f"{DND_STATUS} **Do Not Disturb:** {format_number(members['dnd'])}\n"
+        f"{STREAMING_STATUS} **Streaming:** {format_number(members['streaming'])}\n"
+        f"{OFFLINE_STATUS} **Offline:** {format_number(members['offline'])}\n"
+        "-# Status counts are based on cached human members. Streaming can overlap with Online."
+    )
+
+    channel_info = (
+        f"**Total Channels:** {format_number(channels['total'])}\n"
+        f"**Text Channels:** {format_number(channels['text'])}\n"
+        f"**Announcement Channels:** {format_number(channels['announcements'])}\n"
+        f"**Voice Channels:** {format_number(channels['voice'])}\n"
+        f"**Stage Channels:** {format_number(channels['stage'])}\n"
+        f"**Forum Channels:** {format_number(channels['forums'])}\n"
+        f"**Categories:** {format_number(channels['categories'])}\n"
+        f"**Active Cached Threads:** {format_number(channels['threads'])}"
+    )
+
+    role_info = (
+        f"**Total Roles:** {format_number(roles['total'])}\n"
+        f"**Normal Roles:** {format_number(roles['normal'])}\n"
+        f"**Managed Roles:** {format_number(roles['managed'])}"
+    )
+
+    boost_info = (
+        f"**Boost Count:** {format_number(boosts['count'])}\n"
+        f"**Server Level:** {boosts['tier']}\n"
+        f"**Cached Boosters:** {format_number(boosts['boosters'])}\n"
+        f"**Boost Progress Bar:** {boost_progress}"
+    )
+
+    emoji_info = (
+        f"**Total Emojis:** {format_number(emojis['total'])}\n"
+        f"**Static Emojis:** {format_number(emojis['static'])}\n"
+        f"**Animated Emojis:** {format_number(emojis['animated'])}\n"
+        f"**Stickers:** {format_number(emojis['stickers'])}"
+    )
+
+    security_info = (
+        f"**Verification Level:** {security['verification']}\n"
+        f"**Explicit Content Filter:** {security['content_filter']}\n"
+        f"**Default Notifications:** {security['notifications']}\n"
+        f"**2FA Requirement:** {security['mfa']}\n"
+        f"**AFK Timeout:** {security['afk_timeout']}"
+    )
+
+    server_info = (
+        f"**Server Name:** {guild.name}\n"
+        f"**Server ID:** `{guild.id}`\n"
+        f"**Owner:** {owner}\n"
+        f"**Preferred Language:** {guild.preferred_locale}\n"
+        f"**Server Age:** {get_server_age(guild)}\n"
+        f"**Created:** {created}\n"
+        f"**Created Relative:** {created_relative}\n"
+        f"**Icon:** {icon_text}\n"
+        f"**Banner:** {banner_text}"
+    )
+
+    channel_settings = (
+        f"**System Channel:** {system_channel}\n"
+        f"**Rules Channel:** {rules_channel}\n"
+        f"**Community Updates:** {updates_channel}\n"
+        f"**AFK Channel:** {afk_channel}"
+    )
+
+    server_features = (
+        f"**Features:** {features_text}\n"
+        f"**Maximum Members:** {format_number(guild.max_members or 0)}\n"
+        f"**File Upload Limit:** {guild.filesize_limit // (1024 * 1024)} MB"
+    )
+
+    view = discord.ui.LayoutView(timeout=None)
+
+    container = discord.ui.Container(
+        discord.ui.TextDisplay(
+            "# 📊 LEGENDS SERVER STATISTICS\n"
+            f"### {guild.name}\n"
+            "-# Live server information • Automatically updated every minute"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.large),
+
+        discord.ui.TextDisplay(
+            "## 👥 Member Statistics\n"
+            f"{member_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 🟢 Member Status\n"
+            f"{status_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 📁 Channel Statistics\n"
+            f"{channel_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 🎭 Role Statistics\n"
+            f"{role_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 🚀 Server Boosts\n"
+            f"{boost_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 😀 Emojis & Stickers\n"
+            f"{emoji_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 🔐 Security Settings\n"
+            f"{security_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## ⚙️ Server Information\n"
+            f"{server_info}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## 📌 Channel Configuration\n"
+            f"{channel_settings}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+
+        discord.ui.TextDisplay(
+            "## ✨ Server Features\n"
+            f"{server_features}"
+        ),
+        discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.large),
+
+        discord.ui.TextDisplay(
+            "### 🔄 Statistics Update\n"
+            f"**Last Updated:** {updated}\n"
+            "-# Powered by LEGENDS System-BOT"
+        ),
+        accent_colour=discord.Color.from_rgb(88, 101, 242),
+    )
+
+    view.add_item(container)
+
+    return view
 
 
 # =========================================================
@@ -331,13 +656,20 @@ async def update_stats_for_guild(guild: discord.Guild):
     if guild is None:
         return
 
+    # Try to fill the member cache so the statistics are more complete.
+    if not guild.chunked:
+        try:
+            await guild.chunk(cache=True)
+        except (discord.Forbidden, discord.HTTPException):
+            logging.warning("Could not fully chunk guild members.")
+
     channel = await get_stats_channel()
 
     if channel is None:
         logging.error("Statistics channel not found.")
         return
 
-    text = build_stats_text(guild)
+    view = build_stats_view(guild)
 
     message_id = stats_data.get("message_id")
     stored_guild_id = stats_data.get("guild_id")
@@ -351,9 +683,14 @@ async def update_stats_for_guild(guild: discord.Guild):
     if message_id and stored_guild_id == guild.id:
         try:
             message = await channel.fetch_message(int(message_id))
-            await message.edit(content=text)
 
-            logging.info("Stats message updated.")
+            await message.edit(
+                content=None,
+                embeds=[],
+                view=view,
+            )
+
+            logging.info("Components V2 stats message updated.")
             return
 
         except discord.NotFound:
@@ -371,7 +708,7 @@ async def update_stats_for_guild(guild: discord.Guild):
             return
 
     try:
-        message = await channel.send(text)
+        message = await channel.send(view=view)
 
         stats_data = {
             "message_id": message.id,
@@ -382,7 +719,7 @@ async def update_stats_for_guild(guild: discord.Guild):
         save_stats_data(stats_data)
 
         logging.info(
-            "Stats message created: %s",
+            "Components V2 stats message created: %s",
             message.id,
         )
 
@@ -402,7 +739,6 @@ async def update_stats_for_guild(guild: discord.Guild):
 
 @tasks.loop(minutes=1)
 async def update_stats_message():
-    # Reapply the configured presence without overwriting user settings.
     await set_bot_presence()
 
     guild_id = stats_data.get("guild_id")
@@ -485,7 +821,7 @@ async def on_message(message: discord.Message):
         save_stats_data(stats_data)
 
         logging.info(
-            "Creating stats in channel %s...",
+            "Creating Components V2 stats in channel %s...",
             STATS_CHANNEL_ID,
         )
 
