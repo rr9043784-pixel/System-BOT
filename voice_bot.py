@@ -1,6 +1,4 @@
-
 import asyncio
-import importlib.util
 import logging
 import os
 import tempfile
@@ -43,23 +41,26 @@ def voice_dependency_status():
 
 
 def detect_voice(text: str) -> str:
-    """Choose Russian or English TTS voice."""
-    russian_chars = sum(
-        1 for char in text if "\u0400" <= char <= "\u04FF"
+    russian = sum(
+        1 for char in text
+        if "\u0400" <= char <= "\u04FF"
     )
-    latin_chars = sum(
-        1 for char in text if ("a" <= char.lower() <= "z")
+    english = sum(
+        1 for char in text
+        if char.isascii() and char.isalpha()
     )
 
-    if russian_chars > latin_chars:
-        return "ru-RU-DmitryNeural"
-
-    return "en-US-GuyNeural"
+    return (
+        "ru-RU-DmitryNeural"
+        if russian > english
+        else "en-US-GuyNeural"
+    )
 
 
 class SpeakTextModal(discord.ui.Modal):
     def __init__(self, cog, guild, owner_id):
         super().__init__(title="Speak Text")
+
         self.cog = cog
         self.guild = guild
         self.owner_id = owner_id
@@ -131,7 +132,6 @@ class SpeakTextModal(discord.ui.Modal):
 
             await communicator.save(audio_path)
 
-            # Check that the connection still exists.
             vc = self.guild.voice_client
 
             if vc is None or not vc.is_connected():
@@ -140,10 +140,12 @@ class SpeakTextModal(discord.ui.Modal):
             if vc.is_playing():
                 raise RuntimeError("The bot is already playing audio.")
 
-            source = discord.FFmpegPCMAudio(
+            # FFmpeg creates Opus audio directly.
+            # This avoids discord.py PCM encoding through libopus.
+            source = await discord.FFmpegOpusAudio.from_probe(
                 audio_path,
                 executable=ffmpeg_path,
-                options="-vn",
+                method="fallback",
             )
 
             self.cog.audio_files[self.guild.id] = audio_path
@@ -210,7 +212,7 @@ class BotVoiceView(discord.ui.LayoutView):
 
         self._build_layout()
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    async def interaction_check(self, interaction):
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "❌ This control panel belongs to the bot owner.",
@@ -259,7 +261,6 @@ class BotVoiceView(discord.ui.LayoutView):
 
     def _voice_client(self):
         vc = self.guild.voice_client
-
         return vc if vc and vc.is_connected() else None
 
     def _status_text(self):
@@ -278,17 +279,13 @@ class BotVoiceView(discord.ui.LayoutView):
             else:
                 timer_text = f"<t:{int(expiry)}:R>"
 
-            speaking = (
-                "🗣️ **Speaking:** Yes"
-                if vc.is_playing()
-                else "🗣️ **Speaking:** No"
-            )
+            speaking = "Yes" if vc.is_playing() else "No"
 
             return (
                 "🟢 **Status:** Connected\n"
                 f"🔊 **Channel:** {vc.channel.mention}\n"
                 f"⏱️ **Disconnect:** {timer_text}\n"
-                f"{speaking}"
+                f"🗣️ **Speaking:** {speaking}"
             )
 
         channel = (
@@ -503,12 +500,7 @@ class BotVoiceView(discord.ui.LayoutView):
             )
         )
 
-    async def _replace_view(
-        self,
-        interaction: discord.Interaction,
-        *,
-        notice=None,
-    ):
+    async def _replace_view(self, interaction, *, notice=None):
         new_view = BotVoiceView(
             self.cog,
             self.owner_id,
@@ -523,7 +515,7 @@ class BotVoiceView(discord.ui.LayoutView):
             view=new_view
         )
 
-    async def channel_selected(self, interaction: discord.Interaction):
+    async def channel_selected(self, interaction):
         value = interaction.data["values"][0]
 
         if value == "__previous_page__":
@@ -540,10 +532,7 @@ class BotVoiceView(discord.ui.LayoutView):
                 // CHANNELS_PER_PAGE,
             )
 
-            self.page = min(
-                pages - 1,
-                self.page + 1,
-            )
+            self.page = min(pages - 1, self.page + 1)
 
             await self._replace_view(interaction)
             return
@@ -604,11 +593,11 @@ class BotVoiceView(discord.ui.LayoutView):
 
         await self._replace_view(interaction)
 
-    async def duration_selected(self, interaction: discord.Interaction):
+    async def duration_selected(self, interaction):
         self.duration_key = interaction.data["values"][0]
         await self._replace_view(interaction)
 
-    async def change_channel(self, interaction: discord.Interaction):
+    async def change_channel(self, interaction):
         self.selected_channel_id = None
         self.duration_key = None
 
@@ -617,7 +606,7 @@ class BotVoiceView(discord.ui.LayoutView):
             notice="Choose a different voice channel from the channel menu.",
         )
 
-    async def join_voice(self, interaction: discord.Interaction):
+    async def join_voice(self, interaction):
         if (
             self.selected_channel_id is None
             or self.duration_key is None
@@ -664,7 +653,7 @@ class BotVoiceView(discord.ui.LayoutView):
 
             await interaction.response.send_message(
                 "❌ Voice dependencies are not installed correctly.\n"
-                "Check the Railway requirements.txt file.\n"
+                "Check Railway requirements.txt.\n"
                 f"**Diagnostic:** `{detail[:250]}`",
                 ephemeral=True,
             )
@@ -748,7 +737,7 @@ class BotVoiceView(discord.ui.LayoutView):
                 ephemeral=True,
             )
 
-    async def speak_text(self, interaction: discord.Interaction):
+    async def speak_text(self, interaction):
         modal = SpeakTextModal(
             self.cog,
             self.guild,
@@ -757,7 +746,7 @@ class BotVoiceView(discord.ui.LayoutView):
 
         await interaction.response.send_modal(modal)
 
-    async def stop_speaking(self, interaction: discord.Interaction):
+    async def stop_speaking(self, interaction):
         vc = self._voice_client()
 
         if vc is None:
@@ -774,6 +763,7 @@ class BotVoiceView(discord.ui.LayoutView):
             self.cog,
             self.owner_id,
             self.guild,
+            page=self.page,
             selected_channel_id=vc.channel.id,
         )
 
@@ -781,7 +771,7 @@ class BotVoiceView(discord.ui.LayoutView):
             view=updated
         )
 
-    async def leave_voice(self, interaction: discord.Interaction):
+    async def leave_voice(self, interaction):
         vc = self._voice_client()
 
         if vc is None:
@@ -836,16 +826,12 @@ class BotVoice(commands.Cog):
         self.expirations: dict[int, Optional[float]] = {}
         self.expiry_tasks: dict[int, asyncio.Task] = {}
 
-        self.voice_channels: dict[int, discord.abc.Connectable] = {}
+        self.voice_channels = {}
         self.monitor_tasks: dict[int, asyncio.Task] = {}
 
         self.audio_files: dict[int, str] = {}
 
-    def set_expiration(
-        self,
-        guild_id: int,
-        expiry: Optional[float],
-    ):
+    def set_expiration(self, guild_id, expiry):
         self.cancel_expiration(guild_id)
 
         self.expirations[guild_id] = expiry
@@ -855,7 +841,7 @@ class BotVoice(commands.Cog):
                 self.disconnect_after(guild_id, expiry)
             )
 
-    def cancel_expiration(self, guild_id: int):
+    def cancel_expiration(self, guild_id):
         task = self.expiry_tasks.pop(guild_id, None)
 
         if task and not task.done():
@@ -863,7 +849,7 @@ class BotVoice(commands.Cog):
 
         self.expirations.pop(guild_id, None)
 
-    async def disconnect_after(self, guild_id: int, expiry: float):
+    async def disconnect_after(self, guild_id, expiry):
         try:
             await asyncio.sleep(
                 max(0, expiry - time.time())
@@ -872,7 +858,11 @@ class BotVoice(commands.Cog):
             guild = self.bot.get_guild(guild_id)
 
             if guild and guild.voice_client:
+                if guild.voice_client.is_playing():
+                    guild.voice_client.stop()
+
                 await guild.voice_client.disconnect(force=True)
+
                 log.info(
                     "Voice duration expired in guild %s",
                     guild_id,
@@ -891,11 +881,7 @@ class BotVoice(commands.Cog):
             self.expirations.pop(guild_id, None)
             self.voice_channels.pop(guild_id, None)
 
-    def start_voice_monitor(
-        self,
-        guild_id: int,
-        channel: discord.abc.Connectable,
-    ):
+    def start_voice_monitor(self, guild_id, channel):
         self.stop_voice_monitor(guild_id)
 
         self.voice_channels[guild_id] = channel
@@ -904,7 +890,7 @@ class BotVoice(commands.Cog):
             self.monitor_voice(guild_id)
         )
 
-    def stop_voice_monitor(self, guild_id: int):
+    def stop_voice_monitor(self, guild_id):
         task = self.monitor_tasks.pop(guild_id, None)
 
         if task and not task.done():
@@ -912,11 +898,7 @@ class BotVoice(commands.Cog):
 
         self.voice_channels.pop(guild_id, None)
 
-    async def monitor_voice(self, guild_id: int):
-        """
-        Check the voice connection periodically.
-        If Discord disconnects the bot, try reconnecting a few times.
-        """
+    async def monitor_voice(self, guild_id):
         try:
             while guild_id in self.expirations:
                 await asyncio.sleep(30)
@@ -937,6 +919,8 @@ class BotVoice(commands.Cog):
                     "Trying to reconnect.",
                     guild_id,
                 )
+
+                reconnected = False
 
                 for attempt in range(1, 4):
                     if guild_id not in self.expirations:
@@ -966,6 +950,7 @@ class BotVoice(commands.Cog):
                             attempt,
                         )
 
+                        reconnected = True
                         break
 
                     except asyncio.CancelledError:
@@ -980,6 +965,13 @@ class BotVoice(commands.Cog):
                         )
 
                         await asyncio.sleep(10)
+
+                if not reconnected:
+                    log.warning(
+                        "Could not reconnect voice in guild %s. "
+                        "Will check again later.",
+                        guild_id,
+                    )
 
         except asyncio.CancelledError:
             pass
