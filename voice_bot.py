@@ -1,3 +1,4 @@
+
 import asyncio
 import logging
 import os
@@ -60,7 +61,6 @@ def detect_voice(text: str) -> str:
 class SpeakTextModal(discord.ui.Modal):
     def __init__(self, cog, guild, owner_id):
         super().__init__(title="Speak Text")
-
         self.cog = cog
         self.guild = guild
         self.owner_id = owner_id
@@ -92,7 +92,7 @@ class SpeakTextModal(discord.ui.Modal):
             )
             return
 
-        if vc.is_playing():
+        if vc.is_playing() or vc.is_paused():
             await interaction.response.send_message(
                 "⚠️ The bot is already speaking. Stop the current audio first.",
                 ephemeral=True,
@@ -110,13 +110,13 @@ class SpeakTextModal(discord.ui.Modal):
 
         await interaction.response.defer(ephemeral=True)
 
-        voice_name = detect_voice(text)
         audio_path = None
 
         try:
             import edge_tts
             import imageio_ffmpeg
 
+            voice_name = detect_voice(text)
             ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 
             with tempfile.NamedTemporaryFile(
@@ -137,22 +137,42 @@ class SpeakTextModal(discord.ui.Modal):
             if vc is None or not vc.is_connected():
                 raise RuntimeError("Voice connection was lost.")
 
-            if vc.is_playing():
+            if vc.is_playing() or vc.is_paused():
                 raise RuntimeError("The bot is already playing audio.")
 
-            # FFmpeg creates Opus audio directly.
-            # This avoids discord.py PCM encoding through libopus.
-            source = await discord.FFmpegOpusAudio.from_probe(
-                audio_path,
-                executable=ffmpeg_path,
-                method="fallback",
+            member = self.guild.me
+            permissions = vc.channel.permissions_for(member)
+
+            if not permissions.speak:
+                raise PermissionError(
+                    "The bot does not have the Speak permission."
+                )
+
+            if not os.path.exists(audio_path):
+                raise FileNotFoundError("Generated audio file was not found.")
+
+            if os.path.getsize(audio_path) == 0:
+                raise RuntimeError("Generated audio file is empty.")
+
+            source = discord.PCMVolumeTransformer(
+                discord.FFmpegPCMAudio(
+                    audio_path,
+                    executable=ffmpeg_path,
+                    before_options="-nostdin",
+                    options="-vn -f s16le -ar 48000 -ac 2",
+                ),
+                volume=1.0,
             )
 
             self.cog.audio_files[self.guild.id] = audio_path
 
             def after_playback(error):
                 if error:
-                    log.error("Voice playback error: %s", error)
+                    log.error(
+                        "Voice playback error: %s",
+                        error,
+                        exc_info=error,
+                    )
 
                 try:
                     if os.path.exists(audio_path):
@@ -164,6 +184,13 @@ class SpeakTextModal(discord.ui.Modal):
                     self.cog.audio_files.pop(self.guild.id, None)
 
             vc.play(source, after=after_playback)
+
+            log.info(
+                "TTS playback started: guild=%s voice=%s characters=%s",
+                self.guild.id,
+                voice_name,
+                len(text),
+            )
 
             await interaction.followup.send(
                 f"🗣️ Speaking started!\n"
