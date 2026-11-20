@@ -36,7 +36,9 @@ def voice_dependency_status():
         import nacl
         import edge_tts
         import imageio_ffmpeg
+
         return True, "All voice dependencies are available."
+
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
 
@@ -46,6 +48,7 @@ def detect_voice(text: str) -> str:
         1 for char in text
         if "\u0400" <= char <= "\u04FF"
     )
+
     english = sum(
         1 for char in text
         if char.isascii() and char.isalpha()
@@ -58,9 +61,14 @@ def detect_voice(text: str) -> str:
     )
 
 
+# =========================================================
+# TEXT TO SPEECH
+# =========================================================
+
 class SpeakTextModal(discord.ui.Modal):
     def __init__(self, cog, guild, owner_id):
         super().__init__(title="Speak Text")
+
         self.cog = cog
         self.guild = guild
         self.owner_id = owner_id
@@ -73,6 +81,7 @@ class SpeakTextModal(discord.ui.Modal):
             max_length=MAX_SPEECH_LENGTH,
             required=True,
         )
+
         self.add_item(self.message_input)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -111,6 +120,8 @@ class SpeakTextModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
 
         audio_path = None
+        source = None
+        guild_id = self.guild.id
 
         try:
             import edge_tts
@@ -141,6 +152,10 @@ class SpeakTextModal(discord.ui.Modal):
                 raise RuntimeError("The bot is already playing audio.")
 
             member = self.guild.me
+
+            if member is None:
+                raise RuntimeError("Could not find the bot member.")
+
             permissions = vc.channel.permissions_for(member)
 
             if not permissions.speak:
@@ -149,51 +164,65 @@ class SpeakTextModal(discord.ui.Modal):
                 )
 
             if not os.path.exists(audio_path):
-                raise FileNotFoundError("Generated audio file was not found.")
+                raise FileNotFoundError(
+                    "Generated audio file was not found."
+                )
 
             if os.path.getsize(audio_path) == 0:
                 raise RuntimeError("Generated audio file is empty.")
 
-            source = discord.PCMVolumeTransformer(
-                discord.FFmpegPCMAudio(
-                    audio_path,
-                    executable=ffmpeg_path,
-                    before_options="-nostdin",
-                    options="-vn -f s16le -ar 48000 -ac 2",
-                ),
-                volume=1.0,
+            # FFmpeg encodes the audio directly into Opus.
+            # This avoids discord.py's Python Opus encoder.
+            source = discord.FFmpegOpusAudio(
+                audio_path,
+                executable=ffmpeg_path,
+                codec="libopus",
+                bitrate=128,
+                before_options="-nostdin",
             )
 
-            self.cog.audio_files[self.guild.id] = audio_path
+            self.cog.audio_files[guild_id] = audio_path
 
             def after_playback(error):
                 if error:
                     log.error(
-                        "Voice playback error: %s",
+                        "Voice playback error in guild %s: %s",
+                        guild_id,
                         error,
-                        exc_info=error,
+                    )
+                else:
+                    log.info(
+                        "TTS playback finished successfully in guild %s",
+                        guild_id,
                     )
 
                 try:
-                    if os.path.exists(audio_path):
+                    if audio_path and os.path.exists(audio_path):
                         os.remove(audio_path)
+
                 except OSError:
-                    log.exception("Could not delete temporary audio file")
+                    log.exception(
+                        "Could not delete temporary audio file."
+                    )
 
-                if self.cog.audio_files.get(self.guild.id) == audio_path:
-                    self.cog.audio_files.pop(self.guild.id, None)
+                if self.cog.audio_files.get(guild_id) == audio_path:
+                    self.cog.audio_files.pop(guild_id, None)
 
-            vc.play(source, after=after_playback)
+            vc.play(
+                source,
+                after=after_playback,
+            )
 
             log.info(
-                "TTS playback started: guild=%s voice=%s characters=%s",
-                self.guild.id,
+                "TTS playback started: guild=%s voice=%s "
+                "characters=%s codec=libopus bitrate=128",
+                guild_id,
                 voice_name,
                 len(text),
             )
 
             await interaction.followup.send(
-                f"🗣️ Speaking started!\n"
+                "🗣️ Speaking started!\n"
                 f"**Voice:** `{voice_name}`\n"
                 f"**Length:** {len(text)} characters",
                 ephemeral=True,
@@ -202,18 +231,31 @@ class SpeakTextModal(discord.ui.Modal):
         except Exception as error:
             log.exception("TTS playback failed")
 
+            if source is not None:
+                try:
+                    source.cleanup()
+                except Exception:
+                    pass
+
             if audio_path and os.path.exists(audio_path):
                 try:
                     os.remove(audio_path)
                 except OSError:
                     pass
 
+            if self.cog.audio_files.get(guild_id) == audio_path:
+                self.cog.audio_files.pop(guild_id, None)
+
             await interaction.followup.send(
-                f"❌ Could not speak the text: "
+                "❌ Could not speak the text: "
                 f"`{type(error).__name__}: {str(error)[:200]}`",
                 ephemeral=True,
             )
 
+
+# =========================================================
+# VOICE CONTROL PANEL
+# =========================================================
 
 class BotVoiceView(discord.ui.LayoutView):
     def __init__(
@@ -288,6 +330,7 @@ class BotVoiceView(discord.ui.LayoutView):
 
     def _voice_client(self):
         vc = self.guild.voice_client
+
         return vc if vc and vc.is_connected() else None
 
     def _status_text(self):
@@ -301,8 +344,10 @@ class BotVoiceView(discord.ui.LayoutView):
 
             if expiry is None:
                 timer_text = "Infinite"
+
             elif expiry == "missing":
                 timer_text = "Timer unavailable"
+
             else:
                 timer_text = f"<t:{int(expiry)}:R>"
 
@@ -343,7 +388,10 @@ class BotVoiceView(discord.ui.LayoutView):
         ]
 
         if self.notice:
-            body.append(discord.ui.TextDisplay(self.notice))
+            body.append(
+                discord.ui.TextDisplay(self.notice)
+            )
+
             body.append(discord.ui.Separator())
 
         if connected:
@@ -352,6 +400,7 @@ class BotVoiceView(discord.ui.LayoutView):
                 emoji="🗣️",
                 style=discord.ButtonStyle.primary,
             )
+
             speak.callback = self.speak_text
 
             stop = discord.ui.Button(
@@ -360,6 +409,7 @@ class BotVoiceView(discord.ui.LayoutView):
                 style=discord.ButtonStyle.secondary,
                 disabled=not vc.is_playing(),
             )
+
             stop.callback = self.stop_speaking
 
             leave = discord.ui.Button(
@@ -367,10 +417,15 @@ class BotVoiceView(discord.ui.LayoutView):
                 emoji="🔇",
                 style=discord.ButtonStyle.danger,
             )
+
             leave.callback = self.leave_voice
 
             body.append(
-                discord.ui.ActionRow(speak, stop, leave)
+                discord.ui.ActionRow(
+                    speak,
+                    stop,
+                    leave,
+                )
             )
 
             self.add_item(
@@ -379,6 +434,7 @@ class BotVoiceView(discord.ui.LayoutView):
                     accent_colour=discord.Colour.blurple(),
                 )
             )
+
             return
 
         channels = self._available_channels()
@@ -389,9 +445,13 @@ class BotVoiceView(discord.ui.LayoutView):
             // CHANNELS_PER_PAGE,
         )
 
-        self.page = min(self.page, page_count - 1)
+        self.page = min(
+            self.page,
+            page_count - 1,
+        )
 
         start = self.page * CHANNELS_PER_PAGE
+
         page_channels = channels[
             start:start + CHANNELS_PER_PAGE
         ]
@@ -456,6 +516,7 @@ class BotVoiceView(discord.ui.LayoutView):
             body.append(
                 discord.ui.ActionRow(channel_menu)
             )
+
         else:
             body.append(
                 discord.ui.TextDisplay(
@@ -546,7 +607,11 @@ class BotVoiceView(discord.ui.LayoutView):
         value = interaction.data["values"][0]
 
         if value == "__previous_page__":
-            self.page = max(0, self.page - 1)
+            self.page = max(
+                0,
+                self.page - 1,
+            )
+
             await self._replace_view(interaction)
             return
 
@@ -559,13 +624,17 @@ class BotVoiceView(discord.ui.LayoutView):
                 // CHANNELS_PER_PAGE,
             )
 
-            self.page = min(pages - 1, self.page + 1)
+            self.page = min(
+                pages - 1,
+                self.page + 1,
+            )
 
             await self._replace_view(interaction)
             return
 
         try:
             channel_id = int(value)
+
         except (TypeError, ValueError):
             await interaction.response.send_message(
                 "❌ Invalid channel selection. Please try again.",
@@ -577,7 +646,9 @@ class BotVoiceView(discord.ui.LayoutView):
 
         if channel is None:
             try:
-                channel = await self.guild.fetch_channel(channel_id)
+                channel = await self.guild.fetch_channel(
+                    channel_id
+                )
 
             except discord.Forbidden:
                 await interaction.response.send_message(
@@ -605,7 +676,12 @@ class BotVoiceView(discord.ui.LayoutView):
             return
 
         member = self._bot_member()
-        perms = channel.permissions_for(member) if member else None
+
+        perms = (
+            channel.permissions_for(member)
+            if member
+            else None
+        )
 
         if not perms or not perms.view_channel or not perms.connect:
             await interaction.response.send_message(
@@ -622,6 +698,7 @@ class BotVoiceView(discord.ui.LayoutView):
 
     async def duration_selected(self, interaction):
         self.duration_key = interaction.data["values"][0]
+
         await self._replace_view(interaction)
 
     async def change_channel(self, interaction):
@@ -630,7 +707,10 @@ class BotVoiceView(discord.ui.LayoutView):
 
         await self._replace_view(
             interaction,
-            notice="Choose a different voice channel from the channel menu.",
+            notice=(
+                "Choose a different voice channel "
+                "from the channel menu."
+            ),
         )
 
     async def join_voice(self, interaction):
@@ -663,7 +743,12 @@ class BotVoiceView(discord.ui.LayoutView):
             return
 
         member = self._bot_member()
-        perms = channel.permissions_for(member) if member else None
+
+        perms = (
+            channel.permissions_for(member)
+            if member
+            else None
+        )
 
         if not perms or not perms.view_channel or not perms.connect:
             await interaction.response.send_message(
@@ -676,7 +761,10 @@ class BotVoiceView(discord.ui.LayoutView):
         has_dependencies, detail = voice_dependency_status()
 
         if not has_dependencies:
-            log.error("Voice dependency check failed: %s", detail)
+            log.error(
+                "Voice dependency check failed: %s",
+                detail,
+            )
 
             await interaction.response.send_message(
                 "❌ Voice dependencies are not installed correctly.\n"
@@ -729,7 +817,9 @@ class BotVoiceView(discord.ui.LayoutView):
             )
 
         except asyncio.TimeoutError:
-            log.exception("Voice connection timed out")
+            log.exception(
+                "Voice connection timed out"
+            )
 
             await interaction.followup.send(
                 "❌ Discord voice connection timed out. "
@@ -738,7 +828,9 @@ class BotVoiceView(discord.ui.LayoutView):
             )
 
         except discord.Forbidden:
-            log.exception("Discord denied voice connection")
+            log.exception(
+                "Discord denied voice connection"
+            )
 
             await interaction.followup.send(
                 "❌ Discord denied the connection. "
@@ -747,7 +839,9 @@ class BotVoiceView(discord.ui.LayoutView):
             )
 
         except discord.ClientException as error:
-            log.exception("Discord voice client error")
+            log.exception(
+                "Discord voice client error"
+            )
 
             await interaction.followup.send(
                 f"❌ Voice client error: `{str(error)[:300]}`",
@@ -755,10 +849,12 @@ class BotVoiceView(discord.ui.LayoutView):
             )
 
         except Exception as error:
-            log.exception("Unexpected error joining voice")
+            log.exception(
+                "Unexpected error joining voice"
+            )
 
             await interaction.followup.send(
-                f"❌ Connection failed: "
+                "❌ Connection failed: "
                 f"`{type(error).__name__}: {str(error)[:250]}`. "
                 "Check Railway logs.",
                 ephemeral=True,
@@ -802,8 +898,13 @@ class BotVoiceView(discord.ui.LayoutView):
         vc = self._voice_client()
 
         if vc is None:
-            self.cog.cancel_expiration(self.guild.id)
-            self.cog.stop_voice_monitor(self.guild.id)
+            self.cog.cancel_expiration(
+                self.guild.id
+            )
+
+            self.cog.stop_voice_monitor(
+                self.guild.id
+            )
 
             await self._replace_view(
                 interaction,
@@ -819,8 +920,13 @@ class BotVoiceView(discord.ui.LayoutView):
 
             await vc.disconnect(force=True)
 
-            self.cog.cancel_expiration(self.guild.id)
-            self.cog.stop_voice_monitor(self.guild.id)
+            self.cog.cancel_expiration(
+                self.guild.id
+            )
+
+            self.cog.stop_voice_monitor(
+                self.guild.id
+            )
 
             updated = BotVoiceView(
                 self.cog,
@@ -834,10 +940,12 @@ class BotVoiceView(discord.ui.LayoutView):
             )
 
         except Exception as error:
-            log.exception("Failed to disconnect from voice")
+            log.exception(
+                "Failed to disconnect from voice"
+            )
 
             await interaction.followup.send(
-                f"❌ Could not leave the voice channel: "
+                "❌ Could not leave the voice channel: "
                 f"`{type(error).__name__}`.",
                 ephemeral=True,
             )
@@ -845,6 +953,10 @@ class BotVoiceView(discord.ui.LayoutView):
     async def on_timeout(self):
         self.stop()
 
+
+# =========================================================
+# BOT VOICE COG
+# =========================================================
 
 class BotVoice(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -865,16 +977,25 @@ class BotVoice(commands.Cog):
 
         if expiry is not None:
             self.expiry_tasks[guild_id] = asyncio.create_task(
-                self.disconnect_after(guild_id, expiry)
+                self.disconnect_after(
+                    guild_id,
+                    expiry,
+                )
             )
 
     def cancel_expiration(self, guild_id):
-        task = self.expiry_tasks.pop(guild_id, None)
+        task = self.expiry_tasks.pop(
+            guild_id,
+            None,
+        )
 
         if task and not task.done():
             task.cancel()
 
-        self.expirations.pop(guild_id, None)
+        self.expirations.pop(
+            guild_id,
+            None,
+        )
 
     async def disconnect_after(self, guild_id, expiry):
         try:
@@ -888,7 +1009,9 @@ class BotVoice(commands.Cog):
                 if guild.voice_client.is_playing():
                     guild.voice_client.stop()
 
-                await guild.voice_client.disconnect(force=True)
+                await guild.voice_client.disconnect(
+                    force=True
+                )
 
                 log.info(
                     "Voice duration expired in guild %s",
@@ -901,12 +1024,25 @@ class BotVoice(commands.Cog):
             pass
 
         except Exception:
-            log.exception("Automatic voice disconnect failed")
+            log.exception(
+                "Automatic voice disconnect failed"
+            )
 
         finally:
-            self.expiry_tasks.pop(guild_id, None)
-            self.expirations.pop(guild_id, None)
-            self.voice_channels.pop(guild_id, None)
+            self.expiry_tasks.pop(
+                guild_id,
+                None,
+            )
+
+            self.expirations.pop(
+                guild_id,
+                None,
+            )
+
+            self.voice_channels.pop(
+                guild_id,
+                None,
+            )
 
     def start_voice_monitor(self, guild_id, channel):
         self.stop_voice_monitor(guild_id)
@@ -918,12 +1054,18 @@ class BotVoice(commands.Cog):
         )
 
     def stop_voice_monitor(self, guild_id):
-        task = self.monitor_tasks.pop(guild_id, None)
+        task = self.monitor_tasks.pop(
+            guild_id,
+            None,
+        )
 
         if task and not task.done():
             task.cancel()
 
-        self.voice_channels.pop(guild_id, None)
+        self.voice_channels.pop(
+            guild_id,
+            None,
+        )
 
     async def monitor_voice(self, guild_id):
         try:
@@ -958,7 +1100,10 @@ class BotVoice(commands.Cog):
 
                         if old_vc:
                             try:
-                                await old_vc.disconnect(force=True)
+                                await old_vc.disconnect(
+                                    force=True
+                                )
+
                             except Exception:
                                 log.debug(
                                     "Could not clean up old voice client",
@@ -1010,7 +1155,10 @@ class BotVoice(commands.Cog):
             )
 
         finally:
-            self.monitor_tasks.pop(guild_id, None)
+            self.monitor_tasks.pop(
+                guild_id,
+                None,
+            )
 
     @app_commands.command(
         name="botvoice",
@@ -1053,9 +1201,12 @@ class BotVoice(commands.Cog):
             try:
                 if os.path.exists(path):
                     os.remove(path)
+
             except OSError:
                 pass
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(BotVoice(bot))
+    await bot.add_cog(
+        BotVoice(bot)
+    )
