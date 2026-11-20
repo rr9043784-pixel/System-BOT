@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import tempfile
 import time
 from typing import Optional
@@ -35,9 +36,13 @@ def voice_dependency_status():
     try:
         import nacl
         import edge_tts
-        import imageio_ffmpeg
 
-        return True, "All voice dependencies are available."
+        ffmpeg_path = shutil.which("ffmpeg")
+
+        if not ffmpeg_path:
+            return False, "System FFmpeg is not installed."
+
+        return True, f"FFmpeg found: {ffmpeg_path}"
 
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
@@ -125,10 +130,19 @@ class SpeakTextModal(discord.ui.Modal):
 
         try:
             import edge_tts
-            import imageio_ffmpeg
 
             voice_name = detect_voice(text)
-            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+            ffmpeg_path = shutil.which("ffmpeg")
+
+            if not ffmpeg_path:
+                raise RuntimeError(
+                    "System FFmpeg is not installed."
+                )
+
+            log.info(
+                "Using system FFmpeg: %s",
+                ffmpeg_path,
+            )
 
             with tempfile.NamedTemporaryFile(
                 suffix=".mp3",
@@ -171,7 +185,7 @@ class SpeakTextModal(discord.ui.Modal):
             if os.path.getsize(audio_path) == 0:
                 raise RuntimeError("Generated audio file is empty.")
 
-            # FFmpeg encodes the audio directly into Opus.
+            # System FFmpeg encodes audio directly into Opus.
             # This avoids discord.py's Python Opus encoder.
             source = discord.FFmpegOpusAudio(
                 audio_path,
