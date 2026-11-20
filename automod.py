@@ -1813,12 +1813,18 @@ class AutoMod(
     # !commands System
     # -----------------------------------------------------
 
-    @commands.command(name="commands")
-    async def commands_system(self, ctx, system=None):
-        if not system or system.lower() != "system":
+    @commands.Cog.listener()
+    async def on_commands_system_message(self, message):
+        if message.author.bot:
             return
 
-        if ctx.author.id != OWNER_ID:
+        if message.author.id != OWNER_ID:
+            return
+
+        if message.guild is None:
+            return
+
+        if message.content.strip().lower() != "!commands system":
             return
 
         embed = discord.Embed(
@@ -1829,7 +1835,7 @@ class AutoMod(
         embed.add_field(
             name="AutoMod",
             value=(
-                "`/edit member` — Open member management panel"
+                "`/edit member` — Open member moderation panel"
             ),
             inline=False,
         )
@@ -1861,7 +1867,7 @@ class AutoMod(
             inline=False,
         )
 
-        await ctx.send(embed=embed)
+        await message.channel.send(embed=embed)
 
     # -----------------------------------------------------
     # WORD UPDATE LOOP
