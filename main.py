@@ -1,4 +1,3 @@
-
 import os
 import json
 import logging
@@ -42,6 +41,7 @@ EXTENSIONS = [
     "status_bot",
     "voice_bot",
     "info",
+    "rules",
 ]
 
 logging.basicConfig(
