@@ -41,6 +41,7 @@ EXTENSIONS = [
     "announcement_site",
     "status_bot",
     "voice_bot",
+    "info",
 ]
 
 logging.basicConfig(
