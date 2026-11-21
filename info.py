@@ -1,707 +1,619 @@
-
 import os
 import json
 import logging
 from datetime import datetime, timezone
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 # =========================================================
-# CONFIGURATION
+# SYSTEM-BOT | INFO SERVER
+# Python 3.13 | discord.py 2.6+
 # =========================================================
 
 OWNER_ID = 1176149190192152626
-STATS_CHANNEL_ID = 1542994435472760953
-
-DATA_FILE = "info_server_data.json"
 LANGUAGE_FILE = "info_languages.json"
-
 logger = logging.getLogger("SystemBot.Info")
 
 LANGUAGES = {
     "en": ("🇬🇧", "English"),
-    "ru": ("🇷🇺", "Русский"),
-    "ro": ("🇷🇴", "Română"),
-    "uz": ("🇺🇿", "O‘zbekcha"),
-    "kk": ("🇰🇿", "Қазақша"),
-    "tr": ("🇹🇷", "Türkçe"),
-    "es": ("🇪🇸", "Español"),
-    "fr": ("🇫🇷", "Français"),
-    "de": ("🇩🇪", "Deutsch"),
-    "it": ("🇮🇹", "Italiano"),
-    "uk": ("🇺🇦", "Українська"),
-    "pl": ("🇵🇱", "Polski"),
+    "ru": ("🇷🇺", "Russian"),
+    "ro": ("🇷🇴", "Romanian"),
+    "uz": ("🇺🇿", "Uzbek"),
+    "kk": ("🇰🇿", "Kazakh"),
+    "tr": ("🇹🇷", "Turkish"),
+    "es": ("🇪🇸", "Spanish"),
+    "fr": ("🇫🇷", "French"),
+    "de": ("🇩🇪", "German"),
+    "it": ("🇮🇹", "Italian"),
+    "uk": ("🇺🇦", "Ukrainian"),
+    "pl": ("🇵🇱", "Polish"),
 }
 
-TEXTS = {
-    "en": {
-        "title": "SERVER INFORMATION",
-        "description": "Select a section to explore server information.",
-        "language": "Select your language",
-        "language_desc": "Choose the language for your private information panel.",
-        "language_saved": "Language saved!",
-        "general": "General Information",
-        "members": "Members & Bots",
-        "channels": "Channels",
-        "roles": "Roles",
-        "boosts": "Server Boosts",
-        "emojis": "Emojis & Stickers",
-        "security": "Security",
-        "settings": "Server Settings",
-        "back": "Back",
-        "change_language": "Change language",
-        "members_total": "Total members",
-        "humans": "Humans",
-        "bots": "Bots",
-        "online": "Online",
-        "idle": "Idle",
-        "dnd": "Do Not Disturb",
-        "offline": "Offline",
-        "text_channels": "Text channels",
-        "voice_channels": "Voice channels",
-        "categories": "Categories",
-        "forum_channels": "Forums",
-        "total_channels": "Total channels",
-        "total_roles": "Total roles",
-        "everyone": "Everyone role",
-        "boost_level": "Boost level",
-        "boost_count": "Boosts",
-        "boosters": "Boosters",
-        "emoji_count": "Emojis",
-        "sticker_count": "Stickers",
-        "animated": "Animated emojis",
-        "verification": "Verification level",
-        "mfa": "2FA moderation",
-        "content_filter": "Content filter",
-        "created": "Created",
-        "owner": "Server owner",
-        "region": "Preferred language",
-        "max_members": "Member limit",
-        "roles_page": "Roles list",
-        "no_data": "No information available.",
-        "private": "This panel is private. Only you can see it.",
-        "not_owner": "You are not allowed to use this command.",
-        "panel_created": "Server information panel has been created.",
-        "panel_error": "Could not create the information panel.",
-        "page": "Page",
-    },
-    "ru": {
-        "title": "ИНФОРМАЦИЯ О СЕРВЕРЕ",
-        "description": "Выберите раздел, чтобы посмотреть информацию о сервере.",
-        "language": "Выберите язык",
-        "language_desc": "Выберите язык для своей личной панели информации.",
-        "language_saved": "Язык сохранён!",
-        "general": "Общая информация",
-        "members": "Участники и боты",
-        "channels": "Каналы",
-        "roles": "Роли",
-        "boosts": "Бусты сервера",
-        "emojis": "Эмодзи и стикеры",
-        "security": "Безопасность",
-        "settings": "Настройки сервера",
-        "back": "Назад",
-        "change_language": "Изменить язык",
-        "members_total": "Всего участников",
-        "humans": "Люди",
-        "bots": "Боты",
-        "online": "В сети",
-        "idle": "Не активны",
-        "dnd": "Не беспокоить",
-        "offline": "Не в сети",
-        "text_channels": "Текстовые каналы",
-        "voice_channels": "Голосовые каналы",
-        "categories": "Категории",
-        "forum_channels": "Форумы",
-        "total_channels": "Всего каналов",
-        "total_roles": "Всего ролей",
-        "everyone": "Роль Everyone",
-        "boost_level": "Уровень бустов",
-        "boost_count": "Бусты",
-        "boosters": "Бустеры",
-        "emoji_count": "Эмодзи",
-        "sticker_count": "Стикеры",
-        "animated": "Анимированные эмодзи",
-        "verification": "Уровень проверки",
-        "mfa": "2FA для модерации",
-        "content_filter": "Фильтр контента",
-        "created": "Создан",
-        "owner": "Владелец сервера",
-        "region": "Язык сервера",
-        "max_members": "Лимит участников",
-        "roles_page": "Список ролей",
-        "no_data": "Информация отсутствует.",
-        "private": "Эта панель приватная. Её видишь только ты.",
-        "not_owner": "У тебя нет доступа к этой команде.",
-        "panel_created": "Панель информации о сервере создана.",
-        "panel_error": "Не удалось создать панель информации.",
-        "page": "Страница",
-    },
+# UI labels are translated for all 12 choices.
+# Role descriptions below preserve the wording supplied for the server.
+T = {
+    "en": ["SELECT YOUR LANGUAGE", "Choose your preferred language to continue.",
+           "SERVER INFORMATION", "Welcome to the LEGENDS server information center.",
+           "General information", "Members & bots", "Channels", "Roles",
+           "Server boosts", "Emojis & stickers", "Security", "Server settings",
+           "Change language", "Back", "Previous page", "Next page", "Page"],
+    "ru": ["ВЫБЕРИТЕ ЯЗЫК", "Выберите язык, чтобы продолжить.",
+           "ИНФОРМАЦИЯ О СЕРВЕРЕ", "Добро пожаловать в информационный центр LEGENDS.",
+           "Общая информация", "Участники и боты", "Каналы", "Роли",
+           "Бусты сервера", "Эмодзи и стикеры", "Безопасность", "Настройки сервера",
+           "Изменить язык", "Назад", "Предыдущая страница", "Следующая страница", "Страница"],
+    "ro": ["SELECTAȚI LIMBA", "Alegeți limba preferată pentru a continua.",
+           "INFORMAȚII DESPRE SERVER", "Bun venit în centrul de informații LEGENDS.",
+           "Informații generale", "Membri și boți", "Canale", "Roluri",
+           "Boosturi server", "Emoji și stickere", "Securitate", "Setări server",
+           "Schimbă limba", "Înapoi", "Pagina anterioară", "Pagina următoare", "Pagina"],
+    "uz": ["TILNI TANLANG", "Davom etish uchun tilni tanlang.",
+           "SERVER MA’LUMOTLARI", "LEGENDS server ma’lumot markaziga xush kelibsiz.",
+           "Umumiy ma’lumot", "A’zolar va botlar", "Kanallar", "Rollar",
+           "Server boostlari", "Emoji va stikerlar", "Xavfsizlik", "Server sozlamalari",
+           "Tilni o‘zgartirish", "Orqaga", "Oldingi sahifa", "Keyingi sahifa", "Sahifa"],
+    "kk": ["ТІЛДІ ТАҢДАҢЫЗ", "Жалғастыру үшін тілді таңдаңыз.",
+           "СЕРВЕР ТУРАЛЫ АҚПАРАТ", "LEGENDS ақпарат орталығына қош келдіңіз.",
+           "Жалпы ақпарат", "Қатысушылар мен боттар", "Арналар", "Рөлдер",
+           "Сервер бусттары", "Эмодзи мен стикерлер", "Қауіпсіздік", "Сервер баптаулары",
+           "Тілді өзгерту", "Артқа", "Алдыңғы бет", "Келесі бет", "Бет"],
+    "tr": ["DİLİNİZİ SEÇİN", "Devam etmek için tercih ettiğiniz dili seçin.",
+           "SUNUCU BİLGİLERİ", "LEGENDS sunucu bilgi merkezine hoş geldiniz.",
+           "Genel bilgiler", "Üyeler ve botlar", "Kanallar", "Roller",
+           "Sunucu takviyeleri", "Emojiler ve çıkartmalar", "Güvenlik", "Sunucu ayarları",
+           "Dili değiştir", "Geri", "Önceki sayfa", "Sonraki sayfa", "Sayfa"],
+    "es": ["SELECCIONA TU IDIOMA", "Elige tu idioma preferido para continuar.",
+           "INFORMACIÓN DEL SERVIDOR", "Bienvenido al centro de información de LEGENDS.",
+           "Información general", "Miembros y bots", "Canales", "Roles",
+           "Mejoras del servidor", "Emojis y stickers", "Seguridad", "Ajustes del servidor",
+           "Cambiar idioma", "Atrás", "Página anterior", "Página siguiente", "Página"],
+    "fr": ["CHOISISSEZ VOTRE LANGUE", "Choisissez votre langue préférée pour continuer.",
+           "INFORMATIONS DU SERVEUR", "Bienvenue dans le centre d’information LEGENDS.",
+           "Informations générales", "Membres et bots", "Salons", "Rôles",
+           "Boosts du serveur", "Emojis et autocollants", "Sécurité", "Paramètres du serveur",
+           "Changer de langue", "Retour", "Page précédente", "Page suivante", "Page"],
+    "de": ["SPRACHE AUSWÄHLEN", "Wähle deine bevorzugte Sprache, um fortzufahren.",
+           "SERVERINFORMATIONEN", "Willkommen im LEGENDS-Informationszentrum.",
+           "Allgemeine Informationen", "Mitglieder & Bots", "Kanäle", "Rollen",
+           "Server-Boosts", "Emojis & Sticker", "Sicherheit", "Servereinstellungen",
+           "Sprache ändern", "Zurück", "Vorherige Seite", "Nächste Seite", "Seite"],
+    "it": ["SELEZIONA LA LINGUA", "Scegli la lingua preferita per continuare.",
+           "INFORMAZIONI DEL SERVER", "Benvenuto nel centro informazioni LEGENDS.",
+           "Informazioni generali", "Membri e bot", "Canali", "Ruoli",
+           "Boost del server", "Emoji e adesivi", "Sicurezza", "Impostazioni server",
+           "Cambia lingua", "Indietro", "Pagina precedente", "Pagina successiva", "Pagina"],
+    "uk": ["ОБЕРІТЬ МОВУ", "Оберіть бажану мову, щоб продовжити.",
+           "ІНФОРМАЦІЯ ПРО СЕРВЕР", "Ласкаво просимо до інформаційного центру LEGENDS.",
+           "Загальна інформація", "Учасники та боти", "Канали", "Ролі",
+           "Буст серверу", "Емодзі та стікери", "Безпека", "Налаштування серверу",
+           "Змінити мову", "Назад", "Попередня сторінка", "Наступна сторінка", "Сторінка"],
+    "pl": ["WYBIERZ JĘZYK", "Wybierz preferowany język, aby kontynuować.",
+           "INFORMACJE O SERWERZE", "Witamy w centrum informacji LEGENDS.",
+           "Informacje ogólne", "Użytkownicy i boty", "Kanały", "Role",
+           "Ulepszenia serwera", "Emoji i naklejki", "Bezpieczeństwo", "Ustawienia serwera",
+           "Zmień język", "Wstecz", "Poprzednia strona", "Następna strona", "Strona"],
 }
 
-# Для остальных языков интерфейс пока использует английские подписи.
-# Словари можно расширять без изменения логики системы.
-for language in LANGUAGES:
-    if language not in TEXTS:
-        TEXTS[language] = TEXTS["en"]
+SECTION_EMOJIS = ["📊", "👥", "📁", "🎭", "🚀", "😀", "🔐", "⚙️"]
+SECTION_KEYS = ["general", "members", "channels", "roles", "boosts", "emojis", "security", "settings"]
 
 
-def load_json(path, default):
+def load_languages():
     try:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as file:
-                return json.load(file)
-    except Exception:
-        logger.exception("Could not read %s", path)
-    return default
+        with open(LANGUAGE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
 
 
-def save_json(path, data):
-    temporary = path + ".tmp"
-    with open(temporary, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
-    os.replace(temporary, path)
+def save_languages(data):
+    temp = LANGUAGE_FILE + ".tmp"
+    with open(temp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(temp, LANGUAGE_FILE)
 
 
-def get_text(language, key):
-    return TEXTS.get(language, TEXTS["en"]).get(
-        key, TEXTS["en"].get(key, key)
-    )
+def tr(lang, index):
+    return T.get(lang, T["en"])[index]
 
 
-def is_separator_role(role):
+def role_is_separator(role):
     name = role.name.strip()
     if not name:
         return True
-
-    allowed = set(" -_│┃|•・─━═＝=⋆★☆◆◇")
-    return all(character in allowed for character in name)
-
-
-def format_date(value):
-    return discord.utils.format_dt(value, style="F")
+    separators = set(" -_│┃|•・─━═＝=⋆★☆◆◇")
+    return all(char in separators for char in name)
 
 
-# =========================================================
-# PUBLIC PANEL
-# =========================================================
+# Each entry: (role ID or None, accepted exact names, description)
+ROLE_GROUPS = {
+    "🤖 SYSTEM┃| SERVER": [
+        (None, ["System┃| BOT"], "Main server bot."),
+        (None, ["System2┃| BOT"], "Second main server bot."),
+        (None, ["Stumble Guys┃| BOT"], "Server gaming bot. Game: Stumble Guys."),
+        (None, ["LuckyPrize┃| BOT"], "Friend's bot. Friend: <@1190322918048149595>. Bot owner: <@1176149190192152626>."),
+    ],
+    "👑 ОСНОВНЫЕ РОЛИ": [
+        (None, ["Verified"], "You receive this role after completing server verification."),
+        (None, ["ВЛАДЕЛЕЦ／OWNER", "ВЛАДЕЛЕЦ/OWNER"], "Server owner: <@1176149190192152626>."),
+        (None, ["Помощник／Assistant", "Помощник/Assistant"], "Owner's assistant."),
+        (None, ["Ведущий Турниров／Host Tournaments", "Ведущий Турниров/Host Tournaments"], "Hosts tournaments for the game Stumble Guys."),
+        (None, ["Модератор／Moderator", "Модератор/Moderator"], "Server moderator. Keeps the server orderly."),
+        (None, ["МЕНЕДЖЕР ПОДДЕРЖКИ／SUPPORT MANAGER", "МЕНЕДЖЕР ПОДДЕРЖКИ/SUPPORT MANAGER"], "Helps members who need assistance."),
+        (None, ["ТЕСТЕР／TESTER", "ТЕСТЕР/TESTER"], "Tests new server systems before release."),
+        (None, ["ЮТУБЕР／YOUTUBER", "ЮТУБЕР/YOUTUBER"], "Available only from 1,000 subscribers. Contact support: <#1527278068526219305>."),
+        (None, ["УЧАСТНИК／MEMBER", "УЧАСТНИК/MEMBER"], "Automatically assigned to all members."),
+    ],
+    "🎮 ПЛАТФОРМА": [
+        (None, ["▣ ┃PC", "▣┃PC"], "For playing on a computer or laptop."),
+        (None, ["▯┃Mobile", "▯ ┃Mobile"], "For playing on a phone."),
+        (None, ["▱┃Tablet", "▱ ┃Tablet"], "For playing on a tablet."),
+        (None, ["◇ ┃Xbox", "◇┃Xbox"], "For playing on Xbox."),
+        (None, ["◈ ┃PlayStation", "◈┃PlayStation"], "For playing on PlayStation."),
+        (None, ["⬡ ┃Nintendo Switch", "⬡┃Nintendo Switch"], "For playing on Nintendo Switch."),
+    ],
+    "🎨 ЦВЕТНЫЕ НИКИ": [
+        (None, ["Чёрный／Black", "Чёрный/Black"], "Black nickname."),
+        (None, ["Синий／Blue", "Синий/Blue"], "Blue nickname."),
+        (None, ["Фиолетовый／Purple", "Фиолетовый/Purple"], "Purple nickname."),
+        (None, ["Розовый／Pink", "Розовый/Pink"], "Pink nickname."),
+        (None, ["Ярко Зелёный／Bright Green", "Ярко Зелёный/Bright Green"], "Bright green nickname."),
+    ],
+    "⭐ РОЛЬ ЗА УРОВЕНЬ": [
+        (1527640074986983555, [], "Requires level 5."),
+        (1527640434082316459, [], "Requires level 10."),
+        (1527640780112527512, [], "Requires level 15."),
+        (1527641087047372931, [], "Requires level 20."),
+        (1527641260574376037, [], "Requires level 25."),
+        (1527642018250096670, [], "Requires level 30."),
+        (1527642367329439947, [], "Requires level 35."),
+        (1527643045032628254, [], "Requires level 40."),
+        (1527643250163454052, [], "Requires level 45."),
+        (1527643560113868861, [], "Requires level 50."),
+    ],
+    "🎁 CHEST": [
+        (None, ["Phoenix 2／2", "Phoenix 2/2"], "This role can only drop from a chest."),
+        (None, ["Ultra"], "This role can only drop from a chest."),
+        (None, ["Галактическая／Galactic", "Галактическая/Galactic"], "This role can only drop from a chest."),
+        (None, ["Космическая／Cosmic", "Космическая/Cosmic"], "This role can only drop from a chest."),
+        (None, ["Легендарная／Legendary", "Легендарная/Legendary"], "This role can only drop from a chest."),
+        (None, ["Героическая／Heroic", "Героическая/Heroic"], "This role can only drop from a chest."),
+        (None, ["Мифическая／Mythic", "Мифическая/Mythic"], "This role can only drop from a chest."),
+        (None, ["Эпическая／Epic", "Эпическая/Epic"], "This role can only drop from a chest."),
+        (None, ["Редкая／Rare", "Редкая/Rare"], "This role can only drop from a chest."),
+        (None, ["Необычная／Uncommon", "Необычная/Uncommon"], "This role can only drop from a chest."),
+        (None, ["Обычная／Common", "Обычная/Common"], "This role can only drop from a chest."),
+    ],
+    "💎 EXCLUSIVE": [
+        (None, ["💎 ЛЕГЕНДА／LEGEND 💎", "💎 ЛЕГЕНДА/LEGEND 💎"], "Available only during events."),
+    ],
+    "🌐 LANGUAGE": [
+        (None, ["Russian"], "Can be obtained in <#1541336807508017252>."),
+        (None, ["English"], "Can be obtained in <#1541336807508017252>."),
+    ],
+    "🔔 PING ROLES": [
+        (1541715251018465351, [], "Can be obtained in <#1541718209533575228>."),
+        (1541715118872731768, [], "Can be obtained in <#1541718209533575228>."),
+        (1541716902752157798, [], "Can be obtained in <#1541718209533575228>."),
+        (1541715546356060200, [], "Can be obtained in <#1541718209533575228>."),
+    ],
+}
 
-class PublicInfoView(discord.ui.View):
-    def __init__(self, cog):
-        super().__init__(timeout=None)
-        self.cog = cog
-
-        buttons = [
-            ("📊", "general"),
-            ("👥", "members"),
-            ("📁", "channels"),
-            ("🎭", "roles"),
-            ("🚀", "boosts"),
-            ("😀", "emojis"),
-            ("🔐", "security"),
-            ("⚙️", "settings"),
-        ]
-
-        for emoji, section in buttons:
-            button = discord.ui.Button(
-                emoji=emoji,
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"info_server:{section}",
-                row=len(self.children) // 4,
-            )
-
-            async def callback(interaction, selected=section):
-                await self.cog.open_section(interaction, selected)
-
-            button.callback = callback
-            self.add_item(button)
+ROLE_CATEGORY_KEYS = list(ROLE_GROUPS.keys())
 
 
-# =========================================================
-# LANGUAGE SELECTOR
-# =========================================================
+class V2View(discord.ui.LayoutView):
+    """Base helper for Discord Components V2 layouts."""
+
+    def __init__(self, timeout=300):
+        super().__init__(timeout=timeout)
+
+    def panel(self, *components):
+        self.add_item(discord.ui.Container(
+            *components,
+            accent_colour=discord.Colour.from_rgb(88, 101, 242)
+        ))
+
 
 class LanguageSelect(discord.ui.Select):
-    def __init__(self, cog, user_id):
+    def __init__(self, cog):
         self.cog = cog
-        self.user_id = user_id
-
         options = [
-            discord.SelectOption(
-                label=name,
-                value=code,
-                emoji=emoji
-            )
+            discord.SelectOption(label=name, value=code, emoji=emoji)
             for code, (emoji, name) in LANGUAGES.items()
         ]
-
         super().__init__(
-            placeholder="🌐 Select your language / Выберите язык",
+            placeholder="Select your language",
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="info_language_select"
+            custom_id="info_server_language"
         )
 
-    async def callback(self, interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "This menu belongs to another user.",
-                ephemeral=True
-            )
-            return
+    async def callback(self, interaction: discord.Interaction):
+        lang = self.values[0]
+        self.cog.languages[str(interaction.user.id)] = lang
+        save_languages(self.cog.languages)
 
-        language = self.values[0]
-        self.cog.languages[str(self.user_id)] = language
-        self.cog.save_languages()
-
-        await interaction.response.edit_message(
-            content=get_text(language, "language_saved"),
-            embed=self.cog.build_menu_embed(language),
-            view=PrivateInfoView(self.cog, self.user_id, language)
+        await interaction.response.send_message(
+            view=MainInfoView(self.cog, interaction.guild, interaction.user.id, lang),
+            ephemeral=True
         )
 
 
-class LanguageView(discord.ui.View):
-    def __init__(self, cog, user_id):
-        super().__init__(timeout=300)
-        self.add_item(LanguageSelect(cog, user_id))
+class PublicLanguageView(V2View):
+    def __init__(self, cog):
+        super().__init__(timeout=600)
+        self.panel(
+            discord.ui.TextDisplay("## 🌐 SELECT YOUR LANGUAGE"),
+            discord.ui.TextDisplay("Choose your preferred language to continue."),
+            discord.ui.Separator(),
+            discord.ui.ActionRow(LanguageSelect(cog))
+        )
 
 
-# =========================================================
-# PRIVATE INFORMATION MENU
-# =========================================================
+class MainInfoView(V2View):
+    def __init__(self, cog, guild, user_id, lang):
+        super().__init__(timeout=600)
+        self.cog, self.guild, self.user_id, self.lang = cog, guild, user_id, lang
 
-class PrivateInfoView(discord.ui.View):
-    def __init__(self, cog, user_id, language):
-        super().__init__(timeout=300)
-        self.cog = cog
-        self.user_id = user_id
-        self.language = language
-
-        buttons = [
-            ("📊", "general"),
-            ("👥", "members"),
-            ("📁", "channels"),
-            ("🎭", "roles"),
-            ("🚀", "boosts"),
-            ("😀", "emojis"),
-            ("🔐", "security"),
-            ("⚙️", "settings"),
-        ]
-
-        for emoji, section in buttons:
-            button = discord.ui.Button(
-                emoji=emoji,
-                label=get_text(language, section),
-                style=discord.ButtonStyle.secondary,
-                row=len(self.children) // 2,
-            )
-
-            async def callback(interaction, selected=section):
-                if interaction.user.id != self.user_id:
-                    await interaction.response.send_message(
-                        "This panel belongs to another user.",
-                        ephemeral=True
-                    )
-                    return
-
-                await interaction.response.edit_message(
-                    embed=self.cog.build_section_embed(
-                        interaction.guild,
-                        selected,
-                        self.language
-                    ),
-                    view=SectionBackView(
-                        self.cog,
-                        self.user_id,
-                        self.language
-                    )
+        rows = []
+        for start in (0, 4):
+            buttons = []
+            for i in range(start, start + 4):
+                button = discord.ui.Button(
+                    emoji=SECTION_EMOJIS[i],
+                    label=tr(lang, 4 + i),
+                    style=discord.ButtonStyle.secondary,
+                    custom_id=f"info_private_{i}_{user_id}"
                 )
 
-            button.callback = callback
-            self.add_item(button)
+                async def callback(interaction, index=i):
+                    if interaction.user.id != self.user_id:
+                        return await interaction.response.send_message(
+                            "This private panel belongs to another user.",
+                            ephemeral=True
+                        )
+                    await interaction.response.edit_message(
+                        view=SectionView(self.cog, self.guild, self.user_id, self.lang, index, 0)
+                    )
+
+                button.callback = callback
+                buttons.append(button)
+            rows.append(discord.ui.ActionRow(*buttons))
 
         language_button = discord.ui.Button(
-            label="🌐 " + get_text(language, "change_language"),
+            label="🌐 " + tr(lang, 12),
             style=discord.ButtonStyle.primary,
-            row=4
+            custom_id=f"info_change_language_{user_id}"
         )
 
         async def change_language(interaction):
             if interaction.user.id != self.user_id:
-                await interaction.response.send_message(
-                    "This panel belongs to another user.",
-                    ephemeral=True
+                return await interaction.response.send_message(
+                    "This private panel belongs to another user.", ephemeral=True
                 )
-                return
-
-            await interaction.response.edit_message(
-                content="🌐 Select your language / Выберите язык",
-                embed=None,
-                view=LanguageView(self.cog, self.user_id)
+            await interaction.response.send_message(
+                view=LanguageChangeView(self.cog, self.guild, self.user_id),
+                ephemeral=True
             )
 
         language_button.callback = change_language
-        self.add_item(language_button)
 
-
-class SectionBackView(discord.ui.View):
-    def __init__(self, cog, user_id, language):
-        super().__init__(timeout=300)
-        self.cog = cog
-        self.user_id = user_id
-        self.language = language
-
-        back = discord.ui.Button(
-            label="⬅️ " + get_text(language, "back"),
-            style=discord.ButtonStyle.secondary
+        self.panel(
+            discord.ui.TextDisplay(f"## 📚 {tr(lang, 2)}"),
+            discord.ui.TextDisplay(tr(lang, 3)),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(
+                "\n".join(
+                    f"{SECTION_EMOJIS[i]} — {tr(lang, 4 + i)}"
+                    for i in range(8)
+                )
+            ),
+            discord.ui.Separator(),
+            *rows,
+            discord.ui.ActionRow(language_button)
         )
 
-        async def callback(interaction):
-            if interaction.user.id != self.user_id:
-                await interaction.response.send_message(
-                    "This panel belongs to another user.",
-                    ephemeral=True
-                )
-                return
 
+class LanguageChangeView(V2View):
+    def __init__(self, cog, guild, user_id):
+        super().__init__(timeout=300)
+        self.panel(
+            discord.ui.TextDisplay("## 🌐 SELECT YOUR LANGUAGE"),
+            discord.ui.TextDisplay("Choose your preferred language."),
+            discord.ui.Separator(),
+            discord.ui.ActionRow(LanguageSelectForPrivate(cog, guild, user_id))
+        )
+
+
+class LanguageSelectForPrivate(discord.ui.Select):
+    def __init__(self, cog, guild, user_id):
+        self.cog, self.guild, self.user_id = cog, guild, user_id
+        options = [
+            discord.SelectOption(label=name, value=code, emoji=emoji)
+            for code, (emoji, name) in LANGUAGES.items()
+        ]
+        super().__init__(
+            placeholder="Select your language",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message(
+                "This private panel belongs to another user.", ephemeral=True
+            )
+        lang = self.values[0]
+        self.cog.languages[str(self.user_id)] = lang
+        save_languages(self.cog.languages)
+        await interaction.response.edit_message(
+            view=MainInfoView(self.cog, self.guild, self.user_id, lang)
+        )
+
+
+class RoleCategorySelect(discord.ui.Select):
+    def __init__(self, view):
+        self.parent_view = view
+        options = [
+            discord.SelectOption(label=key[:100], value=str(i), emoji=key.split()[0])
+            for i, key in enumerate(ROLE_CATEGORY_KEYS)
+        ]
+        super().__init__(
+            placeholder="Choose a role category",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction):
+        if interaction.user.id != self.parent_view.user_id:
+            return await interaction.response.send_message(
+                "This private panel belongs to another user.", ephemeral=True
+            )
+        self.parent_view.category_index = int(self.values[0])
+        self.parent_view.page = 0
+        await interaction.response.edit_message(
+            view=SectionView(
+                self.parent_view.cog,
+                self.parent_view.guild,
+                self.parent_view.user_id,
+                self.parent_view.lang,
+                3,
+                0,
+                self.parent_view.category_index
+            )
+        )
+
+
+class SectionView(V2View):
+    def __init__(self, cog, guild, user_id, lang, section_index, page=0, category_index=0):
+        super().__init__(timeout=600)
+        self.cog, self.guild, self.user_id, self.lang = cog, guild, user_id, lang
+        self.section_index, self.page, self.category_index = section_index, page, category_index
+        title = tr(lang, 4 + section_index)
+        body = self.build_body()
+
+        controls = []
+        if section_index == 3:
+            controls.append(discord.ui.ActionRow(RoleCategorySelect(self)))
+
+        nav = []
+        if page > 0:
+            previous = discord.ui.Button(label="⬅️ " + tr(lang, 14), style=discord.ButtonStyle.secondary)
+            async def prev_callback(interaction):
+                await self.change_page(interaction, page - 1)
+            previous.callback = prev_callback
+            nav.append(previous)
+
+        if self.has_next_page():
+            nxt = discord.ui.Button(label=tr(lang, 15) + " ➡️", style=discord.ButtonStyle.secondary)
+            async def next_callback(interaction):
+                await self.change_page(interaction, page + 1)
+            nxt.callback = next_callback
+            nav.append(nxt)
+
+        back = discord.ui.Button(label="↩️ " + tr(lang, 13), style=discord.ButtonStyle.primary)
+        async def back_callback(interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message(
+                    "This private panel belongs to another user.", ephemeral=True
+                )
             await interaction.response.edit_message(
-                content=get_text(language, "private"),
-                embed=cog.build_menu_embed(language),
-                view=PrivateInfoView(cog, user_id, language)
+                view=MainInfoView(cog, guild, user_id, lang)
+            )
+        back.callback = back_callback
+        nav.append(back)
+        if nav:
+            controls.append(discord.ui.ActionRow(*nav))
+
+        self.panel(
+            discord.ui.TextDisplay(f"## {SECTION_EMOJIS[section_index]} {title}"),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(body),
+            discord.ui.Separator(),
+            *controls
+        )
+
+    async def change_page(self, interaction, new_page):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message(
+                "This private panel belongs to another user.", ephemeral=True
+            )
+        await interaction.response.edit_message(
+            view=SectionView(
+                self.cog, self.guild, self.user_id, self.lang,
+                self.section_index, new_page, self.category_index
+            )
+        )
+
+    def has_next_page(self):
+        if self.section_index == 3:
+            entries = self.get_role_entries()
+            return (self.page + 1) * 8 < len(entries)
+        if self.section_index == 2:
+            return False
+        return False
+
+    def get_role_entries(self):
+        category = ROLE_CATEGORY_KEYS[self.category_index]
+        entries = []
+        for role_id, names, description in ROLE_GROUPS[category]:
+            role = self.guild.get_role(role_id) if role_id else None
+            if role is None and names:
+                role = discord.utils.find(
+                    lambda r: r.name in names,
+                    self.guild.roles
+                )
+            if role is None or role_is_separator(role):
+                continue
+            entries.append((role, description))
+        return entries
+
+    def build_body(self):
+        guild = self.guild
+        if guild is None:
+            return "Server information is unavailable."
+
+        if self.section_index == 0:
+            owner = guild.owner.mention if guild.owner else "Unknown"
+            return (
+                f"**Server:** {guild.name}\n"
+                f"**Server ID:** `{guild.id}`\n"
+                f"**Owner:** {owner}\n"
+                f"**Created:** <t:{int(guild.created_at.timestamp())}:F>\n"
+                f"**Members:** {guild.member_count:,}\n"
+                f"**Roles:** {len(guild.roles):,}\n"
+                f"**Channels:** {len(guild.channels):,}"
             )
 
-        back.callback = callback
-        self.add_item(back)
+        if self.section_index == 1:
+            members = guild.members
+            humans = sum(not m.bot for m in members)
+            bots = sum(m.bot for m in members)
+            online = sum(m.status == discord.Status.online for m in members)
+            idle = sum(m.status == discord.Status.idle for m in members)
+            dnd = sum(m.status == discord.Status.dnd for m in members)
+            offline = sum(m.status == discord.Status.offline for m in members)
+            return (
+                f"**Total members:** {guild.member_count:,}\n"
+                f"**Humans:** {humans:,}\n**Bots:** {bots:,}\n\n"
+                f"🟢 **Online:** {online:,}\n"
+                f"🌙 **Idle:** {idle:,}\n"
+                f"⛔ **Do Not Disturb:** {dnd:,}\n"
+                f"⚫ **Offline:** {offline:,}"
+            )
 
+        if self.section_index == 2:
+            return (
+                f"**Total channels:** {len(guild.channels):,}\n"
+                f"**Text channels:** {len(guild.text_channels):,}\n"
+                f"**Voice channels:** {len(guild.voice_channels):,}\n"
+                f"**Categories:** {len(guild.categories):,}\n"
+                f"**Forums:** {len(guild.forums):,}"
+            )
 
-# =========================================================
-# INFORMATION COG
-# =========================================================
+        if self.section_index == 3:
+            category = ROLE_CATEGORY_KEYS[self.category_index]
+            entries = self.get_role_entries()
+            start = self.page * 8
+            page_entries = entries[start:start + 8]
+            lines = [f"### {category}"]
+            if not page_entries:
+                lines.append("No matching roles were found on this server.")
+            for role, description in page_entries:
+                lines.append(f"{role.mention}\n-# {description}")
+            lines.append(f"\n-# {tr(self.lang, 16)} {self.page + 1}")
+            return "\n\n".join(lines)
+
+        if self.section_index == 4:
+            boosters = sum(m.premium_since is not None for m in guild.members)
+            return (
+                f"**Boost level:** {guild.premium_tier}\n"
+                f"**Total boosts:** {guild.premium_subscription_count or 0}\n"
+                f"**Boosters:** {boosters}"
+            )
+
+        if self.section_index == 5:
+            animated = sum(e.animated for e in guild.emojis)
+            return (
+                f"**Emojis:** {len(guild.emojis)}\n"
+                f"**Animated emojis:** {animated}\n"
+                f"**Stickers:** {len(guild.stickers)}"
+            )
+
+        if self.section_index == 6:
+            return (
+                f"**Verification level:** {str(guild.verification_level).replace('_', ' ').title()}\n"
+                f"**2FA moderation:** {'Enabled' if guild.mfa_level else 'Disabled'}\n"
+                f"**Content filter:** {str(guild.explicit_content_filter).replace('_', ' ').title()}"
+            )
+
+        if self.section_index == 7:
+            return (
+                f"**Server ID:** `{guild.id}`\n"
+                f"**Preferred locale:** {guild.preferred_locale}\n"
+                f"**Default notifications:** {str(guild.default_notifications).replace('_', ' ').title()}\n"
+                f"**System channel:** {guild.system_channel.mention if guild.system_channel else 'Not set'}\n"
+                f"**AFK channel:** {guild.afk_channel.mention if guild.afk_channel else 'Not set'}\n"
+                f"**AFK timeout:** {guild.afk_timeout} seconds\n"
+                f"**File size limit:** {guild.filesize_limit:,} bytes"
+            )
+
+        return "No information available."
+
 
 class Info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data = load_json(DATA_FILE, {})
-        self.languages = load_json(LANGUAGE_FILE, {})
-
-        self.public_view = PublicInfoView(self)
-        self.bot.add_view(self.public_view)
-
-        self.update_panel.start()
-
-    def cog_unload(self):
-        self.update_panel.cancel()
-
-    def save_data(self):
-        save_json(DATA_FILE, self.data)
-
-    def save_languages(self):
-        save_json(LANGUAGE_FILE, self.languages)
-
-    # -----------------------------------------------------
-    # EMBEDS
-    # -----------------------------------------------------
-
-    def build_menu_embed(self, language):
-        embed = discord.Embed(
-            title="🌐 " + get_text(language, "title"),
-            description=(
-                get_text(language, "description")
-                + "\n\n"
-                + get_text(language, "private")
-            ),
-            color=0x5865F2
-        )
-        embed.set_footer(text="LEGENDS • System-BOT")
-        return embed
-
-    def build_public_embed(self, guild):
-        embed = discord.Embed(
-            title="📊 SERVER INFORMATION",
-            description=(
-                f"**{guild.name}**\n"
-                "Select an emoji button to open server information.\n\n"
-                "🌐 On your first visit, choose your language."
-            ),
-            color=0x5865F2,
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        embed.add_field(
-            name="👥 Members",
-            value=f"{guild.member_count:,}",
-            inline=True
-        )
-        embed.add_field(
-            name="🎭 Roles",
-            value=f"{len(guild.roles):,}",
-            inline=True
-        )
-        embed.add_field(
-            name="📁 Channels",
-            value=f"{len(guild.channels):,}",
-            inline=True
-        )
-        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-        embed.set_footer(text="LEGENDS • Automatically updated")
-        return embed
-
-    def build_section_embed(self, guild, section, language):
-        t = lambda key: get_text(language, key)
-
-        embed = discord.Embed(
-            title=t(section),
-            color=0x5865F2,
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        if section == "general":
-            embed.add_field(name=t("owner"), value=guild.owner.mention if guild.owner else "Unknown", inline=True)
-            embed.add_field(name=t("created"), value=format_date(guild.created_at), inline=False)
-            embed.add_field(name=t("region"), value=str(guild.preferred_locale), inline=True)
-            embed.add_field(name=t("max_members"), value=str(guild.max_members), inline=True)
-
-        elif section == "members":
-            members = guild.members
-            humans = sum(not member.bot for member in members)
-            bots = sum(member.bot for member in members)
-
-            statuses = {
-                "online": sum(member.status == discord.Status.online for member in members),
-                "idle": sum(member.status == discord.Status.idle for member in members),
-                "dnd": sum(member.status == discord.Status.dnd for member in members),
-                "offline": sum(member.status == discord.Status.offline for member in members),
-            }
-
-            embed.add_field(name=t("members_total"), value=str(guild.member_count), inline=True)
-            embed.add_field(name=t("humans"), value=str(humans), inline=True)
-            embed.add_field(name=t("bots"), value=str(bots), inline=True)
-
-            for key, amount in statuses.items():
-                embed.add_field(name=t(key), value=str(amount), inline=True)
-
-        elif section == "channels":
-            channels = guild.channels
-            embed.add_field(name=t("total_channels"), value=str(len(channels)), inline=True)
-            embed.add_field(name=t("text_channels"), value=str(len(guild.text_channels)), inline=True)
-            embed.add_field(name=t("voice_channels"), value=str(len(guild.voice_channels)), inline=True)
-            embed.add_field(name=t("categories"), value=str(len(guild.categories)), inline=True)
-            embed.add_field(
-                name=t("forum_channels"),
-                value=str(len(guild.forums)),
-                inline=True
-            )
-
-        elif section == "roles":
-            roles = [
-                role for role in guild.roles
-                if not role.is_default() and not is_separator_role(role)
-            ]
-
-            embed.add_field(
-                name=t("total_roles"),
-                value=str(len(roles)),
-                inline=False
-            )
-
-            shown = roles[:25]
-            if shown:
-                embed.add_field(
-                    name=t("roles_page"),
-                    value="\n".join(
-                        f"{role.mention} — {len(role.members)}"
-                        for role in shown
-                    ),
-                    inline=False
-                )
-
-            if len(roles) > 25:
-                embed.set_footer(
-                    text=f"{t('page')} 1 • Showing 25 of {len(roles)} roles"
-                )
-
-        elif section == "boosts":
-            embed.add_field(name=t("boost_level"), value=str(guild.premium_tier), inline=True)
-            embed.add_field(name=t("boost_count"), value=str(guild.premium_subscription_count), inline=True)
-
-            boosters = sum(
-                member.premium_since is not None
-                for member in guild.members
-            )
-            embed.add_field(name=t("boosters"), value=str(boosters), inline=True)
-
-        elif section == "emojis":
-            animated = sum(emoji.animated for emoji in guild.emojis)
-            embed.add_field(name=t("emoji_count"), value=str(len(guild.emojis)), inline=True)
-            embed.add_field(name=t("animated"), value=str(animated), inline=True)
-            embed.add_field(name=t("sticker_count"), value=str(len(guild.stickers)), inline=True)
-
-        elif section == "security":
-            embed.add_field(
-                name=t("verification"),
-                value=str(guild.verification_level).replace("_", " ").title(),
-                inline=True
-            )
-            embed.add_field(
-                name=t("mfa"),
-                value="Enabled" if guild.mfa_level else "Disabled",
-                inline=True
-            )
-            embed.add_field(
-                name=t("content_filter"),
-                value=str(guild.explicit_content_filter).replace("_", " ").title(),
-                inline=False
-            )
-
-        elif section == "settings":
-            embed.add_field(name="Server ID", value=str(guild.id), inline=False)
-            embed.add_field(name="Default notifications", value=str(guild.default_notifications).replace("_", " ").title(), inline=True)
-            embed.add_field(name="System channel", value=guild.system_channel.mention if guild.system_channel else "Not set", inline=True)
-            embed.add_field(name="AFK channel", value=guild.afk_channel.mention if guild.afk_channel else "Not set", inline=True)
-            embed.add_field(name="AFK timeout", value=f"{guild.afk_timeout} seconds", inline=True)
-            embed.add_field(name="Filesize limit", value=f"{guild.filesize_limit:,} bytes", inline=True)
-
-        embed.set_footer(text="LEGENDS • System-BOT")
-        return embed
-
-    # -----------------------------------------------------
-    # OPEN PRIVATE PANELS
-    # -----------------------------------------------------
-
-    async def open_section(self, interaction, section):
-        language = self.languages.get(str(interaction.user.id))
-
-        if not language:
-            await interaction.response.send_message(
-                content="🌐 Select your language / Выберите язык",
-                view=LanguageView(self, interaction.user.id),
-                ephemeral=True
-            )
-            return
-
-        await interaction.response.send_message(
-            content=get_text(language, "private"),
-            embed=self.build_section_embed(
-                interaction.guild,
-                section,
-                language
-            ),
-            view=SectionBackView(
-                self,
-                interaction.user.id,
-                language
-            ),
-            ephemeral=True
-        )
-
-    # -----------------------------------------------------
-    # OWNER COMMAND
-    # -----------------------------------------------------
+        self.languages = load_languages()
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot:
+        if message.author.bot or not message.guild:
             return
 
-        if message.content.strip().lower() != "!info server":
+        content = message.content.strip().lower()
+
+        if content == "!commands system":
+            if message.author.id != OWNER_ID:
+                return
+            await message.reply(
+                "**System-BOT | Info commands**\n"
+                "`!info server` — Open the server information setup.",
+                mention_author=False,
+                delete_after=30
+            )
+            return
+
+        if content != "!info server":
             return
 
         if message.author.id != OWNER_ID:
             await message.reply(
                 "You are not allowed to use this command.",
+                mention_author=False,
                 delete_after=5
             )
             return
 
-        await message.delete()
-
-        channel = self.bot.get_channel(STATS_CHANNEL_ID)
-        if channel is None:
-            try:
-                channel = await self.bot.fetch_channel(STATS_CHANNEL_ID)
-            except Exception:
-                logger.exception("Stats channel not found")
-                return
-
-        if not isinstance(channel, discord.TextChannel):
-            return
-
-        guild = channel.guild
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            pass
 
         try:
-            message_id = self.data.get("message_id")
-
-            if message_id:
-                try:
-                    old_message = await channel.fetch_message(message_id)
-                    await old_message.delete()
-                except discord.NotFound:
-                    pass
-                except discord.Forbidden:
-                    pass
-
-            panel = await channel.send(
-                embed=self.build_public_embed(guild),
-                view=self.public_view
-            )
-
-            self.data = {
-                "message_id": panel.id,
-                "channel_id": channel.id,
-                "guild_id": guild.id
-            }
-            self.save_data()
-
+            await message.channel.send(view=PublicLanguageView(self))
+        except Exception:
+            logger.exception("Could not send language selector")
             try:
-                await message.author.send(
-                    get_text(
-                        self.languages.get(str(message.author.id), "en"),
-                        "panel_created"
-                    )
-                )
+                await message.author.send("Could not create the language selection message.")
             except discord.Forbidden:
                 pass
-
-        except Exception:
-            logger.exception("Could not create information panel")
-
-    # -----------------------------------------------------
-    # AUTOMATIC UPDATE
-    # -----------------------------------------------------
-
-    @tasks.loop(minutes=1)
-    async def update_panel(self):
-        message_id = self.data.get("message_id")
-        channel_id = self.data.get("channel_id")
-
-        if not message_id or not channel_id:
-            return
-
-        channel = self.bot.get_channel(channel_id)
-        if channel is None:
-            return
-
-        guild = channel.guild
-
-        try:
-            panel = await channel.fetch_message(message_id)
-            await panel.edit(
-                embed=self.build_public_embed(guild),
-                view=self.public_view
-            )
-        except discord.NotFound:
-            self.data = {}
-            self.save_data()
-        except discord.Forbidden:
-            logger.warning("Missing permissions to update info panel")
-        except Exception:
-            logger.exception("Info panel update failed")
-
-    @update_panel.before_loop
-    async def before_update_panel(self):
-        await self.bot.wait_until_ready()
 
 
 async def setup(bot):
