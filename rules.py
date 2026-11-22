@@ -11,7 +11,9 @@ from discord.ext import commands
 # =========================================================
 
 OWNER_ID = 1176149190192152626
-LANGUAGE_FILE = "rules_languages.json"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+LANGUAGE_FILE = os.path.join(DATA_DIR, "rules_languages.json")
 VIEW_TIMEOUT = 300
 ACCENT_COLOR = 0x5865F2
 
