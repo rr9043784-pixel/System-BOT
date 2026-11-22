@@ -16,7 +16,9 @@ from flask import Flask
 TOKEN = os.environ.get("DISCORD_TOKEN")
 OWNER_ID = 1176149190192152626
 
-STATS_DATA_FILE = "stats_data.json"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+STATS_DATA_FILE = os.path.join(DATA_DIR, "stats_data.json")
 STATS_CHANNEL_ID = 1542994435472760953
 
 ONLINE_PC_STATUS = "<:Online_pc_status:1557533156322582649>"
