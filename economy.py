@@ -1,3 +1,4 @@
+
 import discord
 from discord.ext import commands
 import logging
@@ -161,39 +162,45 @@ def hex_to_color(value: str) -> discord.Color:
     return discord.Color(int(value.replace("#", ""), 16))
 
 
-def get_all_role_names():
-    return {
-        role_name
-        for season in SEASONS
-        for role_name, _ in season["roles"]
-    }
-
-
 # =========================================================
 # REPORT BUILDER
 # =========================================================
 
-def build_report(results, created, existing, failed):
+def build_reports(results, created, existing, failed):
 
-    # Three embeds in ONE Discord message.
-    # This keeps the full 66-role report together.
+    # Four separate messages:
+    # 3 seasons per message, 18 roles maximum.
+    # This avoids Discord's 6000-character combined embed limit.
 
     chunks = [
-        SEASONS[0:4],
-        SEASONS[4:8],
-        SEASONS[8:11],
+        SEASONS[0:3],
+        SEASONS[3:6],
+        SEASONS[6:9],
+        SEASONS[9:11],
     ]
 
-    embeds = []
+    reports = []
 
     for index, chunk in enumerate(chunks):
 
-        description = ""
+        lines = []
+
+        if index == 0:
+            lines.extend([
+                "**CREATION SUMMARY**",
+                f"Total planned: `{TOTAL_ROLES}`",
+                f"Created: `{created}`",
+                f"Existing / updated: `{existing}`",
+                f"Failed: `{failed}`",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "",
+            ])
 
         for season in chunk:
 
-            description += (
-                f"\n## {season['emoji']} {season['name']}\n"
+            lines.append(
+                f"**{season['emoji']} {season['name']}**"
             )
 
             for role_name, hex_color in season["roles"]:
@@ -202,55 +209,43 @@ def build_report(results, created, existing, failed):
 
                 if result is None:
                     line = (
-                        f"❌ **{role_name}**\n"
-                        "-# Role was not created."
+                        f"❌ **{role_name}** "
+                        f"· `{hex_color}` · Failed"
                     )
-
                 else:
                     role, status = result
 
+                    if status == "created":
+                        status_text = "✅ Created"
+                    elif status == "updated":
+                        status_text = "🔄 Updated"
+                    else:
+                        status_text = "♻️ Existing"
+
                     line = (
-                        f"**{role_name}**\n"
-                        f"-# ID: `{role.id}`\n"
-                        f"-# Color: `{hex_color}`"
+                        f"• **{role_name}**\n"
+                        f"  ID: `{role.id}` "
+                        f"· Color: `{hex_color}` "
+                        f"· {status_text}"
                     )
 
-                    if status == "created":
-                        line += " · <badge>Created</badge>"
-                    elif status == "updated":
-                        line += " · Updated"
-                    else:
-                        line += " · Already existed"
+                lines.append(line)
 
-                description += line + "\n\n"
+            lines.append("")
 
         embed = discord.Embed(
-            title=(
-                "🎭 SEASONAL ROLES REPORT"
-                if index == 0
-                else "🎭 SEASONAL ROLES REPORT"
-            ),
-            description=description,
+            title=f"🎭 SEASONAL ROLES REPORT • {index + 1}/4",
+            description="\n".join(lines),
             color=discord.Color.blurple(),
         )
 
-        if index == 0:
-            embed.description = (
-                f"**Creation Summary**\n"
-                f"Total planned: `{TOTAL_ROLES}`\n"
-                f"Created: `{created}`\n"
-                f"Existing/updated: `{existing}`\n"
-                f"Failed: `{failed}`\n"
-                + description
-            )
-
         embed.set_footer(
-            text=f"LEGENDS ECONOMY • Report {index + 1}/3"
+            text="LEGENDS ECONOMY • System-BOT"
         )
 
-        embeds.append(embed)
+        reports.append(embed)
 
-    return embeds
+    return reports
 
 
 # =========================================================
@@ -276,24 +271,28 @@ async def create_seasonal_roles(guild: discord.Guild):
                     name=role_name,
                 )
 
+                desired_color = hex_to_color(hex_color)
+
                 if role is not None:
 
                     if role.managed:
                         failed += 1
+
                         logger.warning(
                             "Cannot edit managed role: %s",
                             role_name,
                         )
                         continue
 
-                    desired_color = hex_to_color(hex_color)
-
                     if role.color != desired_color:
-                        await role.edit(
+
+                        role = await role.edit(
                             colour=desired_color,
                             reason="LEGENDS ECONOMY seasonal role setup",
                         )
+
                         results[role_name] = (role, "updated")
+
                     else:
                         results[role_name] = (role, "existing")
 
@@ -302,7 +301,7 @@ async def create_seasonal_roles(guild: discord.Guild):
 
                 role = await guild.create_role(
                     name=role_name,
-                    colour=hex_to_color(hex_color),
+                    colour=desired_color,
                     hoist=False,
                     mentionable=False,
                     reason="LEGENDS ECONOMY seasonal role setup",
@@ -312,23 +311,29 @@ async def create_seasonal_roles(guild: discord.Guild):
                 created += 1
 
             except discord.Forbidden:
+
                 failed += 1
+
                 logger.error(
-                    "Missing permission for role: %s",
+                    "Missing permission or role hierarchy prevents processing: %s",
                     role_name,
                 )
 
             except discord.HTTPException:
+
                 failed += 1
+
                 logger.exception(
-                    "Discord API failed creating role: %s",
+                    "Discord API failed processing role: %s",
                     role_name,
                 )
 
             except Exception:
+
                 failed += 1
+
                 logger.exception(
-                    "Unexpected error creating role: %s",
+                    "Unexpected error processing role: %s",
                     role_name,
                 )
 
@@ -345,6 +350,7 @@ class SeasonalRolesPanel(discord.ui.View):
         super().__init__(timeout=300)
 
         self.guild_id = guild_id
+        self.processing = False
 
     async def interaction_check(
         self,
@@ -374,6 +380,13 @@ class SeasonalRolesPanel(discord.ui.View):
         button: discord.ui.Button,
     ):
 
+        if self.processing:
+            await interaction.response.send_message(
+                "⏳ Seasonal role creation is already running.",
+                ephemeral=True,
+            )
+            return
+
         guild = interaction.client.get_guild(self.guild_id)
 
         if guild is None:
@@ -399,8 +412,6 @@ class SeasonalRolesPanel(discord.ui.View):
             )
             return
 
-        # Make sure the bot has enough room for the new roles.
-
         missing = sum(
             1
             for season in SEASONS
@@ -420,24 +431,10 @@ class SeasonalRolesPanel(discord.ui.View):
             )
             return
 
-        if any(
-            role >= bot_member.top_role
-            for role in guild.roles
-            if role.id != guild.default_role.id
-            and not role.managed
-            and discord.utils.get(
-                guild.roles,
-                name=role.name,
-            ) is role
-            and role.name in get_all_role_names()
-        ):
-            # Existing roles above the bot cannot be edited.
-            # Individual role errors are handled during creation.
-            pass
+        self.processing = True
+        button.disabled = True
 
         await interaction.response.defer()
-
-        button.disabled = True
 
         try:
             await interaction.message.edit(view=self)
@@ -448,26 +445,49 @@ class SeasonalRolesPanel(discord.ui.View):
             await create_seasonal_roles(guild)
         )
 
-        embeds = build_report(
+        reports = build_reports(
             results,
             created,
             existing,
             failed,
         )
 
+        sent = 0
+
         try:
-            await interaction.channel.send(
-                embeds=embeds,
+
+            for embed in reports:
+
+                await interaction.channel.send(
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+
+                sent += 1
+
+            logger.info(
+                "Seasonal role report sent: %s/%s messages. "
+                "Created=%s Existing=%s Failed=%s",
+                sent,
+                len(reports),
+                created,
+                existing,
+                failed,
             )
 
         except discord.HTTPException:
-            logger.exception("Could not send seasonal role report.")
+
+            logger.exception(
+                "Could not send seasonal role report. Sent %s/%s messages.",
+                sent,
+                len(reports),
+            )
 
             await interaction.followup.send(
-                "❌ Roles were processed, but the report could not be sent.",
+                "⚠️ Roles were processed, but the report could not be "
+                f"fully delivered. Messages sent: `{sent}/{len(reports)}`.",
                 ephemeral=True,
             )
-            return
 
 
 # =========================================================
@@ -509,12 +529,14 @@ async def economy_command(ctx: commands.Context):
     view = SeasonalRolesPanel(ctx.guild.id)
 
     try:
+
         await ctx.author.send(
             embed=embed,
             view=view,
         )
 
     except discord.Forbidden:
+
         await ctx.send(
             "❌ I couldn't send you a DM. Please enable direct messages."
         )
@@ -550,9 +572,6 @@ async def setup(bot: commands.Bot):
 
     bot.add_command(economy_command)
 
-    # Reuse an existing !commands group if another extension
-    # has already created one.
-
     command_group = bot.get_command("commands")
 
     if command_group is None:
@@ -577,12 +596,14 @@ async def setup(bot: commands.Bot):
             command_group.add_command(system_command)
 
         else:
+
             logger.warning(
                 "!commands system already exists. "
                 "Economy command list was not registered."
             )
 
     else:
+
         logger.warning(
             "The !commands name is already used by a non-group command."
         )
