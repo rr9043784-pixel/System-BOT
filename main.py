@@ -44,6 +44,7 @@ EXTENSIONS = [
     "voice_bot",
     "info",
     "rules",
+    "economy",
 ]
 
 logging.basicConfig(
