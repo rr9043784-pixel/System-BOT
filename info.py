@@ -12,7 +12,9 @@ from discord.ext import commands
 # =========================================================
 
 OWNER_ID = 1176149190192152626
-LANGUAGE_FILE = "info_languages.json"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+LANGUAGE_FILE = os.path.join(DATA_DIR, "info_languages.json")
 logger = logging.getLogger("SystemBot.Info")
 
 LANGUAGES = {
