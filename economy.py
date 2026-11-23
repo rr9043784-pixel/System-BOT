@@ -4,13 +4,14 @@ from discord.ext import commands
 import logging
 
 # =========================================================
-# LEGENDS ECONOMY | SEASONAL ROLE CREATOR
+# LEGENDS ECONOMY | MANAGEMENT SYSTEM
 # Python 3.13 | discord.py 2.6+
 # =========================================================
 
 OWNER_ID = 1176149190192152626
 
 logger = logging.getLogger("LEGENDS_ECONOMY")
+
 
 # =========================================================
 # SEASONAL ROLE DATABASE
@@ -163,14 +164,10 @@ def hex_to_color(value: str) -> discord.Color:
 
 
 # =========================================================
-# REPORT BUILDER
+# SEASONAL ROLE REPORT BUILDER
 # =========================================================
 
-def build_reports(results, created, existing, failed):
-
-    # Four separate messages:
-    # 3 seasons per message, 18 roles maximum.
-    # This avoids Discord's 6000-character combined embed limit.
+def build_role_reports(results, created, existing, failed):
 
     chunks = [
         SEASONS[0:3],
@@ -277,7 +274,6 @@ async def create_seasonal_roles(guild: discord.Guild):
 
                     if role.managed:
                         failed += 1
-
                         logger.warning(
                             "Cannot edit managed role: %s",
                             role_name,
@@ -313,16 +309,14 @@ async def create_seasonal_roles(guild: discord.Guild):
             except discord.Forbidden:
 
                 failed += 1
-
                 logger.error(
-                    "Missing permission or role hierarchy prevents processing: %s",
+                    "Missing permission or role hierarchy: %s",
                     role_name,
                 )
 
             except discord.HTTPException:
 
                 failed += 1
-
                 logger.exception(
                     "Discord API failed processing role: %s",
                     role_name,
@@ -331,13 +325,106 @@ async def create_seasonal_roles(guild: discord.Guild):
             except Exception:
 
                 failed += 1
-
                 logger.exception(
                     "Unexpected error processing role: %s",
                     role_name,
                 )
 
     return results, created, existing, failed
+
+
+# =========================================================
+# ECONOMY CATEGORY FINDER
+# =========================================================
+
+def find_economy_categories(guild: discord.Guild):
+
+    categories = [
+        category
+        for category in guild.categories
+        if "economy" in category.name.casefold()
+    ]
+
+    categories.sort(key=lambda category: category.position)
+
+    return categories
+
+
+# =========================================================
+# ECONOMY CHANNEL REPORT BUILDER
+# =========================================================
+
+def build_economy_channel_reports(guild: discord.Guild):
+
+    categories = find_economy_categories(guild)
+
+    if not categories:
+        return [], 0
+
+    # Three categories per message.
+    # Each category gets its own embed.
+    # Every channel includes its name, mention and ID.
+
+    message_groups = [
+        categories[index:index + 3]
+        for index in range(0, len(categories), 3)
+    ]
+
+    reports = []
+
+    total_channels = 0
+
+    for page_index, category_group in enumerate(message_groups):
+
+        embeds = []
+
+        for category in category_group:
+
+            channels = sorted(
+                category.channels,
+                key=lambda channel: channel.position,
+            )
+
+            total_channels += len(channels)
+
+            lines = [
+                f"**Category ID:** `{category.id}`",
+                f"**Channels:** `{len(channels)}`",
+                "",
+            ]
+
+            if not channels:
+                lines.append("No channels found in this category.")
+
+            for channel in channels:
+
+                lines.append(
+                    f"• {channel.mention}\n"
+                    f"  ID: `{channel.id}`"
+                )
+
+            embed = discord.Embed(
+                title=f"📂 {category.name}",
+                description="\n".join(lines),
+                color=discord.Color.blurple(),
+            )
+
+            embed.set_footer(
+                text="LEGENDS ECONOMY • Category Directory"
+            )
+
+            embeds.append(embed)
+
+        reports.append({
+            "content": (
+                f"📂 **ECONOMY CHANNEL DIRECTORY** "
+                f"• {page_index + 1}/{len(message_groups)}\n"
+                f"Categories in this message: `{len(category_group)}`"
+            ),
+            "embeds": embeds,
+        })
+
+    return reports, total_channels
 
 
 # =========================================================
@@ -368,11 +455,16 @@ class SeasonalRolesPanel(discord.ui.View):
 
         return True
 
+    # -----------------------------------------------------
+    # BUTTON 1: CREATE SEASONAL ROLES
+    # -----------------------------------------------------
+
     @discord.ui.button(
         label="Create Seasonal Roles",
         emoji="🎭",
         style=discord.ButtonStyle.primary,
         custom_id="legends_economy_create_seasonal_roles",
+        row=0,
     )
     async def create_roles_button(
         self,
@@ -445,7 +537,7 @@ class SeasonalRolesPanel(discord.ui.View):
             await create_seasonal_roles(guild)
         )
 
-        reports = build_reports(
+        reports = build_role_reports(
             results,
             created,
             existing,
@@ -489,6 +581,88 @@ class SeasonalRolesPanel(discord.ui.View):
                 ephemeral=True,
             )
 
+    # -----------------------------------------------------
+    # BUTTON 2: SHOW ECONOMY CHANNELS
+    # -----------------------------------------------------
+
+    @discord.ui.button(
+        label="Show Economy Channels",
+        emoji="📂",
+        style=discord.ButtonStyle.secondary,
+        custom_id="legends_economy_show_channels",
+        row=0,
+    )
+    async def show_economy_channels_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+
+        guild = interaction.client.get_guild(self.guild_id)
+
+        if guild is None:
+            await interaction.response.send_message(
+                "❌ The original server could not be found.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+
+        reports, total_channels = build_economy_channel_reports(guild)
+
+        if not reports:
+
+            await interaction.followup.send(
+                "❌ No categories containing `ECONOMY` were found.",
+                ephemeral=True,
+            )
+            return
+
+        sent = 0
+
+        try:
+
+            for report in reports:
+
+                await interaction.channel.send(
+                    content=report["content"],
+                    embeds=report["embeds"],
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+
+                sent += 1
+
+            category_count = len(find_economy_categories(guild))
+
+            await interaction.followup.send(
+                "✅ **Economy channel directory sent!**\n"
+                f"Categories found: `{category_count}`\n"
+                f"Channels found: `{total_channels}`\n"
+                f"Messages sent: `{sent}/{len(reports)}`",
+                ephemeral=True,
+            )
+
+            logger.info(
+                "Economy channel directory sent: %s categories, "
+                "%s channels, %s messages.",
+                category_count,
+                total_channels,
+                sent,
+            )
+
+        except discord.HTTPException:
+
+            logger.exception(
+                "Could not send economy channel directory."
+            )
+
+            await interaction.followup.send(
+                "⚠️ Could not fully send the economy channel directory. "
+                f"Messages sent: `{sent}/{len(reports)}`.",
+                ephemeral=True,
+            )
+
 
 # =========================================================
 # !economy
@@ -511,12 +685,16 @@ async def economy_command(ctx: commands.Context):
     embed = discord.Embed(
         title="💰 LEGENDS ECONOMY",
         description=(
-            "## 🎭 Seasonal Roles Management\n\n"
+            "## 🎭 Economy Management\n\n"
             "Welcome to the LEGENDS ECONOMY administration panel.\n\n"
             f"**Season Collections:** `{len(SEASONS)}`\n"
             f"**Total Seasonal Roles:** `{TOTAL_ROLES}`\n\n"
-            "Press the button below to create all seasonal roles "
-            "with their predefined names and themed HEX colors.\n\n"
+            "Choose an action using the buttons below:\n\n"
+            "🎭 **Create Seasonal Roles**\n"
+            "Create or update all 66 seasonal roles.\n\n"
+            "📂 **Show Economy Channels**\n"
+            "Find all categories containing ECONOMY and list "
+            "their channels with IDs.\n\n"
             "-# Owner-only management panel."
         ),
         color=discord.Color.blurple(),
@@ -554,8 +732,10 @@ async def system_commands_callback(ctx: commands.Context):
             "### 💰 LEGENDS ECONOMY\n\n"
             "`!economy` — Open the private economy management panel.\n\n"
             "### 🎭 SEASONAL ROLES\n\n"
-            "Use the Create Seasonal Roles button inside the panel "
-            "to create all 66 seasonal roles.\n\n"
+            "Create or update all 66 seasonal roles using the panel.\n\n"
+            "### 📂 ECONOMY CHANNELS\n\n"
+            "Find all ECONOMY categories and display their channels "
+            "with Discord IDs.\n\n"
             "-# LEGENDS ECONOMY • System-BOT"
         ),
         color=discord.Color.blurple(),
