@@ -38,34 +38,40 @@ DISCORD_API = "https://discord.com/api/v10"
 HTML = r"""
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>System-BOT Dashboard</title>
 <style>
-:root{--bg:#090d16;--panel:#111827;--panel2:#0d1421;--line:#253149;--muted:#91a0b8;--text:#edf2ff;--accent:#6875ff;--accent2:#8b5cf6;--green:#36c98f;--red:#f06b7b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Inter,Arial,sans-serif}button,input,select,textarea{font:inherit}header{height:66px;padding:0 24px;background:#0c1220;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}.brand{font-size:17px;font-weight:900;letter-spacing:.4px}.brand span{color:#8290ff}.topright{display:flex;gap:14px;align-items:center;color:var(--muted)}a{color:#b7c3ff;text-decoration:none}.layout{display:grid;grid-template-columns:235px minmax(0,1fr);min-height:calc(100vh - 66px)}aside{background:#0c1220;border-right:1px solid var(--line);padding:20px 13px}.navlabel{font-size:10px;color:#66748d;font-weight:800;letter-spacing:1.3px;padding:13px 12px 7px}.nav{display:flex;width:100%;text-align:left;border:0;background:transparent;color:#aebbd1;padding:11px 12px;border-radius:9px;cursor:pointer;margin:2px 0}.nav:hover,.nav.active{background:#1b2540;color:white}.nav.active{box-shadow:inset 3px 0 #7784ff}.main{padding:26px;max-width:1450px;width:100%;margin:auto}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:22px}.head h1{font-size:27px;margin:0 0 7px}.muted{color:var(--muted)}.guildbox{min-width:220px}.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:19px;margin-bottom:17px}.card h2{font-size:16px;margin:0 0 15px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.stat{background:linear-gradient(145deg,#17213a,#111827);border:1px solid var(--line);border-radius:12px;padding:17px}.stat b{display:block;font-size:25px;margin-top:9px}.stat small{color:var(--muted)}label{display:block;color:#aebbd1;font-size:12px;margin:12px 0 7px}input,select,textarea{width:100%;background:#090f1b;color:#f5f7ff;border:1px solid #303d56;border-radius:8px;padding:11px;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--accent)}textarea{min-height:95px;resize:vertical}.btn{border:0;background:linear-gradient(100deg,#5968ef,#7858d8);color:white;border-radius:8px;padding:10px 15px;font-weight:700;cursor:pointer;margin:7px 5px 0 0}.btn.secondary{background:#26334c}.btn.danger{background:#9e394b}.btn.success{background:#197d61}.btn:disabled{opacity:.5;cursor:wait}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}th,td{text-align:left;padding:11px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#8998b1}td{color:#dce4f4}.pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#222e49;color:#bdc9ff;font-size:11px}.pill.good{background:#143b33;color:#79e2ba}.pill.bad{background:#49232e;color:#ff9cac}.hidden{display:none!important}.status{margin:12px 0;color:#a9b8d0;white-space:pre-wrap}.notice{padding:12px;background:#171f31;border:1px solid var(--line);border-radius:8px;color:#aebbd1}.check{display:flex;gap:9px;align-items:center;margin:12px 0}.check input{width:auto}.colorrow{display:flex;gap:9px}.colorrow input[type=color]{width:60px;padding:3px}.preview{border-left:4px solid var(--accent);background:#1a2232;padding:15px;border-radius:7px;white-space:pre-wrap;margin-top:12px}.section{display:none}.section.active{display:block}.small{font-size:12px}.actioncell{white-space:nowrap}.login{max-width:440px;margin:12vh auto;padding:30px;text-align:center}.login .btn{display:inline-block}
-@media(max-width:850px){.layout{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px;padding:9px;border-right:0;border-bottom:1px solid var(--line)}.navlabel{display:none}.nav{white-space:nowrap;width:auto;margin:0}.main{padding:16px}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){header{padding:0 14px}.head{display:block}.guildbox{margin-top:15px}.grid,.grid3{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.card{padding:14px}}
+:root{color-scheme:dark;--bg:#101018;--panel:#191827;--panel2:#211d32;--line:#39314e;--muted:#aaa4c1;--text:#f8f5ff;--accent:#ff5fa2;--accent2:#8b5cf6;--accent3:#18c8e8;--green:#48dfad;--red:#ff647c;--glow:rgba(255,95,162,.2)}
+*{box-sizing:border-box}body{margin:0;color:var(--text);font:14px Inter,ui-sans-serif,system-ui,Arial,sans-serif;background:radial-gradient(ellipse at 8% 0%,rgba(255,95,162,.14),transparent 34%),radial-gradient(ellipse at 90% 8%,rgba(24,200,232,.13),transparent 32%),linear-gradient(145deg,#101018,#141222 58%,#101820);min-height:100vh}button,input,select,textarea{font:inherit}
+header{height:70px;padding:0 25px;background:rgba(19,17,31,.88);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.09);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5;box-shadow:0 8px 35px rgba(0,0,0,.2)}.brand{font-size:17px;font-weight:950;letter-spacing:.7px}.brand span{background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;background-clip:text;color:transparent}.topright{display:flex;gap:14px;align-items:center;color:var(--muted)}a{color:#ff9bc2;text-decoration:none}a:hover{color:#fff}
+.layout{display:grid;grid-template-columns:245px minmax(0,1fr);min-height:calc(100vh - 70px)}aside{background:rgba(19,17,31,.72);border-right:1px solid rgba(255,255,255,.08);padding:20px 13px;backdrop-filter:blur(14px)}.navlabel{font-size:10px;color:#827a9d;font-weight:900;letter-spacing:1.5px;padding:14px 12px 7px}.nav{display:flex;width:100%;text-align:left;border:1px solid transparent;background:transparent;color:#c4bdd7;padding:11px 12px;border-radius:11px;cursor:pointer;margin:3px 0;transition:.18s}.nav:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08);transform:translateX(2px)}.nav.active{background:linear-gradient(105deg,rgba(255,95,162,.2),rgba(139,92,246,.18),rgba(24,200,232,.1));border-color:rgba(255,255,255,.1);color:white;box-shadow:inset 3px 0 var(--accent),0 8px 24px rgba(139,92,246,.12)}
+.main{padding:28px;max-width:1500px;width:100%;margin:auto}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:24px}.head h1{font-size:30px;letter-spacing:-.7px;margin:0 0 7px;background:linear-gradient(90deg,#fff,var(--accent3),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}.muted{color:var(--muted)}.guildbox{min-width:230px}.card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(34,29,52,.94),rgba(24,23,39,.96));border:1px solid rgba(255,255,255,.09);border-radius:17px;padding:20px;margin-bottom:17px;box-shadow:0 14px 38px rgba(0,0,0,.16)}.card:before{content:"";position:absolute;left:0;top:0;width:100%;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));opacity:.7}.card h2{font-size:16px;margin:0 0 15px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.stat{position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(255,95,162,.14),rgba(139,92,246,.15) 52%,rgba(24,200,232,.1));border:1px solid rgba(255,255,255,.1);border-radius:15px;padding:18px}.stat:nth-child(2){background:linear-gradient(135deg,rgba(24,200,232,.16),rgba(34,29,52,.9))}.stat:nth-child(3){background:linear-gradient(135deg,rgba(72,223,173,.14),rgba(34,29,52,.9))}.stat:nth-child(4){background:linear-gradient(135deg,rgba(255,183,77,.15),rgba(34,29,52,.9))}.stat b{display:block;font-size:27px;margin-top:9px}.stat small{color:#c3bad7}
+label{display:block;color:#c9c1d9;font-size:12px;margin:12px 0 7px}input,select,textarea{width:100%;background:#12111e;color:#f8f5ff;border:1px solid #49405f;border-radius:10px;padding:11px 12px;outline:none;transition:.16s}input:focus,select:focus,textarea:focus{border-color:var(--accent3);box-shadow:0 0 0 3px rgba(24,200,232,.13)}textarea{min-height:95px;resize:vertical}.btn{border:0;background:linear-gradient(105deg,var(--accent),var(--accent2) 55%,#5b77ed);color:white;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer;margin:7px 5px 0 0;box-shadow:0 7px 18px rgba(139,92,246,.18);transition:.16s}.btn:hover{filter:brightness(1.12);transform:translateY(-1px)}.btn.secondary{background:linear-gradient(105deg,#39334d,#292b43);box-shadow:none;border:1px solid rgba(255,255,255,.08)}.btn.danger{background:linear-gradient(105deg,#ed5476,#a43d73)}.btn.success{background:linear-gradient(105deg,#13a985,#2b9cba)}.btn:disabled{opacity:.5;cursor:wait}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}th,td{text-align:left;padding:12px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:top}th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#a49bb9}td{color:#e5def1}tbody tr:hover{background:rgba(255,255,255,.035)}.pill{display:inline-block;padding:5px 9px;border-radius:20px;background:rgba(139,92,246,.19);color:#d2bfff;font-size:11px;border:1px solid rgba(139,92,246,.2)}.pill.good{background:rgba(72,223,173,.13);color:#75efc3;border-color:rgba(72,223,173,.18)}.pill.bad{background:rgba(255,100,124,.13);color:#ff9cac;border-color:rgba(255,100,124,.18)}.hidden{display:none!important}.status{margin:12px 0;color:#c4bdd7;white-space:pre-wrap}.notice{padding:13px;background:linear-gradient(110deg,rgba(255,95,162,.1),rgba(24,200,232,.08));border:1px solid rgba(255,255,255,.1);border-radius:11px;color:#d0c9df}.check{display:flex;gap:9px;align-items:center;margin:12px 0}.check input{width:auto}.colorrow{display:flex;gap:9px}.colorrow input[type=color]{width:62px;padding:3px}.preview{border-left:4px solid var(--accent);background:linear-gradient(120deg,rgba(255,95,162,.12),rgba(139,92,246,.12),rgba(24,200,232,.08));padding:16px;border-radius:9px;white-space:pre-wrap;margin-top:12px}.section{display:none}.section.active{display:block;animation:fadeIn .2s ease}.small{font-size:12px}.actioncell{white-space:nowrap}.login{max-width:440px;margin:12vh auto;padding:30px;text-align:center}.login .btn{display:inline-block}.themebar{display:flex;gap:7px;align-items:center}.swatch{width:19px;height:19px;border:2px solid rgba(255,255,255,.65);border-radius:50%;cursor:pointer;padding:0}.swatch.pink{background:linear-gradient(135deg,#ff5fa2,#8b5cf6)}.swatch.cyan{background:linear-gradient(135deg,#18c8e8,#4778ef)}.swatch.sunset{background:linear-gradient(135deg,#ff9a44,#f04f83)}.swatch.green{background:linear-gradient(135deg,#48dfad,#2295a9)}.chatlog{display:flex;flex-direction:column;gap:10px;max-height:520px;overflow:auto;padding:5px}.chatmsg{display:flex;gap:10px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035)}.chatmsg.bot{border-left:3px solid var(--accent2)}.chatmsg.user{border-left:3px solid var(--accent3)}.chatavatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#353047}.chatbody{min-width:0;flex:1}.chatmeta{display:flex;gap:9px;align-items:center;flex-wrap:wrap;font-weight:800}.chatdate{font-size:11px;color:var(--muted);font-weight:400}.chattext{margin-top:5px;white-space:pre-wrap;overflow-wrap:anywhere;color:#e6e0ef}.chatattachments a{display:inline-block;margin:5px 7px 0 0;font-size:12px}.ticket-select{cursor:pointer}.ticket-select:hover{outline:1px solid var(--accent3)}.profile-head{display:flex;gap:14px;align-items:center}.profile-head img{width:58px;height:58px;border-radius:50%;border:2px solid var(--accent3)}
+@keyframes fadeIn{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}body[data-palette="cyan"]{--accent:#18c8e8;--accent2:#4778ef;--accent3:#7de6ff;--glow:rgba(24,200,232,.2)}body[data-palette="sunset"]{--accent:#ff9a44;--accent2:#f04f83;--accent3:#ffd166;--glow:rgba(255,154,68,.2)}body[data-palette="green"]{--accent:#48dfad;--accent2:#2295a9;--accent3:#b6f36b;--glow:rgba(72,223,173,.2)}
+@media(max-width:850px){.layout{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px;padding:9px;border-right:0;border-bottom:1px solid var(--line)}.navlabel{display:none}.nav{white-space:nowrap;width:auto;margin:0}.main{padding:16px}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){header{padding:0 14px}.head{display:block}.guildbox{margin-top:15px}.grid,.grid3{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.card{padding:14px}.topright{gap:7px;font-size:11px}}
 </style></head><body>
-<header><div class="brand">SYSTEM<span>-BOT</span> <span style="color:#71809b">/ DASHBOARD</span></div><div class="topright"><span id="who">Private owner access</span><a href="/announcement/logout">Logout</a></div></header>
+<header><div class="brand">SYSTEM<span>-BOT</span> <span style="color:#71809b">/ DASHBOARD</span></div><div class="topright"><span id="who">Private owner access</span><div class="themebar" title="Dashboard color theme"><button class="swatch pink" onclick="setPalette('pink')" aria-label="Pink theme"></button><button class="swatch cyan" onclick="setPalette('cyan')" aria-label="Cyan theme"></button><button class="swatch sunset" onclick="setPalette('sunset')" aria-label="Sunset theme"></button><button class="swatch green" onclick="setPalette('green')" aria-label="Green theme"></button></div><a href="/announcement/logout">Logout</a></div></header>
 <div class="layout"><aside>
 <div class="navlabel">OVERVIEW</div><button class="nav active" data-tab="dashboard">▦ Dashboard</button>
-<div class="navlabel">SERVER MANAGEMENT</div><button class="nav" data-tab="moderation">♜ Moderation</button><button class="nav" data-tab="roles">◈ Roles</button><button class="nav" data-tab="channels">▤ Channels</button><button class="nav" data-tab="automod">⛨ AutoMod</button>
+<div class="navlabel">SERVER MANAGEMENT</div><button class="nav" data-tab="moderation">♜ Moderation</button><button class="nav" data-tab="members">♟ Members</button><button class="nav" data-tab="roles">◈ Roles</button><button class="nav" data-tab="channels">▤ Channels</button><button class="nav" data-tab="automod">⛨ AutoMod</button>
 <div class="navlabel">LEGENDS SYSTEMS</div><button class="nav" data-tab="economy">◆ LEGENDS Economy</button><button class="nav" data-tab="giveaways">🎉 Giveaways</button><button class="nav" data-tab="tickets">▣ Tickets</button><button class="nav" data-tab="announcements">✦ Announcement Studio</button>
 </aside><main class="main"><div class="head"><div><h1 id="pageTitle">Dashboard</h1><div class="muted" id="pageDesc">Live overview of your Discord server and System-BOT.</div></div><div class="guildbox"><label style="margin-top:0">Active server</label><select id="guild"><option>Loading servers...</option></select></div></div>
 <section id="dashboard" class="section active"><div class="stats" id="stats"><div class="stat"><small>Members</small><b>—</b></div><div class="stat"><small>Channels</small><b>—</b></div><div class="stat"><small>Roles</small><b>—</b></div><div class="stat"><small>Bot status</small><b>Online</b></div></div><div class="card" style="margin-top:17px"><h2>Server overview</h2><div id="overview" class="muted">Loading server information...</div></div></section>
 <section id="moderation" class="section"><div class="grid"><div class="card"><h2>Member moderation</h2><label>Member ID</label><input id="modUser" placeholder="Discord user ID"><label>Action</label><select id="modAction"><option value="warn">Warn</option><option value="timeout">Timeout</option><option value="untimeout">Remove timeout</option><option value="kick">Kick</option><option value="ban">Ban</option><option value="unban">Unban by user ID</option><option value="warn_remove">Remove latest warning</option></select><label>Reason</label><input id="modReason" maxlength="500" placeholder="Reason for this action"><label>Timeout duration (minutes)</label><input id="modMinutes" type="number" min="1" max="40320" value="60"><button class="btn danger" onclick="moderate()">Apply moderation</button><div class="status" id="modStatus"></div></div><div class="card"><h2>Warning history</h2><label>Member ID</label><input id="historyUser" placeholder="Discord user ID"><button class="btn secondary" onclick="loadWarnings()">Load warnings & history</button><div id="warnings" class="status"></div></div></div></section>
-<section id="roles" class="section"><div class="card"><h2>Create role</h2><div class="grid"><div><label>Role name</label><input id="roleName" maxlength="100" placeholder="Role name"></div><div><label>Role color</label><div class="colorrow"><input type="color" id="roleColor" value="#5865F2"><input id="roleHex" value="#5865F2" maxlength="7"></div></div></div><button class="btn" onclick="createRole()">Create role</button><div id="roleStatus" class="status"></div></div><div class="card"><div class="row"><h2 style="flex:1">Server roles</h2><button class="btn secondary" onclick="loadRoles()">Refresh</button></div><div id="rolesList" class="tablewrap muted">Loading roles...</div></div></section>
+<section id="members" class="section"><div class="grid"><div class="card"><h2>Member lookup</h2><label>Discord user ID</label><input id="memberLookupId" placeholder="Enter member ID"><button class="btn" onclick="lookupMember()">Find member</button><div id="memberProfile" class="status">Search for a server member to view their profile and roles.</div></div><div class="card"><h2>Manage member roles</h2><label>Member ID</label><input id="memberRoleUser" placeholder="Discord user ID"><label>Role</label><select id="memberRoleSelect"></select><div class="row"><button class="btn success" onclick="changeMemberRole('add')">Add role</button><button class="btn danger" onclick="changeMemberRole('remove')">Remove role</button></div><div id="memberRoleStatus" class="status"></div></div></div><div class="notice">Role changes follow Discord permissions and hierarchy. The bot cannot manage roles above its highest role or managed integration roles.</div></section><section id="roles" class="section"><div class="card"><h2>Create role</h2><div class="grid"><div><label>Role name</label><input id="roleName" maxlength="100" placeholder="Role name"></div><div><label>Role color</label><div class="colorrow"><input type="color" id="roleColor" value="#5865F2"><input id="roleHex" value="#5865F2" maxlength="7"></div></div></div><button class="btn" onclick="createRole()">Create role</button><div id="roleStatus" class="status"></div></div><div class="card"><div class="row"><h2 style="flex:1">Server roles</h2><button class="btn secondary" onclick="loadRoles()">Refresh</button></div><div id="rolesList" class="tablewrap muted">Loading roles...</div></div></section>
 <section id="channels" class="section"><div class="card"><h2>Create channel</h2><div class="grid"><div><label>Channel name</label><input id="channelName" maxlength="90" placeholder="new-channel"></div><div><label>Type</label><select id="channelType"><option value="text">Text channel</option><option value="voice">Voice channel</option><option value="category">Category</option></select></div></div><label>Category (optional)</label><select id="channelCategory"><option value="">No category</option></select><button class="btn" onclick="createChannel()">Create channel</button><div id="channelStatus" class="status"></div></div><div class="card"><div class="row"><h2 style="flex:1">Channels</h2><button class="btn secondary" onclick="loadChannelsList()">Refresh</button></div><div id="channelsList" class="tablewrap muted">Loading channels...</div></div></section>
 <section id="automod" class="section"><div class="card"><h2>AutoMod protection settings</h2><div id="automodSettings" class="muted">Loading settings...</div><button class="btn" onclick="saveAutoMod()">Save settings</button><div id="automodStatus" class="status"></div></div><div class="notice">These controls update the existing AutoMod settings file used by the running AutoMod cog.</div></section>
 <section id="economy" class="section"><div class="card"><h2>Seasonal economy</h2><div id="economyStatus" class="notice">Loading active economy...</div><div class="grid"><div><label>Member ID</label><input id="ecoUser" placeholder="Discord user ID"></div><div><label>Economy</label><select id="ecoKey"></select></div><div><label>Account</label><select id="ecoAccount"><option value="wallet">Wallet</option><option value="bank">Bank</option></select></div><div><label>Amount</label><input id="ecoAmount" type="number" min="0" placeholder="0"></div></div><label class="check"><input type="checkbox" id="ecoInfinity"> Set infinity for this economy</label><button class="btn" onclick="setEconomyBalance()">Update balance</button><div id="ecoResult" class="status"></div></div></section>
-<section id="giveaways" class="section"><div class="card"><h2>Create giveaway</h2><div class="grid"><div><label>Prize</label><input id="givePrize" maxlength="200" placeholder="Prize name"></div><div><label>Duration (minutes)</label><input id="giveDuration" type="number" min="1" max="43200" value="1440"></div><div><label>Number of winners</label><input id="giveWinners" type="number" min="1" max="20" value="1"></div><div><label>Announcement channel</label><select id="giveChannel"></select></div></div><button class="btn" onclick="createGiveaway()">Create giveaway</button><div id="giveStatus" class="status"></div></div><div class="card"><div class="row"><h2 style="flex:1">Giveaways</h2><button class="btn secondary" onclick="loadGiveaways()">Refresh</button></div><div id="giveList" class="tablewrap muted">Loading...</div></div></section>
-<section id="tickets" class="section"><div class="card"><div class="row"><h2 style="flex:1">Support tickets & applications</h2><button class="btn secondary" onclick="loadTickets()">Refresh</button></div><div id="ticketList" class="tablewrap muted">Loading tickets...</div></div><div class="card"><h2>Ticket reply</h2><label>Ticket number</label><input id="ticketNumber" placeholder="0001"><label>Reply to user</label><textarea id="ticketReply" maxlength="1800" placeholder="Write a support reply..."></textarea><button class="btn" onclick="replyTicket()">Send reply</button><button class="btn danger" onclick="closeTicket()">Close ticket</button><div id="ticketStatus" class="status"></div></div></section>
+<section id="giveaways" class="section"><div class="grid"><div class="card"><h2>✨ Create a Components V2 giveaway</h2><label>Prize</label><input id="givePrize" maxlength="200" placeholder="Prize name"><label>Short description (optional)</label><textarea id="giveDescription" maxlength="700" placeholder="Tell members what they can win..."></textarea><div class="grid"><div><label>Duration (minutes)</label><input id="giveDuration" type="number" min="1" max="43200" value="1440"></div><div><label>Number of winners</label><input id="giveWinners" type="number" min="1" max="20" value="1"></div></div><label>Announcement channel</label><select id="giveChannel"></select><button class="btn" onclick="createGiveaway()">🚀 Publish giveaway</button><div id="giveStatus" class="status"></div></div><div class="card"><h2>Giveaway features</h2><div class="notice">Interactive Components V2 card · Join / leave button · Live entrant count · Automatic ending · Winner announcement · Persistent entries after bot restart.</div><div class="stat" style="margin-top:14px"><small>Giveaway format</small><b style="font-size:19px">Components V2</b></div></div></div><div class="card"><div class="row"><h2 style="flex:1">🎉 Giveaway control center</h2><button class="btn secondary" onclick="loadGiveaways()">Refresh</button></div><div id="giveList" class="tablewrap muted">Loading...</div></div></section>
+<section id="tickets" class="section"><div class="card"><div class="row"><h2 style="flex:1">🎫 Support inbox & applications</h2><button class="btn secondary" onclick="loadTickets()">Refresh</button></div><div id="ticketList" class="tablewrap muted">Loading tickets...</div></div><div class="card"><div class="row"><div style="flex:1"><h2 id="ticketChatTitle">Ticket conversation</h2><div class="muted small" id="ticketChatMeta">Choose a ticket above to inspect its messages.</div></div><button class="btn secondary" onclick="loadTicketMessages()">↻ Refresh chat</button></div><div id="ticketChat" class="chatlog"><div class="notice">Select a ticket to load its latest messages, attachments and timestamps.</div></div><div id="ticketReplyControls"><label>Reply to selected ticket</label><textarea id="ticketReply" maxlength="1800" placeholder="Write a reply to the member..."></textarea><button class="btn" onclick="replyTicket()">Send reply</button><button class="btn danger" onclick="closeTicket()">Close ticket</button></div><div id="ticketStatus" class="status"></div></div></section>
 <section id="announcements" class="section"><div class="card"><h2>Announcement Studio</h2><div class="grid"><div><label>Destination channel</label><select id="announceChannel"></select></div><div><label>Message format</label><select id="announceType"><option value="text">Regular message</option><option value="embed">Embed</option><option value="v2">Components V2</option></select></div></div><label>Message content</label><textarea id="announceContent" maxlength="2000" placeholder="Write announcement..."></textarea><div id="announceEmbed" class="hidden"><div class="grid"><div><label>Embed title</label><input id="announceTitle" maxlength="256"></div><div><label>Footer</label><input id="announceFooter" maxlength="2048"></div></div><label>Description</label><textarea id="announceDescription" maxlength="4096"></textarea><label>Accent color</label><div class="colorrow"><input type="color" id="announceColor" value="#5865F2"><input id="announceHex" value="#5865F2" maxlength="7"></div><label>Image URL</label><input id="announceImage" placeholder="https://..."></div><div id="announceV2" class="hidden"><label>Components V2 JSON</label><textarea id="announceComponents" style="min-height:160px">[{"type":10,"content":"Welcome to LEGENDS!"},{"type":14,"divider":true},{"type":10,"content":"New announcement"}]</textarea><div class="muted small">Supported component types: Text Display (10) and Separator (14).</div></div><label class="check"><input type="checkbox" id="allowRolePings" checked> Allow role and user mentions in this message</label><label class="check"><input type="checkbox" id="allowEveryone"> Allow @everyone and @here (use carefully)</label><button class="btn secondary" onclick="previewAnnouncement()">Preview</button><div id="announcePreview" class="preview hidden"></div><button class="btn" onclick="sendAnnouncement()">Publish announcement</button><div id="announceStatus" class="status"></div></div></section>
 <div class="status" id="globalStatus"></div></main></div>
 <script>
 let csrfToken='';const $=id=>document.getElementById(id);let currentGuild='';
 async function api(url,options={}){if(!csrfToken){let x=await fetch('/announcement/api/session');let j=await x.json();if(!x.ok)throw Error(j.error||'Session expired');csrfToken=j.csrf_token;$('who').textContent=j.username||'Owner';}let r=await fetch(url,{...options,headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken,...(options.headers||{})}});let d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d}
-function msg(id,t){$(id).textContent=t}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function gid(){return $('guild').value}
-const pageInfo={dashboard:['Dashboard','Live overview of your Discord server and System-BOT.'],moderation:['Moderation','Manage member moderation, warnings and history.'],roles:['Roles','Create and manage server roles.'],channels:['Channels','Create and manage server channels.'],automod:['AutoMod','Configure the existing AutoMod protection system.'],economy:['LEGENDS Economy','Manage seasonal economy balances.'],giveaways:['Giveaways','Create and manage Discord giveaways.'],tickets:['Tickets','Manage support tickets and staff applications.'],announcements:['Announcement Studio','Compose and publish messages, embeds and Components V2.']};
+function msg(id,t){$(id).textContent=t}function setPalette(name){document.body.dataset.palette=name==='pink'?'':name;try{localStorage.setItem('systembot_palette',name)}catch(e){}}try{setPalette(localStorage.getItem('systembot_palette')||'pink')}catch(e){}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function gid(){return $('guild').value}
+const pageInfo={dashboard:['Dashboard','Live overview of your Discord server and System-BOT.'],moderation:['Moderation','Manage member moderation, warnings and history.'],members:['Members','Find members and manage their server roles.'],roles:['Roles','Create and manage server roles.'],channels:['Channels','Create and manage server channels.'],automod:['AutoMod','Configure the existing AutoMod protection system.'],economy:['LEGENDS Economy','Manage seasonal economy balances.'],giveaways:['Giveaways','Create and manage Discord giveaways.'],tickets:['Tickets','Manage support tickets and staff applications.'],announcements:['Announcement Studio','Compose and publish messages, embeds and Components V2.']};
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.add('active');$('pageTitle').textContent=pageInfo[b.dataset.tab][0];$('pageDesc').textContent=pageInfo[b.dataset.tab][1];refreshTab(b.dataset.tab)}));
 async function loadGuilds(){try{let d=await api('/announcement/api/guilds');$('guild').innerHTML='';d.guilds.forEach(g=>{let o=document.createElement('option');o.value=g.id;o.textContent=g.name;$('guild').append(o)});if(d.guilds.length){currentGuild=gid();await refreshTab('dashboard');await loadCommonChannels()}else $('guild').innerHTML='<option>No servers available</option>'}catch(e){msg('globalStatus',e.message)}}
-$('guild').addEventListener('change',()=>{currentGuild=gid();loadCommonChannels();refreshTab(document.querySelector('.nav.active').dataset.tab)});
-async function refreshTab(t){try{if(t==='dashboard')await loadDashboard();if(t==='roles')await loadRoles();if(t==='channels')await loadChannelsList();if(t==='automod')await loadAutoMod();if(t==='economy')await loadEconomy();if(t==='giveaways')await loadGiveaways();if(t==='tickets')await loadTickets();}catch(e){msg('globalStatus',e.message)}}
+$('guild').addEventListener('change',()=>{currentGuild=gid();selectedTicket='';selectedTicketType='';$('ticketChat').innerHTML='<div class="notice">Select a ticket to load its conversation.</div>';$('ticketReplyControls').classList.remove('hidden');loadCommonChannels();refreshTab(document.querySelector('.nav.active').dataset.tab)});
+async function refreshTab(t){try{if(t==='dashboard')await loadDashboard();if(t==='members')await loadMemberRoles();if(t==='roles')await loadRoles();if(t==='channels')await loadChannelsList();if(t==='automod')await loadAutoMod();if(t==='economy')await loadEconomy();if(t==='giveaways')await loadGiveaways();if(t==='tickets')await loadTickets();}catch(e){msg('globalStatus',e.message)}}
 async function loadCommonChannels(){if(!gid())return;let d=await api('/announcement/api/channels/'+gid());['giveChannel','announceChannel','channelCategory'].forEach(id=>{$(id).innerHTML=id==='channelCategory'?'<option value="">No category</option>':'';});d.channels.forEach(c=>{let o=document.createElement('option');o.value=c.id;o.textContent='#'+c.name;$('giveChannel').append(o);let a=o.cloneNode(true);$('announceChannel').append(a)});d.categories.forEach(c=>{let o=document.createElement('option');o.value=c.id;o.textContent=c.name;$('channelCategory').append(o)})}
 async function loadDashboard(){let d=await api('/announcement/api/stats/'+gid());$('stats').innerHTML=[['Members',d.members],['Text channels',d.channels],['Roles',d.roles],['Bot status','Online']].map(x=>`<div class="stat"><small>${x[0]}</small><b>${esc(x[1])}</b></div>`).join('');$('overview').innerHTML=`<div class="grid"><div><b>${esc(d.name)}</b><p class="muted">Server ID: ${esc(d.id)}</p><p class="muted">Created: ${esc(d.created)}</p></div><div><p>Owner: ${esc(d.owner)}</p><p>Boost level: ${esc(d.boost)}</p><p>Verification: ${esc(d.verification)}</p></div></div>`}
 async function moderate(){try{let d=await api('/announcement/api/moderation/'+gid(),{method:'POST',body:JSON.stringify({user_id:$('modUser').value,action:$('modAction').value,reason:$('modReason').value,minutes:$('modMinutes').value})});msg('modStatus','Success: '+d.message)}catch(e){msg('modStatus','Error: '+e.message)}}
@@ -79,14 +85,24 @@ async function loadAutoMod(){let d=await api('/announcement/api/automod/'+gid())
 async function saveAutoMod(){try{let settings={};document.querySelectorAll('[data-setting]').forEach(x=>settings[x.dataset.setting]=x.checked);await api('/announcement/api/automod/'+gid(),{method:'POST',body:JSON.stringify({settings})});msg('automodStatus','AutoMod settings saved.')}catch(e){msg('automodStatus',e.message)}}
 async function loadEconomy(){let d=await api('/announcement/api/economy/'+gid());msg('economyStatus','Active economy: '+(d.active_name||'OFF'));$('ecoKey').innerHTML=d.economies.map(x=>`<option value="${esc(x.key)}">${esc(x.name)}</option>`).join('')}
 async function setEconomyBalance(){try{let d=await api('/announcement/api/economy/'+gid(),{method:'POST',body:JSON.stringify({user_id:$('ecoUser').value,economy:$('ecoKey').value,account:$('ecoAccount').value,amount:$('ecoAmount').value,infinity:$('ecoInfinity').checked})});msg('ecoResult',d.message)}catch(e){msg('ecoResult',e.message)}}
-async function createGiveaway(){try{let d=await api('/announcement/api/giveaways/'+gid(),{method:'POST',body:JSON.stringify({channel_id:$('giveChannel').value,prize:$('givePrize').value,duration:$('giveDuration').value,winners:$('giveWinners').value})});msg('giveStatus','Giveaway created: '+d.id);await loadGiveaways()}catch(e){msg('giveStatus',e.message)}}async function loadGiveaways(){let d=await api('/announcement/api/giveaways/'+gid());$('giveList').innerHTML=d.giveaways.length?'<table><thead><tr><th>Prize</th><th>Ends</th><th>Status</th><th>Action</th></tr></thead><tbody>'+d.giveaways.map(g=>`<tr><td>${esc(g.prize)}</td><td>${esc(g.ends)}</td><td><span class="pill ${g.ended?'bad':'good'}">${g.ended?'Ended':'Active'}</span></td><td>${g.ended?'—':`<button class="btn" onclick="endGiveaway('${g.id}')">End now</button>`}</td></tr>`).join('')+'</tbody></table>':'No giveaways yet.'}async function endGiveaway(id){try{await api('/announcement/api/giveaways/'+gid()+'/'+id,{method:'POST',body:'{}'});await loadGiveaways()}catch(e){alert(e.message)}}
-async function loadTickets(){let d=await api('/announcement/api/tickets/'+gid());$('ticketList').innerHTML='<table><thead><tr><th>Number / User</th><th>Type</th><th>Details</th><th>Status / Actions</th></tr></thead><tbody>'+d.items.map(t=>`<tr><td>#${esc(t.number)}<br><span class="muted">${esc(t.user_id)}</span></td><td>${esc(t.type)}</td><td>${esc(t.details||'—')}<br><span class="muted small">Channel: ${esc(t.channel_id)}</span></td><td><span class="pill ${t.closed?'bad':'good'}">${t.closed?'Closed':'Open'}</span>${!t.closed&&t.type!=='Support'?`<br><button class="btn success" onclick="decideApplication('${esc(t.user_id)}','accept')">Accept</button><button class="btn danger" onclick="decideApplication('${esc(t.user_id)}','reject')">Reject</button>`:''}</td></tr>`).join('')+'</tbody></table>'}
+async function createGiveaway(){try{let d=await api('/announcement/api/giveaways/'+gid(),{method:'POST',body:JSON.stringify({channel_id:$('giveChannel').value,prize:$('givePrize').value,description:$('giveDescription').value,duration:$('giveDuration').value,winners:$('giveWinners').value})});msg('giveStatus','Components V2 giveaway published: '+d.id);$('givePrize').value='';$('giveDescription').value='';await loadGiveaways()}catch(e){msg('giveStatus',e.message)}}
+async function loadGiveaways(){let d=await api('/announcement/api/giveaways/'+gid());$('giveList').innerHTML=d.giveaways.length?'<table><thead><tr><th>Prize</th><th>Participants</th><th>Ends</th><th>Status</th><th>Action</th></tr></thead><tbody>'+d.giveaways.map(g=>`<tr><td><b>${esc(g.prize)}</b><br><span class="muted small">${esc(g.id)}</span></td><td>${esc(g.entrants)}</td><td>${esc(g.ends)}</td><td><span class="pill ${g.ended?'bad':'good'}">${g.ended?'Ended':'Active'}</span></td><td>${g.ended?'—':`<button class="btn" onclick="endGiveaway('${g.id}')">End & draw</button>`}</td></tr>`).join('')+'</tbody></table>':'No giveaways yet.'}
+async function endGiveaway(id){if(!confirm('End this giveaway and select winner(s)?'))return;try{await api('/announcement/api/giveaways/'+gid()+'/'+id,{method:'POST',body:'{}'});await loadGiveaways()}catch(e){alert(e.message)}}
+let selectedTicket='';let selectedTicketType='';
+async function loadTickets(){let d=await api('/announcement/api/tickets/'+gid());$('ticketList').innerHTML=d.items.length?'<table><thead><tr><th>Ticket / Member</th><th>Type</th><th>Details</th><th>Status / Actions</th></tr></thead><tbody>'+d.items.map(t=>`<tr class="ticket-select"><td><b>#${esc(t.number)}</b><br><span class="muted">${esc(t.user_name||t.user_id)}</span><br><span class="small muted">${esc(t.created||'')}</span></td><td>${esc(t.type)}</td><td>${esc(t.details||'—')}<br><span class="muted small">Channel: ${esc(t.channel_id)}</span></td><td>${t.closed?'<span class="muted small">Channel removed</span>':`<button class="btn secondary" onclick="selectTicket('${esc(t.number)}','${esc(t.user_id)}','${esc(t.type)}')">View chat</button>`}<br><span class="pill ${t.closed?'bad':'good'}">${t.closed?'Closed':'Open'}</span>${!t.closed&&t.type!=='Support'?`<br><button class="btn success" onclick="decideApplication('${esc(t.user_id)}','accept')">Accept</button><button class="btn danger" onclick="decideApplication('${esc(t.user_id)}','reject')">Reject</button>`:''}</td></tr>`).join('')+'</tbody></table>':'No tickets or applications yet.'}
+async function selectTicket(number,uid,type){selectedTicket=number;selectedTicketType=type;$('ticketReplyControls').classList.toggle('hidden',type!=='Support');$('ticketChatTitle').textContent='Ticket #'+number+' conversation';$('ticketChatMeta').textContent=type+' • Member '+uid;$('ticketChat').innerHTML='<div class="notice">Loading conversation...</div>';await loadTicketMessages()}
+async function loadTicketMessages(){if(!selectedTicket){msg('ticketStatus','Select a ticket first.');return}try{let d=await api('/announcement/api/tickets/'+gid()+'/'+encodeURIComponent(selectedTicket)+'/messages');$('ticketChatTitle').textContent='Ticket #'+selectedTicket+' conversation';$('ticketChatMeta').textContent=d.channel_name+' • '+d.messages.length+' latest messages • Auto-refresh every 10 seconds';$('ticketChat').innerHTML=d.messages.length?d.messages.map(m=>`<div class="chatmsg ${m.is_bot?'bot':'user'}"><img class="chatavatar" src="${esc(m.avatar)}" onerror="this.style.display='none'"><div class="chatbody"><div class="chatmeta">${esc(m.author)} <span class="chatdate">${esc(m.created)}</span></div><div class="chattext">${esc(m.content||'[No text content]')}</div>${m.attachments.length?'<div class="chatattachments">'+m.attachments.map(a=>`<a target="_blank" rel="noopener" href="${esc(a.url)}">📎 ${esc(a.name)}</a>`).join('')+'</div>':''}</div></div>`).join(''):'<div class="notice">No messages were found in this ticket channel.</div>';$('ticketChat').scrollTop=$('ticketChat').scrollHeight}catch(e){msg('ticketStatus',e.message)}}
 async function decideApplication(uid,decision){if(!confirm((decision==='accept'?'Accept':'Reject')+' this application?'))return;try{await api('/announcement/api/tickets/'+gid()+'/application/'+uid+'/'+decision,{method:'POST',body:'{}'});await loadTickets()}catch(e){alert(e.message)}}
-async function replyTicket(){try{let d=await api('/announcement/api/tickets/'+gid()+'/reply',{method:'POST',body:JSON.stringify({number:$('ticketNumber').value,message:$('ticketReply').value})});msg('ticketStatus',d.message)}catch(e){msg('ticketStatus',e.message)}}async function closeTicket(){try{let d=await api('/announcement/api/tickets/'+gid()+'/close',{method:'POST',body:JSON.stringify({number:$('ticketNumber').value})});msg('ticketStatus',d.message);await loadTickets()}catch(e){msg('ticketStatus',e.message)}}
+async function replyTicket(){if(selectedTicketType!=='Support'){msg('ticketStatus','Replies from this panel are available for support tickets.');return}if(!selectedTicket){msg('ticketStatus','Choose a ticket from the list first.');return}try{let d=await api('/announcement/api/tickets/'+gid()+'/reply',{method:'POST',body:JSON.stringify({number:selectedTicket,message:$('ticketReply').value})});msg('ticketStatus',d.message);$('ticketReply').value='';await loadTicketMessages()}catch(e){msg('ticketStatus',e.message)}}
+async function closeTicket(){if(selectedTicketType!=='Support'){msg('ticketStatus','Only support tickets can be closed here.');return}if(!selectedTicket){msg('ticketStatus','Choose a ticket from the list first.');return}if(!confirm('Close and delete this Discord ticket channel?'))return;try{let d=await api('/announcement/api/tickets/'+gid()+'/close',{method:'POST',body:JSON.stringify({number:selectedTicket})});msg('ticketStatus',d.message);selectedTicket='';selectedTicketType='';$('ticketReplyControls').classList.remove('hidden');$('ticketChat').innerHTML='<div class="notice">Ticket closed.</div>';$('ticketChatTitle').textContent='Ticket conversation';await loadTickets()}catch(e){msg('ticketStatus',e.message)}}
+async function loadMemberRoles(){let d=await api('/announcement/api/roles/'+gid());$('memberRoleSelect').innerHTML=d.roles.filter(r=>r.id!==gid()).map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}
+async function lookupMember(){try{let d=await api('/announcement/api/members/'+gid()+'/'+encodeURIComponent($('memberLookupId').value));$('memberRoleUser').value=d.id;$('memberProfile').innerHTML=`<div class="profile-head"><img src="${esc(d.avatar)}" alt=""><div><b>${esc(d.display_name)}</b><div class="muted small">@${esc(d.name)} • ${esc(d.id)}</div></div></div><p>Joined: ${esc(d.joined||'Unknown')}</p><p>Account created: ${esc(d.created||'Unknown')}</p><p>Roles: ${d.roles.map(r=>`<span class="pill">${esc(r.name)}</span>`).join(' ')||'None'}</p>`}catch(e){msg('memberProfile',e.message)}}
+async function changeMemberRole(action){try{let d=await api('/announcement/api/members/'+gid()+'/'+encodeURIComponent($('memberRoleUser').value)+'/roles',{method:'POST',body:JSON.stringify({role_id:$('memberRoleSelect').value,action})});msg('memberRoleStatus',d.message);if($('memberLookupId').value)await lookupMember()}catch(e){msg('memberRoleStatus',e.message)}}
 $('announceType').addEventListener('change',()=>{$('announceEmbed').classList.toggle('hidden',$('announceType').value!=='embed');$('announceV2').classList.toggle('hidden',$('announceType').value!=='v2')});$('announceColor').addEventListener('input',e=>$('announceHex').value=e.target.value.toUpperCase());$('announceHex').addEventListener('input',e=>{if(/^#[0-9a-f]{6}$/i.test(e.target.value))$('announceColor').value=e.target.value});
 function previewAnnouncement(){let text=$('announceContent').value;if($('announceType').value==='embed')text=$('announceTitle').value+'\n\n'+$('announceDescription').value+'\n\n'+text;if($('announceType').value==='v2')text=$('announceComponents').value;$('announcePreview').textContent=text;$('announcePreview').style.borderLeftColor=$('announceHex').value;$('announcePreview').classList.remove('hidden')}
 async function sendAnnouncement(){try{let d=await api('/announcement/api/send',{method:'POST',body:JSON.stringify({guild_id:gid(),channel_id:$('announceChannel').value,type:$('announceType').value,content:$('announceContent').value,title:$('announceTitle').value,description:$('announceDescription').value,color:$('announceHex').value,footer:$('announceFooter').value,image:$('announceImage').value,components:$('announceComponents').value,allow_role_pings:$('allowRolePings').checked,allow_everyone:$('allowEveryone').checked})});msg('announceStatus','Announcement published successfully.')}catch(e){msg('announceStatus','Error: '+e.message)}}
 loadGuilds();
+setInterval(()=>{if(selectedTicket && document.querySelector('.nav.active')?.dataset.tab==='tickets'){loadTicketMessages()}},10000);
 </script></main></div></body></html>
 """
 
@@ -479,6 +495,61 @@ async def setup(bot):
                 verification=str(g.verification_level).replace("_", " ").title())
         except Exception as e: return jsonify(error=str(e)), 400
 
+    @web_app.route("/announcement/api/members/<guild_id>/<user_id>")
+    def dashboard_member_lookup(guild_id, user_id):
+        if not is_owner(): return jsonify(error="Unauthorized"), 401
+        try:
+            guild = get_guild(bot, guild_id)
+            async def fetch_profile():
+                member = await guild.fetch_member(int(user_id))
+                return member
+            member = run_on_bot(fetch_profile())
+            return jsonify(
+                id=str(member.id), name=member.name, display_name=member.display_name,
+                avatar=member.display_avatar.url,
+                joined=member.joined_at.strftime("%Y-%m-%d %H:%M UTC") if member.joined_at else None,
+                created=member.created_at.strftime("%Y-%m-%d %H:%M UTC"),
+                roles=[{"id": str(role.id), "name": role.name} for role in member.roles if not role.is_default()],
+            )
+        except discord.NotFound:
+            return jsonify(error="Member was not found in this server."), 404
+        except Exception as error:
+            return jsonify(error=str(error)), 400
+
+    @web_app.route("/announcement/api/members/<guild_id>/<user_id>/roles", methods=["POST"])
+    def dashboard_member_roles(guild_id, user_id):
+        if not is_owner(): return jsonify(error="Unauthorized"), 401
+        if not csrf_valid(): return jsonify(error="Invalid CSRF token."), 403
+        try:
+            guild = get_guild(bot, guild_id)
+            data = request.get_json(silent=True) or {}
+            role_id = int(data.get("role_id"))
+            action = str(data.get("action", ""))
+            if action not in ("add", "remove"):
+                return jsonify(error="Choose Add role or Remove role."), 400
+            role = guild.get_role(role_id)
+            if role is None or role.is_default() or role.managed:
+                return jsonify(error="This role cannot be managed."), 400
+            async def update_member_role():
+                if not guild.me.guild_permissions.manage_roles:
+                    raise PermissionError("Bot needs Manage Roles permission.")
+                if guild.me.top_role <= role:
+                    raise PermissionError("Move the bot role above the selected role.")
+                member = await guild.fetch_member(int(user_id))
+                if action == "add":
+                    await member.add_roles(role, reason="Role added from System-BOT Dashboard")
+                else:
+                    await member.remove_roles(role, reason="Role removed from System-BOT Dashboard")
+                return member
+            member = run_on_bot(update_member_role())
+            return jsonify(success=True, message=f"{role.name} {('added to' if action == 'add' else 'removed from')} {member.display_name}.")
+        except PermissionError as error:
+            return jsonify(error=str(error)), 403
+        except discord.NotFound:
+            return jsonify(error="Member or role was not found."), 404
+        except Exception as error:
+            return jsonify(error=str(error)), 400
+
     @web_app.route("/announcement/api/roles/<guild_id>", methods=["GET", "POST"])
     def dashboard_roles(guild_id):
         if not is_owner(): return jsonify(error="Unauthorized"), 401
@@ -640,64 +711,200 @@ async def setup(bot):
             member=run_on_bot(update());return jsonify(success=True,message=(f"Granted infinity balance to {member.display_name}." if infinity else f"Updated {account} for {member.display_name} to {amount:,}."))
         except Exception as e:return jsonify(error=str(e)),400
 
-    # Giveaways use a dedicated JSON file; existing bot data files remain untouched.
-    GIVEAWAY_DIR=_os.getenv("DATA_DIR",".")
+    # Giveaways use their own persistent file; existing bot data files remain untouched.
+    GIVEAWAY_DIR = _os.getenv("DATA_DIR", ".")
     _os.makedirs(GIVEAWAY_DIR, exist_ok=True)
-    GIVEAWAY_FILE=_os.path.join(GIVEAWAY_DIR,"dashboard_giveaways.json")
+    GIVEAWAY_FILE = _os.path.join(GIVEAWAY_DIR, "dashboard_giveaways.json")
+
     def read_giveaways():
         try:
-            with open(GIVEAWAY_FILE,"r",encoding="utf-8") as f:return json.load(f)
-        except Exception:return {}
+            with open(GIVEAWAY_FILE, "r", encoding="utf-8") as file:
+                data = json.load(file)
+                return data if isinstance(data, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except Exception:
+            logger.exception("Could not read giveaway data")
+            return {}
+
     def write_giveaways(data):
-        tmp=GIVEAWAY_FILE+".tmp"
-        with open(tmp,"w",encoding="utf-8") as f:json.dump(data,f,ensure_ascii=False,indent=2)
-        _os.replace(tmp,GIVEAWAY_FILE)
+        temporary = GIVEAWAY_FILE + ".tmp"
+        with open(temporary, "w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=2)
+        _os.replace(temporary, GIVEAWAY_FILE)
 
-    @web_app.route("/announcement/api/giveaways/<guild_id>",methods=["GET","POST"])
+    def build_giveaway_view(entry, guild_id, disabled=False):
+        """Persistent Components V2 giveaway card with a real join/leave button."""
+        view = discord.ui.LayoutView(timeout=None)
+        prize = discord.utils.escape_mentions(discord.utils.escape_markdown(str(entry.get("prize", "Giveaway"))))
+        description = discord.utils.escape_mentions(str(entry.get("description", ""))).strip()
+        ends = int(entry.get("ends", 0))
+        entrants_count = len(entry.get("entrants", []))
+        winner_count = int(entry.get("winners", 1))
+        text = (
+            f"# 🎉 GIVEAWAY\n"
+            f"## {prize}\n"
+            f"{description + chr(10) if description else ''}"
+            f"\n**Winners:** {winner_count}"
+            f"\n**Participants:** {entrants_count}"
+            f"\n**Ends:** <t:{ends}:F> • <t:{ends}:R>"
+        )
+
+        async def join_callback(interaction: discord.Interaction):
+            if interaction.user.bot:
+                await interaction.response.send_message("Bots cannot enter giveaways.", ephemeral=True)
+                return
+            all_data = read_giveaways()
+            guild_entries = all_data.get(str(guild_id), [])
+            current = next((item for item in guild_entries if item.get("id") == entry.get("id")), None)
+            if current is None:
+                await interaction.response.send_message("This giveaway is no longer available.", ephemeral=True)
+                return
+            if current.get("ended") or int(current.get("ends", 0)) <= int(time.time()):
+                await interaction.response.send_message("This giveaway has ended.", ephemeral=True)
+                return
+            entrants = [str(value) for value in current.get("entrants", [])]
+            user_id = str(interaction.user.id)
+            if user_id in entrants:
+                entrants.remove(user_id)
+                status = "You left the giveaway."
+            else:
+                entrants.append(user_id)
+                status = "You are entered in the giveaway. Good luck!"
+            current["entrants"] = entrants
+            write_giveaways(all_data)
+            try:
+                await interaction.response.edit_message(view=build_giveaway_view(current, guild_id))
+                await interaction.followup.send(status, ephemeral=True)
+            except discord.HTTPException:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(status, ephemeral=True)
+
+        button = discord.ui.Button(
+            label="Giveaway Ended" if disabled else "Enter / Leave Giveaway",
+            emoji="🎉",
+            style=discord.ButtonStyle.secondary if disabled else discord.ButtonStyle.success,
+            custom_id=f"legends_giveaway:{entry.get('id')}",
+            disabled=disabled,
+        )
+        button.callback = join_callback
+        row = discord.ui.ActionRow(button)
+        container = discord.ui.Container(
+            discord.ui.TextDisplay(text),
+            discord.ui.Separator(),
+            row,
+            accent_colour=discord.Colour.from_rgb(255, 95, 162),
+        )
+        view.add_item(container)
+        return view
+
+    async def finish_giveaway(guild, entry):
+        channel = guild.get_channel(int(entry.get("channel_id", 0)))
+        if not isinstance(channel, discord.TextChannel):
+            raise ValueError("Giveaway channel no longer exists.")
+        message = await channel.fetch_message(int(entry.get("message_id", 0)))
+        entrant_ids = [int(value) for value in entry.get("entrants", [])]
+        # Backwards compatibility: older dashboard giveaways used 🎉 reactions.
+        if not entrant_ids and not entry.get("components_v2"):
+            reaction = next((item for item in message.reactions if str(item.emoji) == "🎉"), None)
+            if reaction:
+                async for user in reaction.users():
+                    if not user.bot:
+                        entrant_ids.append(user.id)
+        entrant_ids = list(dict.fromkeys(entrant_ids))
+        random.shuffle(entrant_ids)
+        selected_ids = entrant_ids[:max(1, int(entry.get("winners", 1)))]
+        entry["ended"] = True
+        entry["ended_at"] = int(time.time())
+        entry["winner_ids"] = selected_ids
+        if entry.get("components_v2"):
+            await message.edit(view=build_giveaway_view(entry, str(guild.id), disabled=True))
+        if selected_ids:
+            mentions = " ".join(f"<@{user_id}>" for user_id in selected_ids)
+            await channel.send(
+                f"🎉 **Giveaway ended!**\nPrize: **{discord.utils.escape_markdown(entry.get('prize', 'Prize'))}**\nWinner(s): {mentions}",
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
+        else:
+            await channel.send(f"The giveaway for **{discord.utils.escape_markdown(entry.get('prize', 'Prize'))}** ended with no valid entries.")
+
+    @web_app.route("/announcement/api/giveaways/<guild_id>", methods=["GET", "POST"])
     def dashboard_giveaways(guild_id):
-        if not is_owner():return jsonify(error="Unauthorized"),401
+        if not is_owner():
+            return jsonify(error="Unauthorized"), 401
         try:
-            g=get_guild(bot,guild_id);all_data=read_giveaways();items=all_data.get(str(g.id),[])
-            if request.method=="GET":return jsonify(giveaways=[{"id":x["id"],"prize":x["prize"],"ends":datetime.fromtimestamp(x["ends"],timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),"ended":x.get("ended",False)} for x in items])
-            if not csrf_valid():return jsonify(error="Invalid CSRF token."),403
-            d=request.get_json(silent=True) or {};channel=g.get_channel(int(d.get("channel_id",0)));prize=str(d.get("prize","")).strip()[:200];duration=max(1,min(43200,int(d.get("duration",1440))));winners=max(1,min(20,int(d.get("winners",1))))
-            if not isinstance(channel,discord.TextChannel):return jsonify(error="Choose a valid text channel."),400
-            if not prize:return jsonify(error="Prize is required."),400
-            gid=str(secrets.token_hex(5));ends=int(time.time())+duration*60
+            guild = get_guild(bot, guild_id)
+            all_data = read_giveaways()
+            items = all_data.get(str(guild.id), [])
+            if request.method == "GET":
+                return jsonify(giveaways=[{
+                    "id": item.get("id"), "prize": item.get("prize", "Prize"),
+                    "entrants": len(item.get("entrants", [])),
+                    "ends": datetime.fromtimestamp(int(item.get("ends", 0)), timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                    "ended": bool(item.get("ended", False)),
+                } for item in items])
+            if not csrf_valid():
+                return jsonify(error="Invalid CSRF token."), 403
+            data = request.get_json(silent=True) or {}
+            channel = guild.get_channel(int(data.get("channel_id", 0)))
+            prize = str(data.get("prize", "")).strip()[:200]
+            description = str(data.get("description", "")).strip()[:700]
+            duration = max(1, min(43200, int(data.get("duration", 1440))))
+            winners = max(1, min(20, int(data.get("winners", 1))))
+            if not isinstance(channel, discord.TextChannel):
+                return jsonify(error="Choose a valid text channel."), 400
+            if not prize:
+                return jsonify(error="Prize is required."), 400
+            giveaway_id = secrets.token_hex(5)
+            ends = int(time.time()) + duration * 60
+            entry = {
+                "id": giveaway_id, "prize": prize, "description": description,
+                "channel_id": channel.id, "ends": ends, "winners": winners,
+                "entrants": [], "ended": False, "components_v2": True,
+            }
             async def create():
-                if not channel.permissions_for(g.me).send_messages or not channel.permissions_for(g.me).add_reactions:raise PermissionError("Bot needs Send Messages and Add Reactions permissions.")
-                message=await channel.send(f"🎉 **GIVEAWAY** 🎉\n\nPrize: **{discord.utils.escape_markdown(prize)}**\nWinners: **{winners}**\nEnds: <t:{ends}:R>\n\nReact with 🎉 to enter!")
-                await message.add_reaction("🎉");return message
-            message=run_on_bot(create());items.append({"id":gid,"prize":prize,"channel_id":channel.id,"message_id":message.id,"ends":ends,"winners":winners,"ended":False});all_data[str(g.id)]=items;write_giveaways(all_data)
-            return jsonify(success=True,id=gid)
-        except PermissionError as e:return jsonify(error=str(e)),403
-        except Exception as e:return jsonify(error=str(e)),400
+                permissions = channel.permissions_for(guild.me)
+                if not permissions.send_messages:
+                    raise PermissionError("Bot needs Send Messages permission in the selected channel.")
+                view = build_giveaway_view(entry, str(guild.id))
+                message = await channel.send(view=view)
+                entry["message_id"] = message.id
+                bot.add_view(build_giveaway_view(entry, str(guild.id)), message_id=message.id)
+                return message
+            message = run_on_bot(create())
+            items.append(entry)
+            all_data[str(guild.id)] = items
+            write_giveaways(all_data)
+            return jsonify(success=True, id=giveaway_id, message_id=str(message.id))
+        except PermissionError as error:
+            return jsonify(error=str(error)), 403
+        except Exception as error:
+            logger.exception("Giveaway creation failed")
+            return jsonify(error=str(error)), 400
 
-    @web_app.route("/announcement/api/giveaways/<guild_id>/<giveaway_id>",methods=["POST"])
-    def dashboard_giveaway_end(guild_id,giveaway_id):
-        if not is_owner():return jsonify(error="Unauthorized"),401
-        if not csrf_valid():return jsonify(error="Invalid CSRF token."),403
+    @web_app.route("/announcement/api/giveaways/<guild_id>/<giveaway_id>", methods=["POST"])
+    def dashboard_giveaway_end(guild_id, giveaway_id):
+        if not is_owner():
+            return jsonify(error="Unauthorized"), 401
+        if not csrf_valid():
+            return jsonify(error="Invalid CSRF token."), 403
         try:
-            g=get_guild(bot,guild_id);data=read_giveaways();items=data.get(str(g.id),[]);entry=next((x for x in items if x["id"]==giveaway_id),None)
-            if not entry:return jsonify(error="Giveaway not found."),404
-            if entry.get("ended"):return jsonify(error="Giveaway already ended."),400
-            async def finish():
-                channel=g.get_channel(int(entry["channel_id"]))
-                if not isinstance(channel,discord.TextChannel):raise ValueError("Giveaway channel no longer exists.")
-                message=await channel.fetch_message(int(entry["message_id"]))
-                reaction=next((r for r in message.reactions if str(r.emoji)=="🎉"),None)
-                entrants=[]
-                if reaction:
-                    async for user in reaction.users():
-                        if not user.bot:entrants.append(user)
-                random.shuffle(entrants);selected=entrants[:int(entry["winners"])]
-                entry["ended"]=True
-                if selected:
-                    mentions=", ".join(u.mention for u in selected)
-                    await channel.send(f"🎉 Giveaway ended! Prize: **{discord.utils.escape_markdown(entry['prize'])}**\nWinner(s): {mentions}",allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False))
-                else:await channel.send(f"Giveaway ended for **{discord.utils.escape_markdown(entry['prize'])}**, but there were no valid entries.")
-            run_on_bot(finish());write_giveaways(data);return jsonify(success=True)
-        except Exception as e:return jsonify(error=str(e)),400
+            guild = get_guild(bot, guild_id)
+            data = read_giveaways()
+            entries = data.get(str(guild.id), [])
+            entry = next((item for item in entries if item.get("id") == giveaway_id), None)
+            if entry is None:
+                return jsonify(error="Giveaway not found."), 404
+            if entry.get("ended"):
+                return jsonify(error="Giveaway already ended."), 400
+            async def finish_and_save():
+                await finish_giveaway(guild, entry)
+                write_giveaways(data)
+            run_on_bot(finish_and_save())
+            return jsonify(success=True)
+        except Exception as error:
+            logger.exception("Could not end giveaway")
+            return jsonify(error=str(error)), 400
 
     @web_app.route("/announcement/api/tickets/<guild_id>")
     def dashboard_tickets(guild_id):
@@ -705,11 +912,67 @@ async def setup(bot):
         try:
             g=get_guild(bot,guild_id);c=get_ticket_cog();items=[]
             for number,t in c.data.get("tickets",{}).items():
-                items.append({"number":number,"user_id":str(t.get("user_id")),"channel_id":str(t.get("channel_id")),"type":"Support","closed":bool(t.get("closed")),"details":f"{t.get('language','')} • {t.get('issue','')}"})
+                user = bot.get_user(int(t.get("user_id", 0)))
+                items.append({"number":str(number),"user_id":str(t.get("user_id")),"user_name":str(user) if user else str(t.get("user_id")),"channel_id":str(t.get("channel_id")),"type":"Support","closed":bool(t.get("closed")),"created":str(t.get("created_at", ""))[:16].replace("T", " "),"details":f"{t.get('language','')} • {t.get('issue','')}"})
             for uid,a in c.data.get("applications",{}).items():
-                items.append({"number":str(a.get("ticket_number", "APP")),"user_id":str(uid),"channel_id":str(a.get("channel_id")),"type":f"{a.get('type','Application').title()} application","closed":bool(a.get("closed",False)),"details":"Application review"})
+                user = bot.get_user(int(uid))
+                items.append({"number":str(a.get("ticket_number", "APP")),"user_id":str(uid),"user_name":str(user) if user else str(uid),"channel_id":str(a.get("channel_id")),"type":f"{a.get('type','Application').title()} application","closed":bool(a.get("closed",False)),"created":str(a.get("submitted_at", ""))[:16].replace("T", " "),"details":"Application review"})
+            items.sort(key=lambda item: item.get("created", ""), reverse=True)
             return jsonify(items=items)
         except Exception as e:return jsonify(error=str(e)),400
+
+    @web_app.route("/announcement/api/tickets/<guild_id>/<ticket_number>/messages")
+    def dashboard_ticket_messages(guild_id, ticket_number):
+        if not is_owner():
+            return jsonify(error="Unauthorized"), 401
+        try:
+            guild = get_guild(bot, guild_id)
+            cog = get_ticket_cog()
+            ticket = cog.data.get("tickets", {}).get(str(ticket_number))
+            kind = "Support ticket"
+            if ticket is None:
+                application = next((value for value in cog.data.get("applications", {}).values() if str(value.get("ticket_number")) == str(ticket_number)), None)
+                if application is None:
+                    return jsonify(error="Ticket or application was not found."), 404
+                ticket = application
+                kind = f"{application.get('type', 'Application').title()} application"
+            async def fetch_messages():
+                channel = guild.get_channel(int(ticket.get("channel_id", 0)))
+                if channel is None:
+                    try:
+                        channel = await bot.fetch_channel(int(ticket.get("channel_id", 0)))
+                    except discord.NotFound:
+                        return None, []
+                messages = []
+                async for message in channel.history(limit=100, oldest_first=False):
+                    content = message.content or ""
+                    if not content and message.embeds:
+                        parts = []
+                        for embed in message.embeds:
+                            if embed.title: parts.append(embed.title)
+                            if embed.description: parts.append(embed.description)
+                            for field in embed.fields:
+                                parts.append(f"{field.name}: {field.value}")
+                        content = "\n".join(parts)
+                    messages.append({
+                        "id": str(message.id), "author": message.author.display_name,
+                        "avatar": message.author.display_avatar.url,
+                        "is_bot": bool(message.author.bot),
+                        "content": content[:5000],
+                        "created": message.created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        "attachments": [{"name": item.filename, "url": item.url} for item in message.attachments[:10]],
+                    })
+                messages.reverse()
+                return channel, messages
+            channel, messages = run_on_bot(fetch_messages())
+            if channel is None:
+                return jsonify(error="The ticket channel no longer exists."), 404
+            return jsonify(channel_name=getattr(channel, "name", "Ticket"), kind=kind, messages=messages)
+        except discord.Forbidden:
+            return jsonify(error="Bot needs View Channel and Read Message History permissions."), 403
+        except Exception as error:
+            logger.exception("Ticket conversation loading failed")
+            return jsonify(error=str(error)), 400
 
     @web_app.route("/announcement/api/tickets/<guild_id>/application/<user_id>/<decision>",methods=["POST"])
     def dashboard_application_decision(guild_id,user_id,decision):
@@ -759,8 +1022,12 @@ async def setup(bot):
             if not message:return jsonify(error="Reply cannot be empty."),400
             async def reply():
                 user=await bot.fetch_user(int(ticket["user_id"]));await user.send(f"**Support:** {message[:1800]}")
-                ch=bot.get_channel(int(ticket["channel_id"]))
-                if ch:await ch.send(embed=discord.Embed(description=f"**Support:** {message[:1800]}",color=discord.Color.light_grey()))
+                ch=guild.get_channel(int(ticket["channel_id"]))
+                if ch:
+                    reply_embed = discord.Embed(description=message[:1800], color=discord.Color.from_rgb(24, 200, 232), timestamp=datetime.now(timezone.utc))
+                    reply_embed.set_author(name="Dashboard Support Team")
+                    reply_embed.set_footer(text=f"Ticket #{number} • System-BOT Dashboard")
+                    await ch.send(embed=reply_embed)
             run_on_bot(reply());return jsonify(success=True,message="Reply sent to the user and ticket channel.")
         except discord.Forbidden:return jsonify(error="Could not DM the user. Their privacy settings may block messages."),400
         except Exception as e:return jsonify(error=str(e)),400
@@ -788,46 +1055,45 @@ async def setup(bot):
         except Exception as e:return jsonify(error=str(e)),400
 
 
+    # Restore persistent giveaway buttons after every bot restart.
+    for guild_key, giveaway_entries in read_giveaways().items():
+        for giveaway_entry in giveaway_entries:
+            if giveaway_entry.get("components_v2") and not giveaway_entry.get("ended") and giveaway_entry.get("message_id"):
+                try:
+                    bot.add_view(build_giveaway_view(giveaway_entry, guild_key), message_id=int(giveaway_entry["message_id"]))
+                except Exception:
+                    logger.exception("Could not restore persistent giveaway view %s", giveaway_entry.get("id"))
+
     async def dashboard_giveaway_scheduler():
         await bot.wait_until_ready()
         while not bot.is_closed():
             await asyncio.sleep(30)
             try:
-                data=read_giveaways();changed=False
+                data = read_giveaways()
+                changed = False
                 for guild_key, entries in data.items():
-                    guild=bot.get_guild(int(guild_key))
-                    if guild is None:continue
+                    guild = bot.get_guild(int(guild_key))
+                    if guild is None:
+                        continue
                     for entry in entries:
-                        if entry.get("ended") or int(entry.get("ends",0))>int(time.time()):continue
-                        channel=guild.get_channel(int(entry.get("channel_id",0)))
-                        if not isinstance(channel,discord.TextChannel):
-                            entry["ended"]=True;changed=True;continue
+                        if entry.get("ended") or int(entry.get("ends", 0)) > int(time.time()):
+                            continue
                         try:
-                            message=await channel.fetch_message(int(entry["message_id"]))
-                            reaction=next((r for r in message.reactions if str(r.emoji)=="🎉"),None)
-                            entrants=[]
-                            if reaction:
-                                async for user in reaction.users():
-                                    if not user.bot:entrants.append(user)
-                            random.shuffle(entrants);selected=entrants[:int(entry.get("winners",1))]
-                            if selected:
-                                mentions=", ".join(user.mention for user in selected)
-                                await channel.send(f"🎉 Giveaway ended! Prize: **{discord.utils.escape_markdown(entry['prize'])}**\\nWinner(s): {mentions}",allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False))
-                            else:
-                                await channel.send(f"Giveaway ended for **{discord.utils.escape_markdown(entry['prize'])}**, but there were no valid entries.")
-                            entry["ended"]=True;changed=True
-                        except (discord.NotFound,discord.Forbidden,discord.HTTPException):
-                            logger.exception("Could not automatically end giveaway %s",entry.get("id"))
-                if changed:write_giveaways(data)
+                            await finish_giveaway(guild, entry)
+                            changed = True
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError):
+                            logger.exception("Could not automatically finish giveaway %s", entry.get("id"))
+                if changed:
+                    write_giveaways(data)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("Giveaway scheduler iteration failed")
 
-    old_giveaway_task=getattr(bot,"_dashboard_giveaway_task",None)
+    old_giveaway_task = getattr(bot, "_dashboard_giveaway_task", None)
     if old_giveaway_task and not old_giveaway_task.done():
         old_giveaway_task.cancel()
-    bot._dashboard_giveaway_task=bot.loop.create_task(dashboard_giveaway_scheduler())
+    bot._dashboard_giveaway_task = bot.loop.create_task(dashboard_giveaway_scheduler())
 
     # SEND ANNOUNCEMENT
 
