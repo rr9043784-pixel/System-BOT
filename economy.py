@@ -595,13 +595,9 @@ class Economy(commands.Cog):
                         (ctx.guild.id,member.id,economy))
         await reply_v2(ctx,f"Granted **∞ Wallet and ∞ Bank** to {member.mention} in {ECONOMIES[economy]['name']}.")
 
-    @commands.command(name="commands")
-    async def commands_root(self,ctx,*args):
-        if args and args[0].lower()=="system":
-            await reply_v2(ctx,"## LEGENDS ECONOMY — COMMANDS\n"+COMMANDS_TEXT+
-                "\n**Owner:** `!economy`, `!economy set bal`, `!economy set amount`, `!economy set infinity`.")
-        else:
-            await reply_v2(ctx,"Use `!commands System` to view the System-BOT economy commands.")
+    # The main System-BOT already owns the !commands command.
+    # Economy command documentation is exposed through the existing
+    # message.py command; do not register a second command with that name.
 
     async def require_active(self,ctx):
         key=active_economy()
