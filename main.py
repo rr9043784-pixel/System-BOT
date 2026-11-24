@@ -45,6 +45,7 @@ EXTENSIONS = [
     "info",
     "rules",
     "economy",
+    "clan",
 ]
 
 logging.basicConfig(
