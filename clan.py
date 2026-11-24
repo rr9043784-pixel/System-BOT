@@ -196,24 +196,51 @@ class ClanDatabase:
 
 
 class RegistrationView(discord.ui.View):
-    def __init__(self, cog, guild_id):
+    def __init__(self, cog, guild_id, user_id):
         super().__init__(timeout=600)
         self.cog = cog
         self.guild_id = guild_id
+        self.user_id = user_id
 
     @discord.ui.button(label="Register Clan", style=discord.ButtonStyle.success, emoji="🏰")
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.guild_id != self.guild_id:
+        # Registration is intentionally completed in DMs. DM interactions have
+        # interaction.guild_id=None, so resolve the original server from storage.
+        if interaction.user.id != self.user_id:
             return await interaction.response.send_message(
-                "Please complete clan registration in the server where you received the purchase role.",
+                "This registration button belongs to another user.",
                 ephemeral=True,
             )
-        if self.cog.db.get_clan_for_user(interaction.user.id):
+
+        guild = self.cog.bot.get_guild(self.guild_id)
+        if guild is None:
+            return await interaction.response.send_message(
+                "The original server is currently unavailable. Please try again later.",
+                ephemeral=True,
+            )
+
+        member = guild.get_member(self.user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.user_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                member = None
+
+        if member is None:
+            return await interaction.response.send_message(
+                "You must still be a member of the server where you purchased the clan.",
+                ephemeral=True,
+            )
+
+        if self.cog.db.get_clan_for_user(self.user_id):
             return await interaction.response.send_message(
                 "You are already a member of a clan.",
                 ephemeral=True,
             )
-        await interaction.response.send_modal(ClanRegistrationModal(self.cog, self.guild_id))
+
+        await interaction.response.send_modal(
+            ClanRegistrationModal(self.cog, self.guild_id, self.user_id)
+        )
 
 
 class ClanRegistrationModal(discord.ui.Modal, title="Create Your Clan"):
@@ -236,12 +263,19 @@ class ClanRegistrationModal(discord.ui.Modal, title="Create Your Clan"):
         max_length=7,
     )
 
-    def __init__(self, cog, guild_id):
+    def __init__(self, cog, guild_id, user_id):
         super().__init__()
         self.cog = cog
         self.guild_id = guild_id
+        self.user_id = user_id
 
     async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message(
+                "This registration belongs to another user.",
+                ephemeral=True,
+            )
+
         tag = normalize_tag(str(self.tag.value))
         name = str(self.name.value).strip()
         color_text = str(self.color.value).strip()
@@ -251,22 +285,46 @@ class ClanRegistrationModal(discord.ui.Modal, title="Create Your Clan"):
                 "The clan tag must contain 2 or 3 English letters.",
                 ephemeral=True,
             )
+
+        if not name:
+            return await interaction.response.send_message(
+                "Please enter a clan name.",
+                ephemeral=True,
+            )
+
         try:
             color = parse_color(color_text)
         except ValueError as exc:
             return await interaction.response.send_message(str(exc), ephemeral=True)
 
-        guild = interaction.guild
-        if guild is None or guild.id != self.guild_id:
+        # A modal submitted from DMs has no interaction.guild. Use the saved
+        # purchase server ID and fetch the member from that server instead.
+        guild = self.cog.bot.get_guild(self.guild_id)
+        if guild is None:
             return await interaction.response.send_message(
-                "The server could not be verified. Please try again from the server.",
+                "The original server is currently unavailable. Please try again later.",
                 ephemeral=True,
             )
-        if self.cog.db.get_clan_for_user(interaction.user.id):
+
+        member = guild.get_member(self.user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.user_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                member = None
+
+        if member is None:
+            return await interaction.response.send_message(
+                "You must still be a member of the server where you purchased the clan.",
+                ephemeral=True,
+            )
+
+        if self.cog.db.get_clan_for_user(member.id):
             return await interaction.response.send_message(
                 "You are already a member of a clan.",
                 ephemeral=True,
             )
+
         if self.cog.db.one(
             "SELECT id FROM clans WHERE guild_id=? AND LOWER(tag)=LOWER(?)",
             (guild.id, tag),
@@ -278,7 +336,7 @@ class ClanRegistrationModal(discord.ui.Modal, title="Create Your Clan"):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            clan = await self.cog.create_clan(guild, interaction.user, tag, name, color)
+            await self.cog.create_clan(guild, member, tag, name, color)
         except discord.Forbidden:
             return await interaction.followup.send(
                 "I could not create the clan. Please check my Manage Roles, Manage Threads, "
@@ -464,6 +522,16 @@ class ApplicationDecisionView(discord.ui.View):
         if not app or app["status"] != "pending":
             return await interaction.response.send_message("This application is no longer pending.", ephemeral=True)
         clan = self.cog.db.get_clan(app["clan_id"])
+        if not clan:
+            return await interaction.response.send_message("This clan no longer exists.", ephemeral=True)
+
+        guild = self.cog.bot.get_guild(clan["guild_id"])
+        if guild is None:
+            return await interaction.response.send_message(
+                "The clan server is currently unavailable. Please try again later.",
+                ephemeral=True,
+            )
+
         actor_row = self.cog.db.one(
             "SELECT rank FROM clan_members WHERE clan_id=? AND user_id=?",
             (app["clan_id"], interaction.user.id),
@@ -477,7 +545,12 @@ class ApplicationDecisionView(discord.ui.View):
                 (self.application_id,),
             )
             await interaction.response.edit_message(content="Application rejected.", view=None)
-            applicant = interaction.guild.get_member(app["user_id"]) if interaction.guild else None
+            applicant = guild.get_member(app["user_id"])
+            if applicant is None:
+                try:
+                    applicant = await guild.fetch_member(app["user_id"])
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    applicant = None
             if applicant:
                 try:
                     await applicant.send(f"Your application to **{clan['name']}** was declined.")
@@ -502,11 +575,16 @@ class ApplicationDecisionView(discord.ui.View):
                 ephemeral=True,
             )
 
-        applicant = interaction.guild.get_member(app["user_id"]) if interaction.guild else None
+        applicant = guild.get_member(app["user_id"])
+        if applicant is None:
+            try:
+                applicant = await guild.fetch_member(app["user_id"])
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                applicant = None
         if not applicant:
             return await interaction.response.send_message("The applicant is no longer in this server.", ephemeral=True)
 
-        await self.cog.add_member(interaction.guild, applicant, clan, "member")
+        await self.cog.add_member(guild, applicant, clan, "member")
         self.cog.db.execute(
             "UPDATE clan_applications SET status='accepted' WHERE id=?",
             (self.application_id,),
@@ -661,7 +739,7 @@ class ClanCog(commands.Cog):
     async def cog_load(self):
         # Re-register persistent clan panels after a restart.
         for row in self.db.all("SELECT id,forum_thread_id,panel_message_id FROM clans"):
-            if row["forum_thread_id"]:
+            if row["forum_thread_id"] and row["panel_message_id"]:
                 self.bot.add_view(ClanPanelView(self, row["id"]), message_id=row["panel_message_id"])
 
     async def cog_unload(self):
@@ -850,7 +928,7 @@ class ClanCog(commands.Cog):
                 await member.send(
                     "🏰 **LEGENDS CLANS registration**\n"
                     "Your clan purchase has been detected. Press the button below to register your clan.",
-                    view=RegistrationView(self, member.guild.id),
+                    view=RegistrationView(self, member.guild.id, member.id),
                 )
             except discord.Forbidden:
                 log.warning("Could not DM clan registration to %s; purchase role remains for retry.", member.id)
