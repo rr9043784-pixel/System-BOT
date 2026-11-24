@@ -402,49 +402,264 @@ class ApplyModal(discord.ui.Modal, title="Apply to Join Clan"):
         await self.cog.notify_leadership(clan, interaction.user, str(self.message.value))
 
 
-class ClanPanelView(discord.ui.View):
+class ClanTextView(discord.ui.LayoutView):
+    """Small Components V2 information panel."""
+    def __init__(self, title, body, accent=None, timeout=180):
+        super().__init__(timeout=timeout)
+        container_kwargs = {}
+        if accent is not None:
+            container_kwargs["accent_colour"] = accent
+        self.add_item(discord.ui.Container(
+            discord.ui.TextDisplay(f"## {title}"),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(body),
+            **container_kwargs,
+        ))
+
+
+class JoinClanSelectView(discord.ui.LayoutView):
+    def __init__(self, cog, guild_id, clans):
+        super().__init__(timeout=180)
+        self.cog = cog
+        options = [
+            discord.SelectOption(
+                label=str(row["name"])[:100],
+                description=f"Tag: {row['tag']} · Level {row['level']}"[:100],
+                value=str(row["id"]),
+            )
+            for row in clans[:25]
+        ]
+        select = discord.ui.Select(
+            placeholder="Choose a clan to apply to...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        select.callback = self.choose
+        self.add_item(discord.ui.Container(
+            discord.ui.TextDisplay("## 🏰 Join a Clan"),
+            discord.ui.TextDisplay("Select a clan below. You will be asked to submit a short application."),
+            discord.ui.Separator(),
+            discord.ui.ActionRow(select),
+        ))
+
+    async def choose(self, interaction: discord.Interaction):
+        clan_id = int(interaction.data["values"][0])
+        clan = self.cog.db.get_clan(clan_id)
+        if not clan or clan["guild_id"] != interaction.guild_id:
+            return await interaction.response.send_message("This clan is no longer available in this server.", ephemeral=True)
+        if self.cog.db.get_clan_for_user(interaction.user.id):
+            return await interaction.response.send_message("You are already in a clan.", ephemeral=True)
+        await interaction.response.send_modal(ApplyModal(self.cog, clan_id))
+
+
+class ClanSettingsView(discord.ui.LayoutView):
+    def __init__(self, cog, clan, user_id):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.clan_id = clan["id"]
+        row = self.cog.db.one(
+            "SELECT rank FROM clan_members WHERE clan_id=? AND user_id=?",
+            (clan["id"], user_id),
+        )
+        pending = self.cog.db.one(
+            "SELECT COUNT(*) AS total FROM clan_applications WHERE clan_id=? AND status='pending'",
+            (clan["id"],),
+        )["total"]
+        body = (
+            f"**Clan:** {clan['name']} (`{clan['tag']}`)\n"
+            f"**Your rank:** {row['rank'].title() if row else 'Member'}\n"
+            f"**Pending applications:** {pending}\n\n"
+            "Use `/clan applications` to review applications. Clan name, tag and color are currently set during registration."
+        )
+        applications_button = discord.ui.Button(
+            label="Applications", style=discord.ButtonStyle.primary, emoji="📨"
+        )
+        applications_button.callback = self.show_applications
+        self.add_item(discord.ui.Container(
+            discord.ui.TextDisplay("## ⚙️ Clan Settings"),
+            discord.ui.Separator(),
+            discord.ui.TextDisplay(body),
+            discord.ui.ActionRow(applications_button),
+        ))
+
+    async def show_applications(self, interaction: discord.Interaction):
+        clan = self.cog.db.get_clan(self.clan_id)
+        rank = self.cog.db.one(
+            "SELECT rank FROM clan_members WHERE clan_id=? AND user_id=?",
+            (self.clan_id, interaction.user.id),
+        )
+        if not clan or not rank or rank["rank"] not in ("leader", "moderator"):
+            return await interaction.response.send_message("Only clan leaders and moderators can review applications.", ephemeral=True)
+        pending = self.cog.db.all(
+            "SELECT * FROM clan_applications WHERE clan_id=? AND status='pending' ORDER BY created_at",
+            (self.clan_id,),
+        )
+        if not pending:
+            return await interaction.response.send_message("There are no pending applications.", ephemeral=True)
+        await interaction.response.send_message(
+            view=ClanTextView(
+                "📨 Pending Applications",
+                f"There are **{len(pending)}** pending application(s). Use `/clan applications` to review and accept or reject them."
+            ),
+            ephemeral=True,
+        )
+
+
+class ClanCommandsInfoView(ClanTextView):
+    def __init__(self):
+        super().__init__(
+            "📖 LEGENDS CLANS Commands",
+            "**Prefix command**\n`!clan` — Open the clan information panel\n\n"
+            "**Slash commands**\n`/clan info` — View your clan information\n"
+            "`/clan leaderboard` — View the top clans\n"
+            "`/clan applications` — Review your clan applications (leadership only)",
+        )
+
+
+class ClanHubView(discord.ui.LayoutView):
+    """Server-wide Components V2 panel posted with !clan."""
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+        join_button = discord.ui.Button(
+            label="Join Clan", style=discord.ButtonStyle.success, emoji="🏰",
+            custom_id="legends_clan:hub:join",
+        )
+        leave_button = discord.ui.Button(
+            label="Leave Clan", style=discord.ButtonStyle.danger, emoji="🚪",
+            custom_id="legends_clan:hub:leave",
+        )
+        settings_button = discord.ui.Button(
+            label="Settings", style=discord.ButtonStyle.primary, emoji="⚙️",
+            custom_id="legends_clan:hub:settings",
+        )
+        commands_button = discord.ui.Button(
+            label="Commands", style=discord.ButtonStyle.secondary, emoji="📖",
+            custom_id="legends_clan:hub:commands",
+        )
+        join_button.callback = self.join
+        leave_button.callback = self.leave
+        settings_button.callback = self.settings
+        commands_button.callback = self.commands_info
+        self.add_item(discord.ui.Container(
+            discord.ui.TextDisplay("# 🏰 LEGENDS CLANS"),
+            discord.ui.TextDisplay(
+                "Find a clan, submit an application, manage your membership and explore clan information.\n"
+                "Choose an action below to continue."
+            ),
+            discord.ui.Separator(),
+            discord.ui.ActionRow(join_button, leave_button),
+            discord.ui.ActionRow(settings_button, commands_button),
+        ))
+
+    async def join(self, interaction: discord.Interaction):
+        if interaction.guild_id is None:
+            return await interaction.response.send_message("Use this panel inside the server.", ephemeral=True)
+        if self.cog.db.get_clan_for_user(interaction.user.id):
+            return await interaction.response.send_message("You are already in a clan. Use Leave Clan first if you want to switch.", ephemeral=True)
+        clans = self.cog.db.all(
+            "SELECT * FROM clans WHERE guild_id=? ORDER BY level DESC,name COLLATE NOCASE",
+            (interaction.guild_id,),
+        )
+        if not clans:
+            return await interaction.response.send_message("There are no clans available in this server yet.", ephemeral=True)
+        await interaction.response.send_message(view=JoinClanSelectView(self.cog, interaction.guild_id, clans), ephemeral=True)
+
+    async def leave(self, interaction: discord.Interaction):
+        if interaction.guild is None:
+            return await interaction.response.send_message("Use this panel inside the server.", ephemeral=True)
+        clan = self.cog.db.get_clan_for_user(interaction.user.id)
+        if not clan or clan["guild_id"] != interaction.guild.id:
+            return await interaction.response.send_message("You are not in a clan in this server.", ephemeral=True)
+        member_row = self.cog.db.one(
+            "SELECT rank FROM clan_members WHERE clan_id=? AND user_id=?",
+            (clan["id"], interaction.user.id),
+        )
+        if member_row and member_row["rank"] == "leader":
+            return await interaction.response.send_message(
+                "The clan leader cannot leave directly. Transfer leadership first or ask the server owner to disband the clan.",
+                ephemeral=True,
+            )
+        await self.cog.remove_member(interaction.guild, interaction.user, clan)
+        await interaction.response.send_message("You have left the clan.", ephemeral=True)
+
+    async def settings(self, interaction: discord.Interaction):
+        clan = self.cog.db.get_clan_for_user(interaction.user.id)
+        if not clan or clan["guild_id"] != interaction.guild_id:
+            return await interaction.response.send_message("Join a clan first to open clan settings.", ephemeral=True)
+        rank = self.cog.db.one(
+            "SELECT rank FROM clan_members WHERE clan_id=? AND user_id=?",
+            (clan["id"], interaction.user.id),
+        )
+        if not rank or rank["rank"] not in ("leader", "moderator"):
+            return await interaction.response.send_message("Only clan leaders and moderators can open management settings.", ephemeral=True)
+        await interaction.response.send_message(view=ClanSettingsView(self.cog, clan, interaction.user.id), ephemeral=True)
+
+    async def commands_info(self, interaction: discord.Interaction):
+        await interaction.response.send_message(view=ClanCommandsInfoView(), ephemeral=True)
+
+
+class ClanPanelView(discord.ui.LayoutView):
     def __init__(self, cog, clan_id):
         super().__init__(timeout=None)
         self.cog = cog
         self.clan_id = clan_id
+        clan = self.cog.db.get_clan(clan_id)
+        clan_name = clan["name"] if clan else "Clan"
+        clan_tag = clan["tag"] if clan else "---"
+        accent = parse_color(clan["color"]) if clan else discord.Color.blurple()
+        guild = self.cog.bot.get_guild(clan["guild_id"]) if clan else None
+        leader = guild.get_member(clan["owner_id"]) if guild else None
+        leader_text = leader.mention if leader else f"`{clan['owner_id']}`" if clan else "Unknown"
+        member_count = len(self.cog.db.members(clan_id)) if clan else 0
+        clan_details = (
+            f"**Clan Tag:** `{clan_tag}`\n"
+            f"**Leader:** {leader_text}\n"
+            f"**Level:** {clan['level']} · **XP:** {clan['xp']}\n"
+            f"**Members:** {member_count}/{capacity_for_level(clan['level'])}"
+        ) if clan else "Clan information is unavailable."
 
         apply_button = discord.ui.Button(
-            label="Apply to Join",
-            style=discord.ButtonStyle.success,
-            emoji="📨",
+            label="Join Clan", style=discord.ButtonStyle.success, emoji="📨",
             custom_id=f"legends_clan:apply:{clan_id}",
         )
-        apply_button.callback = self.apply
-        self.add_item(apply_button)
-
         members_button = discord.ui.Button(
-            label="Members",
-            style=discord.ButtonStyle.secondary,
-            emoji="👥",
+            label="Members", style=discord.ButtonStyle.secondary, emoji="👥",
             custom_id=f"legends_clan:members:{clan_id}",
         )
-        members_button.callback = self.show_members
-        self.add_item(members_button)
-
         leave_button = discord.ui.Button(
-            label="Leave Clan",
-            style=discord.ButtonStyle.danger,
-            emoji="🚪",
+            label="Leave Clan", style=discord.ButtonStyle.danger, emoji="🚪",
             custom_id=f"legends_clan:leave:{clan_id}",
         )
-        leave_button.callback = self.leave
-        self.add_item(leave_button)
-
-        manage_button = discord.ui.Button(
-            label="Leadership",
-            style=discord.ButtonStyle.primary,
-            emoji="⚙️",
+        settings_button = discord.ui.Button(
+            label="Settings", style=discord.ButtonStyle.primary, emoji="⚙️",
             custom_id=f"legends_clan:manage:{clan_id}",
         )
-        manage_button.callback = self.manage
-        self.add_item(manage_button)
+        commands_button = discord.ui.Button(
+            label="Commands", style=discord.ButtonStyle.secondary, emoji="📖",
+            custom_id=f"legends_clan:commands:{clan_id}",
+        )
+        apply_button.callback = self.apply
+        members_button.callback = self.show_members
+        leave_button.callback = self.leave
+        settings_button.callback = self.manage
+        commands_button.callback = self.show_commands
+        self.add_item(discord.ui.Container(
+            discord.ui.TextDisplay(f"# 🏰 {clan_name}"),
+            discord.ui.TextDisplay(clan_details),
+            discord.ui.Separator(),
+            discord.ui.ActionRow(apply_button, members_button, leave_button),
+            discord.ui.ActionRow(settings_button, commands_button),
+            accent_colour=accent,
+        ))
 
     async def apply(self, interaction: discord.Interaction):
+        clan = self.cog.db.get_clan(self.clan_id)
+        if not clan or clan["guild_id"] != interaction.guild_id:
+            return await interaction.response.send_message("This clan is not available in this server.", ephemeral=True)
+        if self.cog.db.get_clan_for_user(interaction.user.id):
+            return await interaction.response.send_message("You are already in a clan.", ephemeral=True)
         await interaction.response.send_modal(ApplyModal(self.cog, self.clan_id))
 
     async def show_members(self, interaction: discord.Interaction):
@@ -453,16 +668,15 @@ class ClanPanelView(discord.ui.View):
             return await interaction.response.send_message("Clan not found.", ephemeral=True)
         rows = self.cog.db.members(self.clan_id)
         lines = []
+        guild = self.cog.bot.get_guild(clan["guild_id"])
         for row in rows:
-            member = interaction.guild.get_member(row["user_id"]) if interaction.guild else None
+            member = guild.get_member(row["user_id"]) if guild else None
             display = member.mention if member else f"`{row['user_id']}`"
             lines.append(f"**{row['rank'].title()}** — {display}")
-        embed = discord.Embed(
-            title=f"{clan['name']} · Members",
-            description="\n".join(lines) if lines else "No members yet.",
-            color=parse_color(clan["color"]),
+        await interaction.response.send_message(
+            view=ClanTextView(f"👥 {clan['name']} · Members", "\n".join(lines) if lines else "No members yet.", parse_color(clan["color"])),
+            ephemeral=True,
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def leave(self, interaction: discord.Interaction):
         clan = self.cog.db.get_clan(self.clan_id)
@@ -477,7 +691,11 @@ class ClanPanelView(discord.ui.View):
                 "The clan leader cannot leave directly. Transfer leadership first or ask the server owner to disband the clan.",
                 ephemeral=True,
             )
-        await self.cog.remove_member(interaction.guild, interaction.user, clan)
+        guild = self.cog.bot.get_guild(clan["guild_id"])
+        member = guild.get_member(interaction.user.id) if guild else None
+        if not guild or not member:
+            return await interaction.response.send_message("You must still be in the clan server to leave.", ephemeral=True)
+        await self.cog.remove_member(guild, member, clan)
         await interaction.response.send_message("You have left the clan.", ephemeral=True)
 
     async def manage(self, interaction: discord.Interaction):
@@ -486,26 +704,14 @@ class ClanPanelView(discord.ui.View):
             (self.clan_id, interaction.user.id),
         )
         if not row or row["rank"] not in ("leader", "moderator"):
-            return await interaction.response.send_message(
-                "Only clan leaders and moderators can use leadership controls.",
-                ephemeral=True,
-            )
+            return await interaction.response.send_message("Only clan leaders and moderators can use clan settings.", ephemeral=True)
         clan = self.cog.db.get_clan(self.clan_id)
         if not clan:
             return await interaction.response.send_message("Clan not found.", ephemeral=True)
-        pending = self.cog.db.all(
-            "SELECT * FROM clan_applications WHERE clan_id=? AND status='pending' ORDER BY created_at",
-            (self.clan_id,),
-        )
-        if not pending:
-            return await interaction.response.send_message(
-                "There are no pending applications.",
-                ephemeral=True,
-            )
-        await interaction.response.send_message(
-            f"There are **{len(pending)}** pending application(s). Use `/clan applications` to review them.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message(view=ClanSettingsView(self.cog, clan, interaction.user.id), ephemeral=True)
+
+    async def show_commands(self, interaction: discord.Interaction):
+        await interaction.response.send_message(view=ClanCommandsInfoView(), ephemeral=True)
 
 
 class ApplicationDecisionView(discord.ui.View):
@@ -737,7 +943,8 @@ class ClanCog(commands.Cog):
         self._purchase_lock = set()
 
     async def cog_load(self):
-        # Re-register persistent clan panels after a restart.
+        # Re-register persistent Components V2 panels after a restart.
+        self.bot.add_view(ClanHubView(self))
         for row in self.db.all("SELECT id,forum_thread_id,panel_message_id FROM clans"):
             if row["forum_thread_id"] and row["panel_message_id"]:
                 self.bot.add_view(ClanPanelView(self, row["id"]), message_id=row["panel_message_id"])
@@ -750,12 +957,7 @@ class ClanCog(commands.Cog):
         if not isinstance(forum, discord.ForumChannel):
             raise RuntimeError("Configured clan channel is not a ForumChannel.")
 
-        # Create identity roles with no permissions. Never grant permissions here.
-        top = await guild.create_role(
-            name=f"━━━ {tag} CLAN ━━━",
-            permissions=discord.Permissions.none(),
-            reason="LEGENDS CLANS setup",
-        )
+        # Create only real clan roles. Decorative divider roles are not created.
         color_role = await guild.create_role(
             name=f"{tag}┃Color",
             permissions=discord.Permissions.none(),
@@ -777,22 +979,30 @@ class ClanCog(commands.Cog):
             permissions=discord.Permissions.none(),
             reason="LEGENDS CLANS setup",
         )
-        bottom = await guild.create_role(
-            name=f"━━━ {tag} END ━━━",
-            permissions=discord.Permissions.none(),
-            reason="LEGENDS CLANS setup",
-        )
+        # Put all clan roles near the top, directly below the bot's highest role.
+        # Discord will never allow the bot to move roles above its own top role.
+        bot_member = guild.me
+        if bot_member and bot_member.top_role.position >= 5:
+            base_position = bot_member.top_role.position - 1
+            try:
+                await guild.edit_role_positions(positions={
+                    color_role: base_position,
+                    leader_role: base_position - 1,
+                    mod_role: base_position - 2,
+                    member_role: base_position - 3,
+                })
+            except discord.Forbidden:
+                log.warning("Could not reorder clan roles in guild %s; check the bot role hierarchy.", guild.id)
 
         cur = self.db.execute("""
             INSERT INTO clans(
                 guild_id,owner_id,tag,name,color,level,xp,created_at,
                 divider_top_role_id,color_role_id,leader_role_id,
                 moderator_role_id,member_role_id,divider_bottom_role_id
-            ) VALUES(?,?,?,?,?,1,0,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,1,0,?,NULL,?,?,?, ?,NULL)
         """, (
             guild.id, leader.id, tag, name, str(color),
-            utc_now(), top.id, color_role.id, leader_role.id, mod_role.id,
-            member_role.id, bottom.id,
+            utc_now(), color_role.id, leader_role.id, mod_role.id, member_role.id,
         ))
         clan_id = cur.lastrowid
         clan = self.db.get_clan(clan_id)
@@ -801,19 +1011,16 @@ class ClanCog(commands.Cog):
 
         view = ClanPanelView(self, clan_id)
         description = (
-            f"## 🏰 {name}\n"
+            f"# 🏰 {name}\n"
             f"**Clan Tag:** `{tag}`\n"
             f"**Leader:** {leader.mention}\n"
             f"**Level:** 1 · **XP:** 0\n"
             f"**Members:** 1/{capacity_for_level(1)}\n\n"
-            "Use **Apply to Join** to send an application.\n"
-            "Clan members can use **Members** and **Leave Clan** from this panel.\n"
-            "Leadership controls are available to clan leaders and moderators."
+            "Use the buttons below to apply, view members or manage clan membership."
         )
-        thread_name = f"{small_caps(tag)}┃{name}'s clan"
+        thread_name = f"{small_caps(tag)}┃{name}"
         result = await forum.create_thread(
             name=thread_name,
-            content=description,
             view=view,
             reason="Create LEGENDS CLANS forum post",
         )
@@ -821,10 +1028,9 @@ class ClanCog(commands.Cog):
         message = getattr(result, "message", None)
         if message is None:
             try:
-                message = await thread.fetch_message(thread.id)
-            except (discord.NotFound, discord.Forbidden, AttributeError):
+                message = await thread.send(view=ClanPanelView(self, clan_id))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 message = None
-
         self.db.execute(
             "UPDATE clans SET forum_thread_id=?,panel_message_id=? WHERE id=?",
             (thread.id, message.id if message else None, clan_id),
@@ -843,11 +1049,9 @@ class ClanCog(commands.Cog):
         """, (clan["id"], member.id, rank, original_nick, utc_now()))
 
         role_ids = [
-            clan["divider_top_role_id"],
             clan["color_role_id"],
             clan["leader_role_id"] if rank == "leader" else
             clan["moderator_role_id"] if rank == "moderator" else clan["member_role_id"],
-            clan["divider_bottom_role_id"],
         ]
         roles = [guild.get_role(role_id) for role_id in role_ids if role_id]
         roles = [role for role in roles if role]
@@ -871,9 +1075,8 @@ class ClanCog(commands.Cog):
         if not row:
             return
         role_ids = [
-            clan["divider_top_role_id"], clan["color_role_id"],
-            clan["leader_role_id"], clan["moderator_role_id"],
-            clan["member_role_id"], clan["divider_bottom_role_id"],
+            clan["color_role_id"], clan["leader_role_id"],
+            clan["moderator_role_id"], clan["member_role_id"],
         ]
         roles = [guild.get_role(role_id) for role_id in role_ids if role_id]
         roles = [role for role in roles if role and role in member.roles]
@@ -914,6 +1117,38 @@ class ClanCog(commands.Cog):
                 except discord.Forbidden:
                     pass
 
+    @commands.command(name="clan")
+    @commands.guild_only()
+    async def clan_panel_command(self, ctx):
+        """Post the LEGENDS CLANS Components V2 information panel."""
+        await ctx.send(view=ClanHubView(self))
+
+    async def cleanup_legacy_divider_roles(self, guild):
+        """Remove old decorative divider roles created by previous versions."""
+        rows = self.db.all(
+            "SELECT id,divider_top_role_id,divider_bottom_role_id FROM clans WHERE guild_id=?",
+            (guild.id,),
+        )
+        for row in rows:
+            for role_id in (row["divider_top_role_id"], row["divider_bottom_role_id"]):
+                if not role_id:
+                    continue
+                role = guild.get_role(role_id)
+                if role:
+                    for member in list(role.members):
+                        try:
+                            await member.remove_roles(role, reason="Remove obsolete LEGENDS CLANS divider role")
+                        except discord.HTTPException:
+                            log.warning("Could not remove legacy divider role %s from member %s", role.id, member.id)
+                    try:
+                        await role.delete(reason="Remove obsolete LEGENDS CLANS divider role")
+                    except discord.HTTPException:
+                        log.warning("Could not delete legacy divider role %s", role.id)
+            self.db.execute(
+                "UPDATE clans SET divider_top_role_id=NULL,divider_bottom_role_id=NULL WHERE id=?",
+                (row["id"],),
+            )
+
     async def process_purchase_role(self, member):
         if member.bot or member.id in self._purchase_lock:
             return
@@ -939,8 +1174,9 @@ class ClanCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Catch purchases that happened while the bot was offline.
+        # Remove obsolete decorative roles and catch purchases made while offline.
         for guild in self.bot.guilds:
+            await self.cleanup_legacy_divider_roles(guild)
             role = guild.get_role(PURCHASE_ROLE_ID)
             if not role:
                 continue
